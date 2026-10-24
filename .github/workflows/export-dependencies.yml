@@ -1,0 +1,49 @@
+name: Export verified Android dependencies
+on:
+  push:
+    branches: [develop]
+    paths: ['.github/workflows/export-dependencies.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-dependencies
+          run-id: 40066059748
+          github-token: ${{ github.token }}
+          path: dependencies
+      - name: Split archive for bounded download
+        run: |
+          mkdir chunks
+          split -b 400M -d dependencies/android-dependencies.tgz chunks/dependencies-
+          sha256sum chunks/* > chunks/SHA256SUMS.txt
+          sha256sum dependencies/android-dependencies.tgz >> chunks/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dependencies-00
+          path: chunks/dependencies-00
+          compression-level: 0
+          retention-days: 2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dependencies-01
+          path: chunks/dependencies-01
+          compression-level: 0
+          retention-days: 2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dependencies-02
+          path: chunks/dependencies-02
+          compression-level: 0
+          retention-days: 2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dependency-checksums
+          path: chunks/SHA256SUMS.txt
+          retention-days: 2
