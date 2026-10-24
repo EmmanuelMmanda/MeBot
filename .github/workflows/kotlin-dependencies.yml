@@ -1,0 +1,58 @@
+name: Complete Kotlin verification dependencies
+on:
+  push:
+    branches: [develop]
+    paths: ['.github/workflows/kotlin-dependencies.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        with:
+          gradle-version: '8.13'
+          cache-disabled: true
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
+      - name: Generate existing dependency project with actual Kotlin sources
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, yaml
+          w = yaml.safe_load(pathlib.Path('.github/workflows/toolchain.yml').read_text())
+          s = next(s['run'] for s in w['jobs']['tools']['steps'] if 'run' in s)
+          s = s[:s.rfind('gradle :core:test')]
+          pathlib.Path(os.environ['RUNNER_TEMP'], 'prepare.sh').write_text(s)
+          PY
+          bash -e "$RUNNER_TEMP/prepare.sh"
+          mkdir -p "$RUNNER_TEMP/seed/core/src/main/kotlin" "$RUNNER_TEMP/seed/core/src/test/kotlin" "$RUNNER_TEMP/seed/app/src/main/java"
+          printf '@kotlinx.serialization.Serializable\ndata class Seed(val text: String = "ready")\n' > "$RUNNER_TEMP/seed/core/src/main/kotlin/Seed.kt"
+          printf 'class SeedTest { @org.junit.Test fun works() { org.junit.Assert.assertEquals("ready", Seed().text) } }\n' > "$RUNNER_TEMP/seed/core/src/test/kotlin/SeedTest.kt"
+          printf '@androidx.compose.runtime.Composable\nfun Sample() { androidx.compose.material3.Text(Seed().text) }\n' > "$RUNNER_TEMP/seed/app/src/main/java/Sample.kt"
+          cd "$RUNNER_TEMP/seed"
+          gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease --no-daemon --stacktrace
+      - name: Package compiler modules and resolution metadata
+        run: |
+          gradle --stop
+          mkdir -p "$RUNNER_TEMP/patch/runtime/gradle-caches/modules-2/files-2.1"
+          cp -a "$HOME/.gradle/caches/modules-2/metadata-"* "$RUNNER_TEMP/patch/runtime/gradle-caches/modules-2/"
+          for group in org.jetbrains.kotlin org.jetbrains.kotlinx org.jetbrains.intellij.deps; do
+            if [ -d "$HOME/.gradle/caches/modules-2/files-2.1/$group" ]; then cp -a "$HOME/.gradle/caches/modules-2/files-2.1/$group" "$RUNNER_TEMP/patch/runtime/gradle-caches/modules-2/files-2.1/"; fi
+          done
+          find "$RUNNER_TEMP/patch" -name '*.lock' -delete
+          tar -czf "$RUNNER_TEMP/kotlin-patch.tgz" -C "$RUNNER_TEMP/patch" runtime
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: kotlin-patch
+          path: ${{ runner.temp }}/kotlin-patch.tgz
+          compression-level: 0
+          retention-days: 7
