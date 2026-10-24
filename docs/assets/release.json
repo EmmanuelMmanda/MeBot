@@ -6,13 +6,11 @@
   "channel": "official",
   "apk": true,
   "filename": "mebot-0.8.0.apk",
-  "sourceCommit": "eeeee9619cd44b0b9d9328cab6fb8e6081955c66",
+  "sourceCommit": "47245074cb76d39c7569971abadbbd4097395521",
   "minimumAndroid": "8.0",
   "sha256": "fc45ebdcb0ba183e6dd6dc5c30a1c9f738193bf0c7a336072b11ee0d689b6d81",
   "sizeBytes": 15884939,
   "sourceFilename": "mebot-0.8.0-source.zip",
-  "sourceSha256": "6d9dac5bd9be1211eb35f9479c1a43dfa82050311dfdff6efa80f7d22c25412f",
-  "sourceSizeBytes": 8645839,
   "previewsFilename": "mebot-0.8.0-resources.zip",
   "verificationFilename": "mebot-0.8.0-verification.txt",
   "testsFilename": "mebot-0.8.0-resources.zip",
@@ -28,19 +26,19 @@
       "channel": "official",
       "apk": true,
       "filename": "mebot-0.8.0.apk",
-      "sourceCommit": "eeeee9619cd44b0b9d9328cab6fb8e6081955c66",
+      "sourceCommit": "47245074cb76d39c7569971abadbbd4097395521",
       "minimumAndroid": "8.0",
       "sha256": "fc45ebdcb0ba183e6dd6dc5c30a1c9f738193bf0c7a336072b11ee0d689b6d81",
       "sizeBytes": 15884939,
       "sourceFilename": "mebot-0.8.0-source.zip",
-      "sourceSha256": "6d9dac5bd9be1211eb35f9479c1a43dfa82050311dfdff6efa80f7d22c25412f",
-      "sourceSizeBytes": 8645839,
       "previewsFilename": "mebot-0.8.0-resources.zip",
       "verificationFilename": "mebot-0.8.0-verification.txt",
       "testsFilename": "mebot-0.8.0-resources.zip",
       "publishedDate": "2026-10-24",
       "integrityFile": "releases/v0.8.0.json",
-      "notes": "Official MeBot release. The matching application package updates original official MeBot; the earlier MeBot Test remains separate."
+      "notes": "Official MeBot release. The matching application package updates original official MeBot; the earlier MeBot Test remains separate.",
+      "sourceRef": "v0.8.0",
+      "sourceIntegrityFile": "SHA256SUMS.txt"
     },
     {
       "version": "0.7.0-beta.1",
@@ -147,5 +145,7 @@
       "sourceSha256": "016610a9666f4c876253312466f6457a80cae3034a0e07bced747fa202a768fa",
       "sourceSizeBytes": 1466771
     }
-  ]
+  ],
+  "sourceRef": "v0.8.0",
+  "sourceIntegrityFile": "SHA256SUMS.txt"
 }

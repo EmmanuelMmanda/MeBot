@@ -6,5 +6,8 @@
   "application_id": "app.mynguli",
   "version_code": 11,
   "certificate_sha256": "b1b69dcefe26c815dbaec76223b7b80be76af06ba30da774637a806a7f75e3e9",
-  "personal_profile_asset_present": false
+  "personal_profile_asset_present": false,
+  "source_code_commit": "47245074cb76d39c7569971abadbbd4097395521",
+  "source_ref": "v0.8.0",
+  "source_integrity_file": "SHA256SUMS.txt"
 }
