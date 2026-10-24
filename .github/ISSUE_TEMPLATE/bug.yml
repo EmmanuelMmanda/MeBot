@@ -1,0 +1,47 @@
+name: Bug report
+description: Report a reproducible problem in MeBot.
+body:
+  - type: markdown
+    attributes:
+      value: 'Do not post API keys, tokens, private context, backups or personal account screenshots. For a security issue, follow SECURITY.md.'
+  - type: input
+    id: version
+    attributes:
+      label: MeBot version
+      placeholder: '0.6.1, official APK or own build'
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version
+      placeholder: 'Device model, Android version, app language'
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include the screen, settings and actions needed to see the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: AI connection, if relevant
+      options:
+        - Not relevant / local feature
+        - ChatGPT plan
+        - Direct API key
+        - My service
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Optional safe evidence
+      description: A redacted screenshot, error stage or local operation code. Never include raw provider responses or credentials.

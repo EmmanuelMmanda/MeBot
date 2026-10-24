@@ -1,0 +1,22 @@
+name: Feature proposal
+description: Describe a useful improvement or module.
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What are you trying to do?
+      description: Describe the situation and why the current flow is insufficient.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Proposed behavior
+      description: Include the simplest useful version, defaults and how someone would disable it.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Data and connections, if any
+      description: Does this need a new source, permission, paid request or private connector?

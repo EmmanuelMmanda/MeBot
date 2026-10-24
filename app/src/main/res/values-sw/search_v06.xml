@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_title">Tafuta</string>
+    <string name="search_description">Pata vyanzo vya sasa kwenye moduli zako.</string>
+    <string name="search_hint">Mada, swali au neno muhimu</string>
+    <string name="search_all_modules">Moduli zote</string>
+    <string name="search_submit">Tafuta kwa AI</string>
+    <string name="search_connect_title">Unganisha AI ili kutafuta</string>
+    <string name="search_connect_body">Tumia akaunti yako iliyounganishwa kupata na kukagua vyanzo vya sasa.</string>
+    <string name="search_modules_empty">Chagua moduli kwanza</string>
+    <string name="search_modules_empty_body">Washa moduli ya habari, mafunzo au ugunduzi kwenye Moduli.</string>
+    <string name="search_working">Inatafuta vyanzo…</string>
+    <string name="search_no_results">Hakuna matokeo yanayolingana</string>
+    <string name="search_no_results_body">Jaribu neno pana zaidi au moduli nyingine.</string>
+    <string name="search_intro">Chagua moduli kupunguza wigo wa utafutaji, au tafuta kwenye moduli ulizowasha.</string>
+    <plurals name="search_result_count">
+        <item quantity="one">Matokeo %1$d</item>
+        <item quantity="other">Matokeo %1$d</item>
+    </plurals>
+    <plurals name="search_source_count">
+        <item quantity="one">Chanzo %1$d</item>
+        <item quantity="other">Vyanzo %1$d</item>
+    </plurals>
+</resources>

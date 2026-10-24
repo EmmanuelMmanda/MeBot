@@ -1,0 +1,24 @@
+{
+  "version": "0.6.1",
+  "verified_with_app_version": "0.6.1",
+  "kind": "Optional service tests with controlled provider transports",
+  "totals": {
+    "tests": 145,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "suites": [
+    {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "145",
+      "time": "68.101",
+      "timestamp": "2026-10-23T22:39:57.713004+09:00",
+      "hostname": "4b784bf0190a"
+    }
+  ],
+  "paid_provider_calls": false
+}

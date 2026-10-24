@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="secondary_theme">Mandhari</string>
+    <string name="secondary_accent">Rangi ya msisitizo</string>
+    <string name="secondary_open_alarms">Panga kengele</string>
+    <string name="secondary_outcome_done">Limekamilika</string>
+    <string name="secondary_outcome_pending">Bado linaendelea</string>
+    <string name="secondary_show_more">Onyesha zaidi</string>
+    <string name="secondary_import_alarm_error">Nakala yako imerejeshwa, lakini kengele hazikuweza kuanzishwa upya. Kagua mipangilio kabla ya kuwasha kengele.</string>
+</resources>

@@ -1,0 +1,13 @@
+* text=auto eol=lf
+gradlew.bat text eol=crlf
+*.png binary
+*.ttf binary
+*.wav binary
+*.jar binary
+
+# A blank line terminates each SSE event, including the final wire-fixture event.
+app/src/test/resources/chatgpt/*.sse whitespace=-blank-at-eof
+
+# Preserve the original upstream font license text, including its whitespace.
+docs/FONT-LICENSE.txt -text -whitespace
+app/src/main/assets/licenses/Figtree-OFL.txt -text -whitespace

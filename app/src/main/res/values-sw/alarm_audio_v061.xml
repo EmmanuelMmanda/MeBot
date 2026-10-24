@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="alarm_audio_title">Sauti</string>
+    <string name="alarm_audio_pulse">Mdundo</string>
+    <string name="alarm_audio_chime">Kengele inayopanda</string>
+    <string name="alarm_audio_bell">Kengele thabiti</string>
+    <string name="alarm_audio_classic">Ya kawaida</string>
+    <string name="alarm_audio_pulse_note">Midundo angavu inayojirudia</string>
+    <string name="alarm_audio_chime_note">Mdundo wa noti nne zinazopanda</string>
+    <string name="alarm_audio_bell_note">Mapigo ya wazi yenye mwendo thabiti</string>
+    <string name="alarm_audio_classic_note">Sauti ya asili ya MeBot</string>
+    <string name="alarm_audio_phone">Sauti za simu</string>
+    <string name="alarm_audio_file">Chagua faili ya sauti</string>
+    <string name="alarm_audio_custom">Faili ya sauti</string>
+    <string name="alarm_audio_phone_default">Alarm chaguo-msingi ya simu</string>
+    <string name="alarm_audio_preview">Jaribu sauti</string>
+    <string name="alarm_audio_stop">Simamisha jaribio</string>
+    <string name="alarm_audio_preview_hint">Jaribio hutumia kiwango cha sasa cha sauti ya alarm kwenye simu.</string>
+    <string name="alarm_audio_fallback">Sauti hii haipatikani. Sauti ya alarm iliyomo kwenye programu inatumika.</string>
+    <string name="alarm_audio_no_sound">Sauti haipatikani. Jaribu nyingine au angalia kiwango cha sauti ya alarm.</string>
+    <string name="alarm_audio_pick_failed">Faili hiyo haiwezi kuhifadhiwa kwa alarm. Chagua faili ya sauti kwenye simu.</string>
+    <string name="alarm_audio_picker_unavailable">Simu haina kichagua sauti hiki. Chagua sauti iliyomo kwenye programu.</string>
+    <string name="alarm_audio_active">Maliza alarm inayolia kabla ya kujaribu sauti nyingine.</string>
+    <string name="alarm_audio_speech">Ujumbe wa kuamsha kwa sauti</string>
+    <string name="alarm_audio_speech_hint">Hutumia sauti iliyosakinishwa bila intaneti. Alarm huendelea kulia ikiwa sauti ya kuzungumza haipatikani.</string>
+    <string name="alarm_audio_message">Ujumbe wa kuamsha</string>
+    <string name="alarm_audio_default_message">Habari za asubuhi. Ni wakati wa kuamka.</string>
+    <string name="alarm_audio_message_hint">Acha tupu ili kutumia ujumbe chaguo-msingi.</string>
+    <string name="alarm_audio_voice_unavailable">Hakuna sauti ya lugha hii iliyo tayari bila intaneti. Alarm bado italia.</string>
+    <string name="alarm_audio_summary">%1$s · %2$d%% · %3$s</string>
+    <string name="alarm_audio_selected">Sauti iliyochaguliwa: %1$s</string>
+</resources>

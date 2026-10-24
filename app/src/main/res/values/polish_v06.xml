@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="polish_file_too_large">This file is too large. Use a smaller export or text file.</string>
+    <string name="polish_model_mismatch">This model differs from the one configured on your MeBot service. Enter the service model in Connection and try again.</string>
+    <string name="polish_response_type">Response type: %1$s</string>
+    <string name="polish_response_state">Response state: %1$s</string>
+    <string name="polish_provider_code">Provider code: %1$s</string>
+    <string name="polish_provider_parameter">Parameter: %1$s</string>
+    <string name="polish_ai_interrupted">The response stopped before it finished. Your earlier messages are saved. Try again when the connection is ready.</string>
+    <string name="polish_ai_incomplete">The model did not finish this response. Try again or ask a shorter question.</string>
+    <string name="polish_conversation_limit">You have 24 saved conversations. Delete one from History to start another.</string>
+    <string name="polish_conversation_full">This conversation is full. Start a new one; these messages stay in History.</string>
+    <string name="polish_attachment_type">Choose a UTF-8 .txt or .md file.</string>
+    <string name="polish_attachment_size">Use up to 3 text files, each under 48 KB and 24,000 characters in total.</string>
+    <string name="polish_import_format">This file is not the expected MeBot export. Choose a context file for Context, or a feed backup for Restore.</string>
+    <string name="polish_import_invalid">The file contains invalid or unsupported data. Nothing was imported.</string>
+</resources>

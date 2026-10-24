@@ -1,0 +1,33 @@
+<resources>
+    <string name="workspace_title">AI</string>
+    <string name="workspace_history">Conversations</string>
+    <string name="workspace_new">New conversation</string>
+    <string name="workspace_general">All topics</string>
+    <string name="workspace_question">Ask MeBot</string>
+    <string name="workspace_attach">Attach a text file (.txt or .md)</string>
+    <string name="workspace_remove_attachment">Remove attachment</string>
+    <string name="workspace_voice_input">Phone voice input</string>
+    <string name="workspace_voice_error">The phone speech service could not complete this. You can keep typing.</string>
+    <string name="workspace_stop_audio">Stop reading</string>
+    <string name="workspace_read">Read aloud</string>
+    <string name="workspace_stop">Stop</string>
+    <string name="workspace_copy">Copy answer</string>
+    <string name="workspace_delete">Delete conversation</string>
+    <string name="workspace_delete_title">Delete this conversation?</string>
+    <string name="workspace_delete_body">Its messages and attached text will be removed from this app.</string>
+    <string name="workspace_choose_context">Start with a module</string>
+    <string name="workspace_context_help">A new conversation can use the notes approved for one module. General conversations use only their messages and attached files.</string>
+    <string name="workspace_manage_context">Your preferences</string>
+    <string name="workspace_attachment_help">This text is included when you send a message in this conversation. Remove it from the composer to stop including it in future messages.</string>
+    <string name="workspace_start_title">What would you like to know?</string>
+    <string name="workspace_scoped_notes">This conversation can use %1$d approved context notes.</string>
+    <string name="workspace_general_context">Ask about your topics or anything else.</string>
+    <string name="workspace_research">Catch me up on a useful development</string>
+    <string name="workspace_compare">Compare two practical options</string>
+    <string name="workspace_discover">Find a useful guide or resource</string>
+    <string name="workspace_research_prompt">Find one consequential recent development relevant to the selected module and approved context. If no topic is configured, choose a useful technology or science development. Explain what changed, why it matters and what remains uncertain, with original sources.</string>
+    <string name="workspace_compare_prompt">Choose one practical decision relevant to the selected module or approved context and compare two credible options with their tradeoffs and original links. If no topic is configured, compare two free tools for organizing daily work. Do not assume that I use or have purchased either option.</string>
+    <string name="workspace_discover_prompt">Find one practical, accessible guide or resource relevant to the selected module and approved context. If no topic is configured, find a guide to a useful everyday digital skill. Explain what I can do with it and link to its original creator. Verify access and any stated cost.</string>
+    <string name="workspace_writing">Writing…</string>
+    <string name="workspace_partial">Unfinished response</string>
+</resources>

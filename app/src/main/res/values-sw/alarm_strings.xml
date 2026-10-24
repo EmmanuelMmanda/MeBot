@@ -1,0 +1,31 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="alarm_channel_name">Kengele</string>
+    <string name="alarm_channel_description">Kengele na majaribio ya kuamka</string>
+    <string name="alarm_generic_title">Kengele</string>
+    <string name="alarm_your_title">Kengele yako</string>
+    <string name="alarm_go_checkpoint">Nenda kwenye msimbo</string>
+    <string name="alarm_notification_followup">Changanua tena kumaliza</string>
+    <string name="alarm_scan_code">Changanua msimbo wako</string>
+    <string name="alarm_time_set">Muda wa kuamka</string>
+    <string name="alarm_snooze_action">Ahirisha</string>
+    <string name="alarm_dismiss_action">Zima</string>
+    <string name="alarm_emergency_action">Simamisha sasa</string>
+    <string name="alarm_wrong_code">Msimbo tofauti. Jaribu uliouhifadhi.</string>
+    <string name="alarm_not_ready">Bado haijafika. Angalia ruhusa ikiwa itaendelea kusubiri.</string>
+    <string name="alarm_scan_cancelled">Umeghairi. Kengele bado inaendelea.</string>
+    <string name="alarm_scan_prompt">Changanua msimbo wako</string>
+    <string name="alarm_camera_permission">Ruhusu kamera kuchanganua, au simamisha kengele sasa.</string>
+    <string name="alarm_ended">Kengele imeisha</string>
+    <string name="alarm_return_to_app">Fungua MeBot</string>
+    <string name="alarm_checkpoint_generic">Msimbo wako</string>
+    <string name="alarm_no_camera">Kamera haipatikani. Simamisha kengele sasa.</string>
+    <string name="alarm_scan_action">Changanua msimbo</string>
+    <string name="alarm_dismiss_full_action">Zima kengele</string>
+    <string name="alarm_snooze_failed">Imeshindikana kuahirisha. Angalia ruhusa.</string>
+    <string name="alarm_close_for_now">Funga kwa sasa</string>
+    <string name="alarm_camera_settings">Mipangilio ya kamera</string>
+    <string name="alarm_exact_permission_needed">Ruhusu kengele ili kuweka muda.</string>
+    <string name="alarm_schedule_failed">Imeshindikana kuweka. Angalia ruhusa ya kengele.</string>
+    <string name="alarm_checkpoint_required">Weka msimbo kwanza.</string>
+</resources>

@@ -1,0 +1,620 @@
+{
+  "version": "0.6.1",
+  "kind": "JVM domain and native Android host tests",
+  "totals": {
+    "tests": 501,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "suites": [
+    {
+      "suite": "app.mynguli.core.AlarmAudioSettingsTest",
+      "module": "core",
+      "timestamp": "2026-10-23T14:38:47.248Z",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.core.AlarmTimeTest",
+      "module": "core",
+      "timestamp": "2026-10-23T14:38:48.311Z",
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.core.BackupCodecTest",
+      "module": "core",
+      "timestamp": "2026-10-23T14:38:48.758Z",
+      "tests": 22,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.core.ConversationBriefLogicTest",
+      "module": "core",
+      "timestamp": "2026-10-23T14:38:50.423Z",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.core.DailyLogicTest",
+      "module": "core",
+      "timestamp": "2026-10-23T14:38:52.934Z",
+      "tests": 18,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.core.FeedLogicTest",
+      "module": "core",
+      "timestamp": "2026-10-23T14:38:53.083Z",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.core.FocusLogicTest",
+      "module": "core",
+      "timestamp": "2026-10-23T14:38:53.459Z",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.core.MathChallengeTest",
+      "module": "core",
+      "timestamp": "2026-10-23T14:38:53.523Z",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.core.ModuleCatalogTest",
+      "module": "core",
+      "timestamp": "2026-10-23T14:38:54.367Z",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.core.ModuleDiscoveryTest",
+      "module": "core",
+      "timestamp": "2026-10-23T14:38:54.885Z",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.core.ModulePreferencesTest",
+      "module": "core",
+      "timestamp": "2026-10-23T14:38:55.146Z",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.core.ReadingHistoryTest",
+      "module": "core",
+      "timestamp": "2026-10-23T14:38:55.304Z",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.core.RequestBudgetTest",
+      "module": "core",
+      "timestamp": "2026-10-23T14:38:55.328Z",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.alarm.AlarmAudioAccessTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:09:40.653Z",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.alarm.AlarmAudioPlaybackTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:09:56.686Z",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.alarm.AlarmControllerTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:09:58.858Z",
+      "tests": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.alarm.AlarmProtocolTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:10:07.702Z",
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.alarm.AlarmStoreTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:10:07.833Z",
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.alarm.MathAlarmControllerTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:10:11.631Z",
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.alarm.MathAlarmRecoveryTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:10:14.897Z",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.alarm.MeBotAlarmJourneyTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:10:16.264Z",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.data.AppRepositoryTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:11:11.814Z",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.AiCitationMetadataTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:11:28.745Z",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.AiConnectionCheckTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:11:28.974Z",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.AiConversationRequestTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:11:29.022Z",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.AiSearchTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:11:29.087Z",
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.ChatGptFeedEngineTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:11:29.276Z",
+      "tests": 15,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.ChatGptResponsesIntegrationTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:11:35.203Z",
+      "tests": 26,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.ChatGptResponsesTransportTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:11:37.869Z",
+      "tests": 19,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.FeedEditionEngineTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:11:38.812Z",
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.FeedEngineTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:11:45.763Z",
+      "tests": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.FeedMediaCacheTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:11:49.053Z",
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.FeedMediaTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:11:50.348Z",
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.FeedNetworkTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:11:52.344Z",
+      "tests": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.FeedRepositoryTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:11:53.540Z",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.FeedSearchEngineTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:11:54.649Z",
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.FeedWorkerTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:11:57.077Z",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.MeBotV06FlowTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:12:00.371Z",
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.ModuleDefaultRequestTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:12:06.484Z",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.PersonalContextImportTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:12:06.565Z",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.PublicDiscoveryTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:12:07.432Z",
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.auth.ChatGptAuthManagerTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:12:08.523Z",
+      "tests": 29,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.auth.ChatGptAuthTransportTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:12:10.518Z",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.auth.ChatGptBrowserReturnTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:12:10.755Z",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.auth.ChatGptIdentityAndCallbackTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:12:10.945Z",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.feed.auth.ChatGptModelCatalogTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:12:11.236Z",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.ChatGptConnectedJourneyTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:12:11.458Z",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.ChatGptReturnJourneyTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:12:39.086Z",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.ContextPasteDialogUiTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:12:40.981Z",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.MeBotAlarmAudioUiTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:12:43.541Z",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.MeBotChatGptUiTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:12:55.406Z",
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.MeBotContextRestoreUiTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:13:08.481Z",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.MeBotDataUiTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:13:11.905Z",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.MeBotDeliveryPreferencesUiTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:13:14.424Z",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.MeBotEditionUiTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:13:17.819Z",
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.MeBotFeedJourneyTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:13:33.531Z",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.MeBotFeedNotificationJourneyTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:14:09.408Z",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.MeBotNavigationJourneyTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:14:12.510Z",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.MeBotOnboardingUiTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:14:13.247Z",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.MeBotSearchUiTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:14:15.034Z",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.MeBotSetupUiTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:14:19.862Z",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.MeBotUsabilityJourneyTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:14:24.495Z",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.MeBotWorkspaceUiTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:14:31.567Z",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.ModuleCatalogUiTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:14:35.337Z",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.ModuleDiscoveryUiTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:14:36.917Z",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.ModulePolishUiTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:14:38.303Z",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "app.mynguli.ui.MyNguliJourneyTest",
+      "module": "app",
+      "timestamp": "2026-10-23T15:14:42.601Z",
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "limits": [
+    "Synthetic accounts and controlled inference transports; no live owner request.",
+    "Robolectric native Compose rendering on API 35; no physical-device frame-rate claim.",
+    "No physical installation or overnight alarm qualification."
+  ]
+}

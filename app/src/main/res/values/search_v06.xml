@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_title">Search</string>
+    <string name="search_description">Find current sources across your modules.</string>
+    <string name="search_hint">Topic, question or keyword</string>
+    <string name="search_all_modules">All modules</string>
+    <string name="search_submit">Search with AI</string>
+    <string name="search_connect_title">Connect AI to search</string>
+    <string name="search_connect_body">Use your connected account to find and check current sources.</string>
+    <string name="search_modules_empty">Choose a module first</string>
+    <string name="search_modules_empty_body">Enable a news, learning or discovery module in Modules.</string>
+    <string name="search_working">Finding sources…</string>
+    <string name="search_no_results">No matching results</string>
+    <string name="search_no_results_body">Try a broader keyword or another module.</string>
+    <string name="search_intro">Choose a module to narrow your search, or search across the modules you enabled.</string>
+    <plurals name="search_result_count">
+        <item quantity="one">%1$d result</item>
+        <item quantity="other">%1$d results</item>
+    </plurals>
+    <plurals name="search_source_count">
+        <item quantity="one">%1$d source</item>
+        <item quantity="other">%1$d sources</item>
+    </plurals>
+</resources>

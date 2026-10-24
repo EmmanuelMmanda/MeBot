@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="polish_file_too_large">Faili hili ni kubwa sana. Tumia nakala au faili la maandishi lililo dogo zaidi.</string>
+    <string name="polish_model_mismatch">Modeli hii ni tofauti na iliyowekwa kwenye huduma yako ya MeBot. Weka modeli ya huduma kwenye Muunganisho kisha ujaribu tena.</string>
+    <string name="polish_response_type">Aina ya jibu: %1$s</string>
+    <string name="polish_response_state">Hali ya jibu: %1$s</string>
+    <string name="polish_provider_code">Msimbo wa mtoa huduma: %1$s</string>
+    <string name="polish_provider_parameter">Kigezo: %1$s</string>
+    <string name="polish_ai_interrupted">Jibu limesimama kabla ya kukamilika. Ujumbe wako wa awali umehifadhiwa. Jaribu tena muunganisho ukiwa tayari.</string>
+    <string name="polish_ai_incomplete">Modeli haijakamilisha jibu hili. Jaribu tena au uliza swali fupi zaidi.</string>
+    <string name="polish_conversation_limit">Una mazungumzo 24 yaliyohifadhiwa. Futa moja kwenye Historia ili kuanzisha mengine.</string>
+    <string name="polish_conversation_full">Mazungumzo haya yamejaa. Anzisha mapya; ujumbe huu unabaki kwenye Historia.</string>
+    <string name="polish_attachment_type">Chagua faili la UTF-8 la .txt au .md.</string>
+    <string name="polish_attachment_size">Tumia hadi faili 3 za maandishi, kila moja chini ya KB 48 na jumla ya herufi 24,000.</string>
+    <string name="polish_import_format">Faili hili si la MeBot linalotarajiwa. Chagua faili la muktadha kwa Muktadha, au nakala ya mlisho kwa Rejesha.</string>
+    <string name="polish_import_invalid">Faili lina data batili au isiyotumika. Hakuna kilichoingizwa.</string>
+</resources>

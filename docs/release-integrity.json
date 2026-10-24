@@ -1,0 +1,87 @@
+{
+  "version": "0.6.1",
+  "application_id": "app.mynguli",
+  "label": "MeBot",
+  "version_code": 8,
+  "min_sdk": 26,
+  "target_sdk": 36,
+  "apk_file": "mebot-0.6.1.apk",
+  "apk_size_bytes": 15774571,
+  "apk_sha256": "b1eefa7b53544fa9ffd626137fbda44048255222c8f4d72346c2424aaa40ef6d",
+  "signer_certificate_sha256": "b1b69dcefe26c815dbaec76223b7b80be76af06ba30da774637a806a7f75e3e9",
+  "same_certificate_as_previous_release": true,
+  "debuggable": false,
+  "internet_permission": true,
+  "signature_verified": true,
+  "android_backup_enabled": false,
+  "outgoing_cleartext_enabled": false,
+  "signature_scheme_v2_verified": true,
+  "zip_alignment_verified": true,
+  "zip_crc_verified": true,
+  "personal_profile_asset_present": false,
+  "broad_storage_permissions": false,
+  "development_activities_present": false,
+  "bundled_licenses": [
+    "assets/licenses/Apache-2.0.txt",
+    "assets/licenses/Figtree-OFL.txt",
+    "assets/licenses/NOTICE.txt"
+  ],
+  "bundled_alarm_sounds_match_source": true,
+  "bundled_alarm_sounds_uncompressed": true,
+  "native_abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+  ],
+  "native_64bit_segments": [
+    {
+      "library": "lib/arm64-v8a/libandroidx.graphics.path.so",
+      "load_alignment_bytes": [
+        16384,
+        16384,
+        16384
+      ]
+    },
+    {
+      "library": "lib/arm64-v8a/libdatastore_shared_counter.so",
+      "load_alignment_bytes": [
+        16384,
+        16384,
+        16384
+      ]
+    },
+    {
+      "library": "lib/x86_64/libandroidx.graphics.path.so",
+      "load_alignment_bytes": [
+        16384,
+        16384,
+        16384
+      ]
+    },
+    {
+      "library": "lib/x86_64/libdatastore_shared_counter.so",
+      "load_alignment_bytes": [
+        16384,
+        16384
+      ]
+    }
+  ],
+  "tag": "v0.6.1",
+  "source_commit": "440718f1210a90cf4f6072b60f35b21564179cca",
+  "distribution": "public",
+  "source_file": "mebot-0.6.1-source.zip",
+  "source_sha256": "3267697a07695095e7cce7c0ed3377736d0fde828a5e112e48c2ed30042557e8",
+  "source_size_bytes": 7640220,
+  "source_matches_tag": true,
+  "apk_available": true,
+  "same_signing_certificate_as_historical_release": true,
+  "zip_alignment_16k_verified": true,
+  "retained_entry_count": 161,
+  "all_retained_entry_hashes_match_historical_apk": true,
+  "all_retained_compression_methods_match": true,
+  "historical_private_apk_sha256": "84ff5507fe6a1fffb9b7b67e1ff744e1bb1d32219b83574a666e0860ee06b3c8",
+  "packaging_note": "Optional personal starter-profile asset removed, container realigned and signed with the original key. Every retained application entry is byte-identical to the historical APK. Application code, resources, manifest, native libraries and licenses are unchanged.",
+  "device_installation_verified": false,
+  "live_provider_verified_by_this_check": false
+}

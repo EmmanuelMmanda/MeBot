@@ -1,0 +1,5 @@
+<resources>
+    <string name="polish_all_modules">All modules</string>
+    <string name="polish_feed_filters">Feed modules</string>
+    <string name="polish_feed_reselect">Refresh feed and return to top</string>
+</resources>

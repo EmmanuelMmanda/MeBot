@@ -1,0 +1,18 @@
+<resources>
+    <string name="delivery_usage_finite">Maombi %1$d kati ya %2$d yametumika leo</string>
+    <string name="delivery_usage_unlimited">Maombi %1$d yametumika leo · hakuna kikomo hapa</string>
+    <string name="delivery_usage_saturated">Zaidi ya maombi bilioni 2 yametumika leo</string>
+    <string name="delivery_reset_note">Huanza kuhesabu upya saa sita usiku kwa eneo lako la saa.</string>
+    <string name="delivery_limit_unlimited">Bila kikomo</string>
+    <string name="delivery_limit_custom">Weka mwenyewe</string>
+    <string name="delivery_limit_default">%1$d · chaguo la awali</string>
+    <string name="delivery_limit_custom_label">Maombi kwa siku</string>
+    <string name="delivery_limit_invalid">Weka namba kamili kubwa kuliko sifuri.</string>
+    <string name="delivery_limit_provider_note">Hiki ni kikomo cha MeBot. Vikomo vya mtoa huduma, matumizi ya kifurushi na gharama za API bado vinatumika.</string>
+    <string name="delivery_interval_hours">Saa %1$d</string>
+    <string name="delivery_interval_custom_label">Saa kati ya masasisho</string>
+    <string name="delivery_interval_invalid">Chagua namba kamili kuanzia 1 hadi 24.</string>
+    <string name="delivery_quiet_note">Arifa pekee ndizo hunyamazishwa. Weka saa zinazofanana kuondoa kipindi cha utulivu.</string>
+    <string name="delivery_quiet_invalid">Tumia saa kuanzia 0 hadi 23.</string>
+    <string name="delivery_saving">Inahifadhi…</string>
+</resources>

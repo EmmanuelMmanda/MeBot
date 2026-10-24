@@ -1,0 +1,45 @@
+MeBot Daily 0.7.0-beta.1 - verification
+
+Built from recovered public 0.6.1 source plus documented changes.
+Package: app.mynguli.beta
+Display name: MeBot Test
+Version code: 9
+Min Android: 8.0 / API 26; target/compile: API 36
+Non-debuggable beta variant. Android development test certificate; not the stable release key.
+Install separately. Do not uninstall stable MeBot.
+
+Core: {'tests': 129, 'failures': 0, 'errors': 0, 'skipped': 0}
+Android/JVM/native host UI: {'tests': 389, 'failures': 0, 'errors': 0, 'skipped': 0}
+Optional Python service: {'tests': 145, 'failures': 0, 'errors': 0, 'skipped': 0}
+Total tests: 663
+Beta lint: {'Fatal': 0, 'Error': 0, 'Warning': 125, 'Information': 0}
+Commands: :core:test :app:testDebugUnitTest :app:assembleBeta :app:lintBeta
+Gradle result: BUILD SUCCESSFUL
+Service: pytest; 1 dependency deprecation warning.
+
+APK signature verified with Android apksigner.
+APK alignment verified with zipalign -c -P 16 -v 4.
+No source credential-pattern matches in a bounded scan. This is not an independent security audit.
+Source archives omit local.properties, build caches, personal profiles, signing keys, credentials and font binaries.
+
+Not verified: real owner ChatGPT/API inference, physical Android installation, actual embedded-media playback, overnight alarm delivery, real-world recommendation relevance over time.
+Some provider-specific stages are available only when the provider emits those events; no fake progress or raw private reasoning is displayed.
+Social private-account feeds and unrestricted video access are not implemented.
+
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): false
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+Signer #1 certificate DN: C=US, O=Android, CN=Android Debug
+Signer #1 certificate SHA-256 digest: 6399a44017bc0b332754d870f4a9852a2411edb613df4680790771417f10f23a
+Signer #1 certificate SHA-1 digest: 941845248a2cf958442894c205fe40be440548fa
+Signer #1 certificate MD5 digest: 41218d15a1ec85ccf7c1d4cd86299491
+Signer #1 key algorithm: RSA
+Signer #1 key size (bits): 2048
+Signer #1 public key SHA-256 digest: f336a8bed52d13952f3c86bd90ca5e891ef5fba2537dc87e5be85a2549ceb8f9
+Signer #1 public key SHA-1 digest: a09b02936c86b512d35697366036c74220daabd2
+Signer #1 public key MD5 digest: f948b6710696b8ba055412377b9baac9

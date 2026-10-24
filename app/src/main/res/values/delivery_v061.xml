@@ -1,0 +1,18 @@
+<resources>
+    <string name="delivery_usage_finite">%1$d of %2$d used today</string>
+    <string name="delivery_usage_unlimited">%1$d used today · no local limit</string>
+    <string name="delivery_usage_saturated">More than 2 billion used today</string>
+    <string name="delivery_reset_note">Resets at midnight in your selected time zone.</string>
+    <string name="delivery_limit_unlimited">Unlimited</string>
+    <string name="delivery_limit_custom">Custom</string>
+    <string name="delivery_limit_default">%1$d · default</string>
+    <string name="delivery_limit_custom_label">Requests per day</string>
+    <string name="delivery_limit_invalid">Enter a whole number greater than zero.</string>
+    <string name="delivery_limit_provider_note">This is MeBot\'s own limit. Provider limits, plan allowances and API charges still apply.</string>
+    <string name="delivery_interval_hours">%1$d h</string>
+    <string name="delivery_interval_custom_label">Hours between updates</string>
+    <string name="delivery_interval_invalid">Choose a whole number from 1 to 24.</string>
+    <string name="delivery_quiet_note">Only notifications are silenced. Set both hours the same for no quiet period.</string>
+    <string name="delivery_quiet_invalid">Use hours from 0 to 23.</string>
+    <string name="delivery_saving">Saving…</string>
+</resources>

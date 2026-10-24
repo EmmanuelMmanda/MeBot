@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chatgpt_name" translatable="false">ChatGPT</string>
+    <string name="chatgpt_connect_title">Use your ChatGPT plan</string>
+    <string name="chatgpt_connect_body">Personalized updates and answers, using your eligible plan.</string>
+    <string name="chatgpt_continue">Continue with ChatGPT</string>
+    <string name="chatgpt_signin_note">Sign in securely in your browser.</string>
+    <string name="chatgpt_using_plan">Using ChatGPT plan</string>
+    <string name="chatgpt_manage_usage">Manage usage</string>
+    <string name="chatgpt_usage_help">Review your plan or MeBot’s limit in ChatGPT settings.</string>
+    <string name="chatgpt_welcome_title">You’re using your ChatGPT plan</string>
+    <string name="chatgpt_welcome_body">Eligible AI requests use your ChatGPT plan. You can manage usage in ChatGPT settings.</string>
+    <string name="chatgpt_got_it">Got it</string>
+    <string name="chatgpt_waiting_title">Finish signing in</string>
+    <string name="chatgpt_waiting_body">Complete the steps in your browser, then return to MeBot.</string>
+    <string name="chatgpt_verifying_title">Checking your connection</string>
+    <string name="chatgpt_verifying_body">Confirming your account and AI access.</string>
+    <string name="chatgpt_cancel">Cancel sign-in</string>
+    <string name="chatgpt_cancel_check">Cancel check</string>
+    <string name="chatgpt_accounts">Accounts</string>
+    <string name="chatgpt_add_account">Add an account</string>
+    <string name="chatgpt_use_account">Use this account</string>
+    <string name="chatgpt_active_account">In use</string>
+    <string name="chatgpt_signed_out">Signed out</string>
+    <string name="chatgpt_plan_off">Plan access is off</string>
+    <string name="chatgpt_plan_ready">Plan access enabled</string>
+    <string name="chatgpt_sign_out">Sign out</string>
+    <string name="chatgpt_choose_model">Choose a model</string>
+    <string name="chatgpt_models_empty">Couldn’t load model access. Check the connection again.</string>
+    <string name="chatgpt_api_alternative">Use an API key instead</string>
+    <string name="chatgpt_api_heading">API connection</string>
+    <string name="chatgpt_api_active">Using your API connection</string>
+    <string name="chatgpt_api_billing">API usage has separate billing. MeBot only switches when you choose to connect.</string>
+    <string name="chatgpt_memory_note">Sign-in does not import chats or memories. Choose what MeBot knows under My context.</string>
+    <string name="chatgpt_error_ineligible">This account cannot share its ChatGPT plan with MeBot yet.</string>
+    <string name="chatgpt_error_limit">ChatGPT usage limit reached.</string>
+    <string name="chatgpt_error_unavailable">ChatGPT is temporarily unavailable. Try again shortly.</string>
+    <string name="chatgpt_error_capability">This model or account cannot complete this request. Choose another available model.</string>
+    <string name="chatgpt_error_reauth">Sign in again to restore your ChatGPT connection.</string>
+    <string name="chatgpt_error_permission">Allow MeBot to use your ChatGPT plan when you sign in.</string>
+    <string name="chatgpt_error_policy">This request is not available under your account or workspace settings.</string>
+    <string name="chatgpt_error_incomplete">ChatGPT did not finish the answer. Your saved feed is unchanged.</string>
+    <string name="chatgpt_error_interrupted">The connection ended before the answer finished. Try again.</string>
+    <string name="chatgpt_error_declined">Sign-in was not completed. You can try again whenever you are ready.</string>
+    <string name="chatgpt_error_expired">This sign-in expired. Start again to get a fresh connection.</string>
+    <string name="chatgpt_error_security">The sign-in response could not be verified. Start sign-in again.</string>
+    <string name="chatgpt_error_browser">A browser could not be opened. Install or enable a browser, then try again.</string>
+    <string name="chatgpt_error_listener">MeBot could not receive the sign-in response. Close this attempt and try again.</string>
+    <string name="chatgpt_error_account">This sign-in belongs to a different account. Add it as a new account instead.</string>
+    <string name="chatgpt_error_account_limit">MeBot has reached its saved account limit. Use an existing account.</string>
+    <string name="chatgpt_local_signout">Signed out on this device. Disconnect MeBot in ChatGPT settings to finish.</string>
+    <string name="chatgpt_error_configuration">ChatGPT could not start this connection. Try a fresh sign-in.</string>
+    <string name="chatgpt_browser_title">Return to MeBot</string>
+    <string name="chatgpt_browser_body">Your sign-in response has arrived. Return to MeBot to finish connecting.</string>
+    <string name="chatgpt_browser_invalid">This sign-in link is no longer valid. Return to MeBot and try again.</string>
+    <string name="chatgpt_browser_return">Open MeBot</string>
+</resources>

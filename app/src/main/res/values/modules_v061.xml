@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="modules_catalog_count">%1$d feed modules · %2$d enabled</string>
+    <string name="modules_find">Find a module</string>
+    <string name="modules_clear_search">Clear module search</string>
+    <string name="modules_filter_all">All</string>
+    <string name="modules_filter_enabled">Enabled</string>
+    <string name="modules_filter_disabled">Disabled</string>
+    <string name="modules_all_categories">All categories</string>
+    <string name="modules_no_matches">No matching modules</string>
+    <string name="modules_no_matches_help">Try another name or clear the filters.</string>
+    <string name="modules_reset_filters">Show all modules</string>
+    <string name="modules_default_focus">Default focus</string>
+    <string name="modules_use_default">Use default focus</string>
+    <string name="modules_default_news">Recent developments, what changed and why it matters. Uses your region and shared interests.</string>
+    <string name="modules_default_technology">Useful releases, what they can do and where to try them. Prioritizes original documentation.</string>
+    <string name="modules_default_security">Verified advisories, affected versions and available fixes for your shared technologies.</string>
+    <string name="modules_default_business">Business and policy changes with practical implications, dated figures and direct sources.</string>
+    <string name="modules_default_science">Original research with its finding, evidence and key limitation in plain language.</string>
+    <string name="modules_default_opportunities">Active jobs, contracts and grants with eligibility, deadlines and official application links.</string>
+    <string name="modules_default_scholarships">Study funding with verified coverage, eligibility, intake and application dates.</string>
+    <string name="modules_default_learning">A useful lesson or guide with a clear practice outcome, prerequisites and a starting link.</string>
+    <string name="modules_default_github">Maintained projects and releases with a concrete use, setup information and a repository link.</string>
+    <string name="modules_default_weather">Current conditions and the next 24 hours for your selected location, including rain and heat.</string>
+    <string name="modules_default_entertainment">Films and series suited to your shared taste, with spoiler-free reasons and official trailers.</string>
+    <string name="modules_default_music">Performances, listening discoveries and lessons that match your shared music interests.</string>
+    <string name="modules_default_media">Useful short explainers, demonstrations and interviews from original or official channels.</string>
+    <string name="modules_default_events">Upcoming local or online events with verified dates, timezone and registration links.</string>
+    <string name="modules_default_travel">Specific places to explore with practical visitor information and verified logistics.</string>
+    <string name="modules_default_horoscope">A short reading for your selected sign and tone. Optional entertainment, with no factual predictions.</string>
+    <string name="modules_default_watch">Current updates for your chosen topic, using verified sources and the notes you share.</string>
+</resources>

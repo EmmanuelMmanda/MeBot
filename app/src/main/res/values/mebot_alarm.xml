@@ -1,0 +1,22 @@
+<resources>
+    <string name="mebot_alarm_math">Math challenge</string>
+    <string name="mebot_alarm_question_count">%1$d / %2$d</string>
+    <string name="mebot_alarm_solve_to_stop">Solve to stop your alarm</string>
+    <string name="mebot_alarm_try_again">Try again</string>
+    <string name="mebot_alarm_answer">Answer: %1$s</string>
+    <string name="mebot_alarm_empty">empty</string>
+    <string name="mebot_alarm_delete_digit">Delete digit</string>
+    <string name="mebot_alarm_submit">Check answer</string>
+    <string name="mebot_alarm_test">TEST</string>
+    <string name="mebot_alarm_open">Open alarm</string>
+    <string name="mebot_alarm_followup_wait">One scan left</string>
+    <string name="mebot_alarm_snoozed">Snoozed</string>
+    <string name="mebot_alarm_scan_again">Scan once more</string>
+    <string name="mebot_alarm_time_to_wake">Time to wake up</string>
+    <string name="mebot_alarm_quiet_remaining">Quiet for %1$s</string>
+    <string name="mebot_alarm_snooze_short">Snooze %1$d min</string>
+    <string name="mebot_alarm_stop_title">Stop this alarm?</string>
+    <string name="mebot_alarm_stop_detail">Ends this alarm and any queued alarms.</string>
+    <string name="mebot_alarm_stop_confirm">Stop alarm</string>
+    <string name="mebot_alarm_keep_ringing">Keep ringing</string>
+</resources>

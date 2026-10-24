@@ -1,0 +1,33 @@
+<resources>
+    <string name="workspace_title">AI</string>
+    <string name="workspace_history">Mazungumzo</string>
+    <string name="workspace_new">Mazungumzo mapya</string>
+    <string name="workspace_general">Mada zote</string>
+    <string name="workspace_question">Uliza MeBot</string>
+    <string name="workspace_attach">Ongeza faili la maandishi (.txt au .md)</string>
+    <string name="workspace_remove_attachment">Ondoa kiambatisho</string>
+    <string name="workspace_voice_input">Ingiza sauti kwa simu</string>
+    <string name="workspace_voice_error">Huduma ya sauti ya simu haikukamilisha. Unaweza kuendelea kuandika.</string>
+    <string name="workspace_stop_audio">Acha kusoma</string>
+    <string name="workspace_read">Soma kwa sauti</string>
+    <string name="workspace_stop">Simamisha</string>
+    <string name="workspace_copy">Nakili jibu</string>
+    <string name="workspace_delete">Futa mazungumzo</string>
+    <string name="workspace_delete_title">Futa mazungumzo haya?</string>
+    <string name="workspace_delete_body">Ujumbe na maandishi yaliyoambatishwa yataondolewa kwenye programu hii.</string>
+    <string name="workspace_choose_context">Anza na sehemu</string>
+    <string name="workspace_context_help">Mazungumzo mapya yanaweza kutumia maelezo yaliyoidhinishwa kwa sehemu moja. Mazungumzo ya jumla hutumia ujumbe na faili zake tu.</string>
+    <string name="workspace_manage_context">Unavyopenda</string>
+    <string name="workspace_attachment_help">Maandishi haya hujumuishwa unapotuma ujumbe katika mazungumzo haya. Yaondoe kwenye sehemu ya kuandika ili yasijumuishwe kwenye ujumbe unaofuata.</string>
+    <string name="workspace_start_title">Ungependa kujua nini?</string>
+    <string name="workspace_scoped_notes">Mazungumzo haya yanaweza kutumia maelezo %1$d yaliyoidhinishwa.</string>
+    <string name="workspace_general_context">Uliza kuhusu mada zako au jambo lingine.</string>
+    <string name="workspace_research">Nipe maendeleo mapya yenye manufaa</string>
+    <string name="workspace_compare">Linganisha chaguo mbili zinazofaa</string>
+    <string name="workspace_discover">Tafuta mwongozo au nyenzo inayofaa</string>
+    <string name="workspace_research_prompt">Tafuta maendeleo moja mapya muhimu yanayohusiana na sehemu iliyochaguliwa na taarifa zilizoidhinishwa. Kama hakuna mada, chagua maendeleo yenye manufaa katika teknolojia au sayansi. Eleza kilichobadilika, umuhimu wake na yasiyo na uhakika, ukiweka vyanzo vya asili.</string>
+    <string name="workspace_compare_prompt">Chagua uamuzi wa vitendo unaohusiana na sehemu iliyochaguliwa au taarifa zilizoidhinishwa, kisha linganisha chaguo mbili zinazoaminika pamoja na tofauti zake na viungo vya asili. Kama hakuna mada, linganisha zana mbili za bure za kupanga kazi za kila siku. Usidhani ninatumia au nimenunua mojawapo.</string>
+    <string name="workspace_discover_prompt">Tafuta mwongozo au nyenzo moja inayofikika na yenye manufaa kwa sehemu iliyochaguliwa na taarifa zilizoidhinishwa. Kama hakuna mada, tafuta mwongozo wa ujuzi wa kidijitali wa kila siku. Eleza ninachoweza kufanya nayo na weka kiungo cha mtengenezaji. Hakiki upatikanaji na gharama zilizotajwa.</string>
+    <string name="workspace_writing">Inaandika…</string>
+    <string name="workspace_partial">Jibu halijakamilika</string>
+</resources>

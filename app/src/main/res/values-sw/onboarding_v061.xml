@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tour_replay">Ziara fupi</string>
+    <string name="tour_step">%1$d kati ya %2$d</string>
+    <string name="tour_feed_title">Mambo unayopenda, sehemu moja</string>
+    <string name="tour_feed_body">Soma habari, pata mawazo ya kukusaidia na fungua vyanzo vyake.</string>
+    <string name="tour_modules_title">Unapenda kufuatilia nini?</string>
+    <string name="tour_modules_body">Chagua mada unazopenda. Unaweza kuzibadili wakati wowote.</string>
+    <string name="tour_explain_title">Elewa habari vizuri</string>
+    <string name="tour_explain_body">Fungua habari upate maelezo ya AI. Ukiwa na swali, uliza hapo hapo.</string>
+    <string name="tour_search_title">Uliza, tazama au sikiliza</string>
+    <string name="tour_search_body">Tafuta kwenye mada zako, fungua vyanzo na cheza video zinazokubaliwa hapa.</string>
+    <string name="tour_tools_title">Vifaa vya siku yako</string>
+    <string name="tour_tools_body">Weka kengele, tenga muda wa kazi au hifadhi cha kusoma baadaye.</string>
+    <string name="tour_context_title">Iweke ikufae</string>
+    <string name="tour_context_body">Ongeza kidogo, au endelea na mada ulizochagua. Huhitaji faili.</string>
+    <string name="tour_connect">Unganisha AI</string>
+    <string name="tour_next">Endelea</string>
+    <string name="tour_open">Fungua ukurasa wangu</string>
+    <string name="tour_skip">Ruka kwa sasa</string>
+    <string name="tour_example">Mfano</string>
+    <string name="tour_preview_today">Leo</string>
+    <string name="tour_preview_explanation">Maelezo ya AI</string>
+    <string name="tour_preview_alarm">Kengele</string>
+    <string name="tour_preview_news">Habari</string>
+    <string name="tour_preview_news_note">Habari za karibuni zenye viungo vya vyanzo.</string>
+    <string name="tour_preview_learning">Jambo la kujifunza</string>
+    <string name="tour_preview_learning_note">Masomo muhimu kuhusu unayopenda.</string>
+    <string name="tour_preview_opportunities">Matukio na fursa</string>
+    <string name="tour_preview_opportunities_note">Tarehe, makataa na njia za kushiriki.</string>
+    <string name="tour_preview_why">Yaliyo muhimu hapa</string>
+    <string name="tour_preview_explanation_note">Hoja kuu, maelezo ya msingi na yale yanayothibitishwa na chanzo.</string>
+    <string name="tour_preview_sources">Viungo vya vyanzo</string>
+    <string name="tour_preview_sources_note">Fungua rejea wakati wowote unapotaka kuikagua.</string>
+    <string name="tour_preview_ask">Hili lina maana gani kwangu?</string>
+    <string name="tour_preview_query">Zana za Android kwa mradi mpya</string>
+    <string name="tour_preview_save">Hifadhi kwa baadaye</string>
+    <string name="tour_preview_save_note">Hifadhi taarifa au matokeo muhimu.</string>
+    <string name="tour_preview_chat">Mazungumzo ya AI</string>
+    <string name="tour_preview_chat_note">Mazungumzo yanahifadhiwa; unaweza kuambatisha faili za maandishi.</string>
+    <string name="tour_preview_voice">Ingiza kwa sauti ikiwa huduma ya utambuzi wa sauti inapatikana kwenye simu.</string>
+    <string name="tour_preview_alarm_time">06:30</string>
+    <string name="tour_preview_math">8 + 7 = ?</string>
+    <string name="tour_preview_answer">15</string>
+    <string name="tour_preview_focus">Umakini na tathmini</string>
+    <string name="tour_preview_tools_note">Umakini, hali ya kila siku na historia yako.</string>
+    <string name="tour_preview_preferences">Maelezo yako</string>
+    <string name="tour_preview_preferences_note">Mada, mapendeleo na taarifa muhimu kukuhusu.</string>
+    <string name="tour_preview_connection">Chagua muunganisho wako</string>
+    <string name="tour_preview_connection_note">Akaunti ya ChatGPT au ufunguo wako wa API.</string>
+    <string name="tour_preview_control">Taarifa chinichini</string>
+    <string name="tour_preview_control_note">Muda wa kusasisha, saa tulivu na kikomo cha maombi kwa siku.</string>
+</resources>

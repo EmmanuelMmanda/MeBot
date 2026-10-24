@@ -1,0 +1,21 @@
+{
+  "model": "gpt-6-luna",
+  "name": "",
+  "region": "",
+  "timezone": "UTC",
+  "modules": [
+    {
+      "id": "news",
+      "kind": "news",
+      "title": "Software news",
+      "query": "Meaningful changes in open-source software and private AI deployment",
+      "enabled": true,
+      "sources": [],
+      "alerts": false,
+      "zodiacSign": ""
+    }
+  ],
+  "context": [],
+  "language": "en",
+  "limit": 6
+}

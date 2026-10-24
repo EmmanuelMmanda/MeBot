@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Setup and usage guide
+    url: https://emmanuelmmanda.github.io/MeBot/guide.html
+    about: Installation, ChatGPT connection, context, modules and troubleshooting.
+  - name: Security reporting instructions
+    url: https://github.com/EmmanuelMmanda/MeBot/blob/master/SECURITY.md
+    about: Check the private reporting route before sharing sensitive information.

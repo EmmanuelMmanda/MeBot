@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="imports_checking">Checking file…</string>
+    <string name="imports_applying">Importing…</string>
+    <string name="imports_context_review">Review context</string>
+    <string name="imports_backup_review">Review backup</string>
+    <string name="imports_context_impact">Replaces your profile and context.</string>
+    <string name="imports_modules_replace">Also replaces your module settings and order.</string>
+    <string name="imports_modules_keep">Your current modules stay as they are.</string>
+    <string name="imports_backup_impact">Replaces your feed, modules, context and conversations. Connect AI again after importing.</string>
+    <string name="imports_local_tools_keep">Your local alarms and routines stay as they are.</string>
+    <string name="imports_confirm">Import file</string>
+    <string name="imports_context_done">Context imported.</string>
+    <string name="imports_backup_done">Backup imported. AI is ready to reconnect.</string>
+    <string name="imports_context_note">Choose a MeBot context JSON file, then review what it will replace.</string>
+    <string name="imports_entries">Context entries</string>
+    <string name="imports_modules">Modules</string>
+    <string name="imports_saved">Saved items</string>
+    <string name="imports_conversations">Conversations</string>
+    <string name="imports_history_title">Reading history</string>
+    <string name="imports_history_body">Remember opened items on this device to reduce repeats in your feed.</string>
+    <string name="imports_history_off">Newly opened items are not recorded.</string>
+    <string name="imports_history_clear">Clear history</string>
+    <string name="imports_diagnostics">Troubleshooting</string>
+    <string name="imports_diagnostics_body">Recent technical errors on this device.</string>
+    <string name="imports_diagnostic_record">%1$s · %2$s\nID %3$s</string>
+    <plurals name="imports_history_count">
+        <item quantity="one">%d item remembered</item>
+        <item quantity="other">%d items remembered</item>
+    </plurals>
+</resources>

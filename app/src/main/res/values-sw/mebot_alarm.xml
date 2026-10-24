@@ -1,0 +1,22 @@
+<resources>
+    <string name="mebot_alarm_math">Hesabu</string>
+    <string name="mebot_alarm_question_count">%1$d / %2$d</string>
+    <string name="mebot_alarm_solve_to_stop">Jibu ili kuzima kengele</string>
+    <string name="mebot_alarm_try_again">Jaribu tena</string>
+    <string name="mebot_alarm_answer">Jibu: %1$s</string>
+    <string name="mebot_alarm_empty">wazi</string>
+    <string name="mebot_alarm_delete_digit">Futa tarakimu</string>
+    <string name="mebot_alarm_submit">Hakiki jibu</string>
+    <string name="mebot_alarm_test">JARIBIO</string>
+    <string name="mebot_alarm_open">Fungua kengele</string>
+    <string name="mebot_alarm_followup_wait">Uchanganuzi mmoja umebaki</string>
+    <string name="mebot_alarm_snoozed">Imeahirishwa</string>
+    <string name="mebot_alarm_scan_again">Changanua tena</string>
+    <string name="mebot_alarm_time_to_wake">Muda wa kuamka</string>
+    <string name="mebot_alarm_quiet_remaining">Sauti ndogo kwa %1$s</string>
+    <string name="mebot_alarm_snooze_short">Ahirisha dk %1$d</string>
+    <string name="mebot_alarm_stop_title">Simamisha kengele hii?</string>
+    <string name="mebot_alarm_stop_detail">Husimamisha hii na kengele zote zinazosubiri.</string>
+    <string name="mebot_alarm_stop_confirm">Simamisha</string>
+    <string name="mebot_alarm_keep_ringing">Iendelee kulia</string>
+</resources>

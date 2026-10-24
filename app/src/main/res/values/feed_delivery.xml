@@ -1,0 +1,4 @@
+<resources>
+    <string name="feed_channel_name">Feed updates</string>
+    <string name="feed_notification_title">Your MeBot update</string>
+</resources>

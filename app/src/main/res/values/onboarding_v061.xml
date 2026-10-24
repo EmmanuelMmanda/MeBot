@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tour_replay">Quick tour</string>
+    <string name="tour_step">%1$d of %2$d</string>
+    <string name="tour_feed_title">Your topics, in one place</string>
+    <string name="tour_feed_body">Read updates, find useful ideas and open the original sources.</string>
+    <string name="tour_modules_title">What interests you?</string>
+    <string name="tour_modules_body">Choose a few topics. Change them anytime.</string>
+    <string name="tour_explain_title">Understand the story</string>
+    <string name="tour_explain_body">Open a post for an AI explanation. Ask a follow-up in the same place.</string>
+    <string name="tour_search_title">Ask, watch or listen</string>
+    <string name="tour_search_body">Search your topics, follow source links and play supported videos here.</string>
+    <string name="tour_tools_title">Tools for your day</string>
+    <string name="tour_tools_body">Set an alarm, take a focus session or save something for later.</string>
+    <string name="tour_context_title">Make it yours</string>
+    <string name="tour_context_body">Add a little more, or continue with your topics. No files needed.</string>
+    <string name="tour_connect">Connect AI</string>
+    <string name="tour_next">Next</string>
+    <string name="tour_open">Open my feed</string>
+    <string name="tour_skip">Skip for now</string>
+    <string name="tour_example">Example</string>
+    <string name="tour_preview_today">Today</string>
+    <string name="tour_preview_explanation">AI explanation</string>
+    <string name="tour_preview_alarm">Alarm</string>
+    <string name="tour_preview_news">News</string>
+    <string name="tour_preview_news_note">Recent reporting with direct source links.</string>
+    <string name="tour_preview_learning">Something to learn</string>
+    <string name="tour_preview_learning_note">Useful lessons about your interests.</string>
+    <string name="tour_preview_opportunities">Events and opportunities</string>
+    <string name="tour_preview_opportunities_note">Dates, deadlines and ways to take part.</string>
+    <string name="tour_preview_why">What matters here</string>
+    <string name="tour_preview_explanation_note">The main points, useful background and what the source can support.</string>
+    <string name="tour_preview_sources">Source links</string>
+    <string name="tour_preview_sources_note">Open a reference whenever you want to check it.</string>
+    <string name="tour_preview_ask">What does this mean for me?</string>
+    <string name="tour_preview_query">Android tools for a new project</string>
+    <string name="tour_preview_save">Save for later</string>
+    <string name="tour_preview_save_note">Keep a useful post or search result.</string>
+    <string name="tour_preview_chat">AI conversations</string>
+    <string name="tour_preview_chat_note">Saved chats and text attachments.</string>
+    <string name="tour_preview_voice">Use phone voice input when a speech service is available.</string>
+    <string name="tour_preview_alarm_time">06:30</string>
+    <string name="tour_preview_math">8 + 7 = ?</string>
+    <string name="tour_preview_answer">15</string>
+    <string name="tour_preview_focus">Focus and check-ins</string>
+    <string name="tour_preview_tools_note">Focus, daily check-ins and your history.</string>
+    <string name="tour_preview_preferences">Your context</string>
+    <string name="tour_preview_preferences_note">Topics, interests and useful background.</string>
+    <string name="tour_preview_connection">Choose your connection</string>
+    <string name="tour_preview_connection_note">ChatGPT account or your API key.</string>
+    <string name="tour_preview_control">Background updates</string>
+    <string name="tour_preview_control_note">Refresh interval, quiet hours and daily request budget.</string>
+</resources>

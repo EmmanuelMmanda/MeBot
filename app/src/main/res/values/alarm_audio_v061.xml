@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="alarm_audio_title">Sound</string>
+    <string name="alarm_audio_pulse">Pulse</string>
+    <string name="alarm_audio_chime">Rising chime</string>
+    <string name="alarm_audio_bell">Steady bell</string>
+    <string name="alarm_audio_classic">Classic</string>
+    <string name="alarm_audio_pulse_note">Bright, repeating pulses</string>
+    <string name="alarm_audio_chime_note">A rising four-note melody</string>
+    <string name="alarm_audio_bell_note">Clear, steady strikes</string>
+    <string name="alarm_audio_classic_note">The original MeBot sound</string>
+    <string name="alarm_audio_phone">Phone alarm sounds</string>
+    <string name="alarm_audio_file">Choose audio file</string>
+    <string name="alarm_audio_custom">Audio file</string>
+    <string name="alarm_audio_phone_default">Phone default alarm</string>
+    <string name="alarm_audio_preview">Preview sound</string>
+    <string name="alarm_audio_stop">Stop preview</string>
+    <string name="alarm_audio_preview_hint">Preview uses your phone’s current alarm volume.</string>
+    <string name="alarm_audio_fallback">This sound is unavailable. Using a bundled alarm sound.</string>
+    <string name="alarm_audio_no_sound">Audio is unavailable. Try another sound or check your phone’s alarm volume.</string>
+    <string name="alarm_audio_pick_failed">That file could not be kept for alarms. Choose a local audio file.</string>
+    <string name="alarm_audio_picker_unavailable">Your phone has no picker for this option. Choose a bundled sound instead.</string>
+    <string name="alarm_audio_active">Finish the active alarm before previewing another sound.</string>
+    <string name="alarm_audio_speech">Spoken wake-up message</string>
+    <string name="alarm_audio_speech_hint">Uses an installed offline voice. The tone keeps ringing if no voice is available.</string>
+    <string name="alarm_audio_message">Wake-up message</string>
+    <string name="alarm_audio_default_message">Good morning. It is time to get up.</string>
+    <string name="alarm_audio_message_hint">Leave empty to use the default message.</string>
+    <string name="alarm_audio_voice_unavailable">No offline voice is ready for this language. The alarm sound still works.</string>
+    <string name="alarm_audio_summary">%1$s · %2$d%% · %3$s</string>
+    <string name="alarm_audio_selected">Selected sound: %1$s</string>
+</resources>

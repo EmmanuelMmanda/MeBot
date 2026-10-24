@@ -1,0 +1,23 @@
+: Synthetic protocol fixture. No account, credential or captured provider content.
+
+event: response.created
+data: {"type":"response.created","response":{"id":"resp_items_fixture","object":"response","status":"in_progress","output":[]},"sequence_number":0}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"id":"rs_fixture","type":"reasoning","status":"in_progress","summary":[],"content":null,"encrypted_content":null},"sequence_number":1}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"id":"rs_fixture","type":"reasoning","status":"completed","summary":[],"content":null,"encrypted_content":null},"sequence_number":2}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":1,"item":{"id":"ws_fixture","type":"web_search_call","status":"completed","content":null,"action":{"type":"search","query":"release announcement","sources":[{"type":"url","url":"https://example.com/release","title":"Official release"}]}},"sequence_number":3}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","output_index":2,"content_index":0,"item_id":"msg_fixture","delta":"This provisional fragment must never become an answer.","sequence_number":4}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":2,"item":{"id":"msg_fixture","type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"{\"items\":[{\"title\":\"Verified release\",\"summary\":\"A synthetic release announcement for the transport regression.\",\"why\":\"Matches the configured topic.\",\"sourceName\":\"Example\",\"sourceUrl\":\"https://example.com/release\",\"publishedAt\":\"\",\"deadline\":\"\",\"relevance\":80,\"contentType\":\"article\",\"referenceUrls\":[]}]}","annotations":[{"type":"url_citation","title":"Official release","url":"https://example.com/release","start_index":0,"end_index":16}],"logprobs":[]}]},"sequence_number":5}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_items_fixture","object":"response","status":"completed","error":null,"output":[],"usage":{"input_tokens":12,"output_tokens":34,"total_tokens":46}},"sequence_number":6}
+

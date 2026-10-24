@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="modules_catalog_count">Moduli %1$d za taarifa · %2$d zimewashwa</string>
+    <string name="modules_find">Tafuta moduli</string>
+    <string name="modules_clear_search">Futa utafutaji wa moduli</string>
+    <string name="modules_filter_all">Zote</string>
+    <string name="modules_filter_enabled">Zimewashwa</string>
+    <string name="modules_filter_disabled">Zimezimwa</string>
+    <string name="modules_all_categories">Makundi yote</string>
+    <string name="modules_no_matches">Hakuna moduli inayolingana</string>
+    <string name="modules_no_matches_help">Jaribu jina lingine au ondoa vichujio.</string>
+    <string name="modules_reset_filters">Onyesha moduli zote</string>
+    <string name="modules_default_focus">Maudhui ya kawaida</string>
+    <string name="modules_use_default">Tumia maudhui ya kawaida</string>
+    <string name="modules_default_news">Matukio ya karibuni, kilichobadilika na umuhimu wake. Hutumia eneo na mambo unayopenda uliyoshiriki.</string>
+    <string name="modules_default_technology">Matoleo yenye manufaa, uwezo wake na mahali pa kuyajaribu. Hupendelea nyaraka rasmi.</string>
+    <string name="modules_default_security">Tahadhari zilizothibitishwa, matoleo yaliyoathirika na marekebisho ya teknolojia ulizoshiriki.</string>
+    <string name="modules_default_business">Mabadiliko ya biashara na sera, athari zake, takwimu zenye tarehe na vyanzo vya moja kwa moja.</string>
+    <string name="modules_default_science">Utafiti wa asili, matokeo, ushahidi na udhaifu muhimu kwa lugha rahisi.</string>
+    <string name="modules_default_opportunities">Ajira, mikataba na ruzuku zilizo wazi, vigezo, tarehe za mwisho na viungo rasmi vya maombi.</string>
+    <string name="modules_default_scholarships">Ufadhili wa masomo, gharama zinazolipiwa, vigezo, awamu ya masomo na tarehe za maombi.</string>
+    <string name="modules_default_learning">Somo au mwongozo wenye zoezi la vitendo, mahitaji ya kuanza na kiungo cha kujifunza.</string>
+    <string name="modules_default_github">Miradi inayotunzwa na matoleo yake, matumizi yake, namna ya kuanza na kiungo cha mradi.</string>
+    <string name="modules_default_weather">Hali ya sasa na saa 24 zijazo kwa eneo ulilochagua, ikijumuisha mvua na joto.</string>
+    <string name="modules_default_entertainment">Filamu na tamthilia zinazolingana na upendeleo ulioshiriki, sababu fupi na trela rasmi bila kufichua hadithi.</string>
+    <string name="modules_default_music">Maonesho, muziki wa kusikiliza na masomo yanayolingana na mambo ya muziki uliyoshiriki.</string>
+    <string name="modules_default_media">Video fupi za kueleza, kuonesha na mahojiano kutoka kwa watengenezaji asili au chaneli rasmi.</string>
+    <string name="modules_default_events">Matukio yajayo ya karibu au mtandaoni yenye tarehe, saa na viungo vya kujisajili vilivyothibitishwa.</string>
+    <string name="modules_default_travel">Maeneo ya kutembelea, taarifa muhimu kwa wageni na maelezo ya safari yaliyothibitishwa.</string>
+    <string name="modules_default_horoscope">Ujumbe mfupi kwa nyota na mtindo uliochagua. Burudani ya hiari bila utabiri wa ukweli.</string>
+    <string name="modules_default_watch">Taarifa mpya za mada uliyochagua, kutoka vyanzo vilivyothibitishwa na maelezo uliyoshiriki.</string>
+</resources>

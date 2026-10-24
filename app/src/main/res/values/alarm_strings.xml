@@ -1,0 +1,31 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="alarm_channel_name">Alarms</string>
+    <string name="alarm_channel_description">Active alarms and wake-up challenges</string>
+    <string name="alarm_generic_title">Alarm</string>
+    <string name="alarm_your_title">Your alarm</string>
+    <string name="alarm_go_checkpoint">Go to your checkpoint</string>
+    <string name="alarm_notification_followup">Scan once more to finish</string>
+    <string name="alarm_scan_code">Scan your checkpoint</string>
+    <string name="alarm_time_set">Time to wake up</string>
+    <string name="alarm_snooze_action">Snooze</string>
+    <string name="alarm_dismiss_action">Dismiss</string>
+    <string name="alarm_emergency_action">Emergency stop</string>
+    <string name="alarm_wrong_code">Different code. Try your saved checkpoint.</string>
+    <string name="alarm_not_ready">Not ready yet. Check alarm access if it stays waiting.</string>
+    <string name="alarm_scan_cancelled">Scan cancelled. Alarm still active.</string>
+    <string name="alarm_scan_prompt">Scan your checkpoint</string>
+    <string name="alarm_camera_permission">Allow camera access to scan, or use Emergency stop.</string>
+    <string name="alarm_ended">Alarm ended</string>
+    <string name="alarm_return_to_app">Open MeBot</string>
+    <string name="alarm_checkpoint_generic">Your checkpoint</string>
+    <string name="alarm_no_camera">No camera available. Use Emergency stop.</string>
+    <string name="alarm_scan_action">Scan checkpoint</string>
+    <string name="alarm_dismiss_full_action">Dismiss alarm</string>
+    <string name="alarm_snooze_failed">Could not snooze. Check alarm access.</string>
+    <string name="alarm_close_for_now">Close for now</string>
+    <string name="alarm_camera_settings">Camera settings</string>
+    <string name="alarm_exact_permission_needed">Allow alarm access to schedule.</string>
+    <string name="alarm_schedule_failed">Could not schedule. Check alarm access.</string>
+    <string name="alarm_checkpoint_required">Set a checkpoint first.</string>
+</resources>

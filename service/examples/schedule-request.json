@@ -1,0 +1,24 @@
+{
+  "enabled": true,
+  "intervalMinutes": 360,
+  "timezone": "UTC",
+  "quietStartHour": 22,
+  "quietEndHour": 7,
+  "request": {
+    "model": "gpt-6-luna",
+    "name": "",
+    "region": "",
+    "timezone": "UTC",
+    "modules": [
+      {
+        "id": "news",
+        "kind": "news",
+        "query": "Important changes in the software tools I follow",
+        "enabled": true
+      }
+    ],
+    "context": [],
+    "language": "en",
+    "limit": 6
+  }
+}

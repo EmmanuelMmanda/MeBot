@@ -1,0 +1,33 @@
+{
+  "version": "0.7.0-beta.1",
+  "core": {
+    "tests": 129,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "android": {
+    "tests": 389,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "service": {
+    "tests": 145,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lint_beta": {
+    "Fatal": 0,
+    "Error": 0,
+    "Warning": 125,
+    "Information": 0
+  },
+  "live_account_tested": false,
+  "physical_phone_tested": false,
+  "youtube_playback_tested": false,
+  "package": "app.mynguli.beta",
+  "signer": "Android development test certificate",
+  "production_upgrade_compatible": false
+}

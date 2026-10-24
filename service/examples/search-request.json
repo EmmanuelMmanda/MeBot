@@ -1,0 +1,23 @@
+{
+  "query": "Practical demonstrations of PostgreSQL query planning",
+  "region": "",
+  "timezone": "UTC",
+  "language": "en",
+  "limit": 8,
+  "modules": [
+    {
+      "id": "media",
+      "kind": "media",
+      "title": "Media",
+      "query": "Original technical explainers and demonstrations",
+      "preferences": {"focus": "demonstrations", "duration": "short"}
+    },
+    {
+      "id": "learning",
+      "kind": "learning",
+      "title": "Learning",
+      "preferences": {"format": "guides", "cost": "free"}
+    }
+  ],
+  "context": []
+}

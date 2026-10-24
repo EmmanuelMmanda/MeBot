@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="imports_checking">Inakagua faili…</string>
+    <string name="imports_applying">Inaingiza…</string>
+    <string name="imports_context_review">Kagua maelezo</string>
+    <string name="imports_backup_review">Kagua nakala</string>
+    <string name="imports_context_impact">Itachukua nafasi ya wasifu na maelezo yako.</string>
+    <string name="imports_modules_replace">Pia itachukua nafasi ya mipangilio na mpangilio wa moduli zako.</string>
+    <string name="imports_modules_keep">Moduli zako za sasa zitabaki.</string>
+    <string name="imports_backup_impact">Itachukua nafasi ya taarifa, moduli, maelezo na mazungumzo yako. Unganisha AI tena baada ya kuingiza.</string>
+    <string name="imports_local_tools_keep">Kengele na taratibu zako za ndani zitabaki.</string>
+    <string name="imports_confirm">Ingiza faili</string>
+    <string name="imports_context_done">Maelezo yameingizwa.</string>
+    <string name="imports_backup_done">Nakala imeingizwa. AI iko tayari kuunganishwa tena.</string>
+    <string name="imports_context_note">Chagua faili la JSON la maelezo ya MeBot, kisha kagua litakachobadilisha.</string>
+    <string name="imports_entries">Maelezo binafsi</string>
+    <string name="imports_modules">Moduli</string>
+    <string name="imports_saved">Vilivyohifadhiwa</string>
+    <string name="imports_conversations">Mazungumzo</string>
+    <string name="imports_history_title">Historia ya kusoma</string>
+    <string name="imports_history_body">Kumbuka uliyofungua kwenye kifaa hiki ili kupunguza marudio kwenye taarifa zako.</string>
+    <string name="imports_history_off">Vipya unavyofungua havirekodiwi.</string>
+    <string name="imports_history_clear">Futa historia</string>
+    <string name="imports_diagnostics">Utatuzi wa hitilafu</string>
+    <string name="imports_diagnostics_body">Hitilafu za kiufundi za hivi karibuni kwenye kifaa hiki.</string>
+    <string name="imports_diagnostic_record">%1$s · %2$s\nID %3$s</string>
+    <plurals name="imports_history_count">
+        <item quantity="one">Kipengee %d kimekumbukwa</item>
+        <item quantity="other">Vipengee %d vimekumbukwa</item>
+    </plurals>
+</resources>
