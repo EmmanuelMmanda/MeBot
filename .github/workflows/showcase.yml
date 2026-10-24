@@ -2,9 +2,9 @@ name: Review MeBot website
 on:
   push:
     branches: [develop]
-    paths: ['README.md', 'docs/**', 'scripts/check-docs.py', 'scripts/check-showcase.py', '.github/workflows/showcase.yml']
+    paths: ['README.md', 'docs/**', 'scripts/*showcase*', 'scripts/check-docs.py', '.github/workflows/showcase.yml']
   pull_request:
-    paths: ['README.md', 'docs/**', 'scripts/check-docs.py', 'scripts/check-showcase.py', '.github/workflows/showcase.yml']
+    paths: ['README.md', 'docs/**', 'scripts/*showcase*', 'scripts/check-docs.py', '.github/workflows/showcase.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,23 +14,73 @@ concurrency:
 jobs:
   review:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Check documentation links
-        run: python3 scripts/check-docs.py
-      - name: Check showcase and release links
+      - name: Generate the reviewed static pages
         run: |
-          if [ -f scripts/check-showcase.py ]; then python3 scripts/check-showcase.py; fi
+          python3 scripts/prepare-showcase-validation.py
+          python3 scripts/build-showcase.py
+          python3 scripts/build-showcase.py
+      - name: Check documentation and release data
+        run: |
+          python3 scripts/check-docs.py
+          python3 scripts/check-showcase.py
           node --check docs/site.js
-      - name: Export website for review
+          node --check docs/showcase.js
+      - name: Check published release assets and APK checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/EmmanuelMmanda/MeBot/releases/tags/v0.7.0-beta.1 > "$RUNNER_TEMP/published-release.json"
+          python3 - <<'PY'
+          import hashlib, json, os, urllib.request
+          from pathlib import Path
+          release=json.loads(Path(os.environ['RUNNER_TEMP'],'published-release.json').read_text())
+          config=json.loads(Path('docs/assets/release.json').read_text())
+          assert release['tag_name']==config['tag'] and release['prerelease'] and not release['draft']
+          assets={a['name']:a for a in release['assets']}
+          for key in ['filename','sourceFilename','previewsFilename','verificationFilename','testsFilename']:
+              assert config[key] in assets and assets[config[key]]['state']=='uploaded', key
+          assert 'SHA256SUMS.txt' in assets
+          a=assets[config['filename']]
+          assert a['size']==config['sizeBytes']
+          req=urllib.request.Request(a['browser_download_url'],headers={'User-Agent':'MeBot-docs-check'})
+          with urllib.request.urlopen(req,timeout=60) as response:
+              digest=hashlib.sha256(); size=0
+              while chunk:=response.read(1024*1024):
+                  digest.update(chunk); size+=len(chunk)
+          assert size==config['sizeBytes'] and digest.hexdigest()==config['sha256']
+          print('Published assets exist; direct APK download and SHA-256 passed.')
+          PY
+      - name: Install browser test tools
+        run: |
+          python3 -m pip install 'playwright==1.56.0'
+          python3 -m playwright install --with-deps chromium
+      - name: Verify mobile, desktop, dark mode and keyboard journeys
+        run: python3 scripts/test-showcase-browser.py
+      - name: Commit only generated documentation after checks pass
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        run: |
+          git config user.name 'MeBot documentation bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md docs scripts/check-docs.py
+          if ! git diff --cached --quiet; then
+            git commit -m 'docs: publish verified screenshot gallery and beta download pages'
+            git push origin HEAD:develop
+          fi
+      - name: Export review files and browser evidence
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mebot-website-review
           path: |
             docs/
             README.md
+            scripts/*showcase*
             scripts/check-docs.py
-            scripts/check-showcase.py
+            website-evidence/
           include-hidden-files: true
           retention-days: 7

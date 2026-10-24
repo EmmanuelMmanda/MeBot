@@ -1,0 +1,11 @@
+{
+ "version":"0.7.0-beta.1",
+ "apk_file":"mebot-0.7.0-beta.1.apk",
+ "apk_sha256":"4a1e1e4cb6323297dc12de795ff004e805268a4260a213c097f0d1fe7ac417ae",
+ "apk_size_bytes":15828127,
+ "personal_profile_asset_present":false,
+ "application_id":"app.mynguli.beta",
+ "signing":"Testing certificate; not the stable signing certificate",
+ "source_commit":"eeeee9619cd44b0b9d9328cab6fb8e6081955c66",
+ "verification_url":"https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.7.0-beta.1/mebot-0.7.0-beta.1-verification.txt"
+}
