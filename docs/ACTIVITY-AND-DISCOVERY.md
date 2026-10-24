@@ -35,3 +35,15 @@ Status strings are localized independently of generated text. Kiswahili uses sho
 ## Verification limits
 
 Automated provider fixtures are not a live account authorization test. Device playback, physical alarms, the Android save picker, third-party availability and live account quotas need device checks. See the release verification report for executed checks and remaining limitations.
+
+
+## Interface previews
+
+Native host renders with example content, not live account responses.
+
+![Readable source summary with a compact Show more action while MeBot works](screenshots/v081/mebot-0.8.1-detail-working.png)
+
+![Fixed activity panel expanded into an operation history popover](screenshots/v081/mebot-0.8.1-activity-details.png)
+
+![Streaming MeBot answer with one top activity surface](screenshots/v081/mebot-0.8.1-streaming.png)
+
