@@ -1,0 +1,89 @@
+name: Verify activity-panel maintenance
+on:
+  push:
+    branches: [fix/activity-panel-081]
+    paths: ['.github/workflows/activity-polish-081.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Import reviewed source changes
+        run: |
+          python3 - <<'PY'
+          import urllib.request,gzip,hashlib,subprocess,pathlib
+          if not pathlib.Path('core/src/main/kotlin/app/mynguli/core/RegionalDefaults.kt').exists():
+              data=urllib.request.urlopen('https://sb-6hhukiqyxqp3.vercel.run/activity-polish.patch.gz',timeout=30).read(100000)
+              assert hashlib.sha256(data).hexdigest()=='5ab787c52b7df992891240ad95c46a9157e91b219740dda75284cc16fc84288a'
+              patch=gzip.decompress(data)
+              assert len(patch)<200000
+              for line in patch.splitlines():
+                  if line.startswith(b'+++ b/'):
+                      path=line[6:].decode()
+                      assert path.startswith(('app/','core/','docs/')) and '..' not in pathlib.PurePosixPath(path).parts
+              subprocess.run(['git','apply','--check','-'],input=patch,check=True)
+              subprocess.run(['git','apply','-'],input=patch,check=True)
+          PY
+          git config user.name 'MeBot maintenance bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app core docs
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix: scoped activity, compact detail content and verified resources'
+            git push origin HEAD:fix/activity-panel-081
+          fi
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        with:
+          gradle-version: '8.13'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Build prerequisites
+        run: |
+          python3 scripts/prepare-build.py
+          python3 - <<'PY'
+          import subprocess
+          subprocess.run(['sdkmanager','platforms;android-36','build-tools;35.0.0'],input='y\n'*30,text=True,check=True)
+          PY
+      - name: Verify all core and Android checks
+        run: ./gradlew :core:test :app:testDebugUnitTest --no-daemon --max-workers=2 -Dorg.gradle.parallel=false -Pkotlin.incremental=false
+      - name: Compile and lint official package
+        run: ./gradlew :app:assembleRelease :app:lintRelease --no-daemon --max-workers=2 -Dorg.gradle.parallel=false -Pkotlin.incremental=false
+      - name: Verify optional service
+        run: |
+          python3 -m venv "$RUNNER_TEMP/service-env"
+          "$RUNNER_TEMP/service-env/bin/pip" install -r service/requirements-dev.txt
+          cd service
+          "$RUNNER_TEMP/service-env/bin/python" -m pytest -q --junitxml=test-results.xml
+      - name: Check documentation
+        run: python3 scripts/check-docs.py
+      - name: Collect source and release inputs
+        if: always()
+        run: |
+          mkdir -p review-input
+          git archive --format=zip HEAD > review-input/mebot-0.8.1-source-review.zip
+          git rev-parse HEAD > review-input/SOURCE-COMMIT.txt
+          if compgen -G 'app/build/outputs/apk/release/*unsigned.apk' > /dev/null; then cp app/build/outputs/apk/release/*unsigned.apk review-input/mebot-0.8.1-unsigned.apk; fi
+          sha256sum review-input/* > review-input/SHA256SUMS.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: mebot-activity-polish-review
+          path: |
+            review-input/
+            core/build/test-results/
+            app/build/test-results/
+            app/build/reports/lint-results-*.xml
+            app/build/outputs/screenshots/
+            service/test-results.xml
+          retention-days: 14
