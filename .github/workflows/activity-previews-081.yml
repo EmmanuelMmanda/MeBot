@@ -1,0 +1,53 @@
+name: Preserve activity maintenance evidence
+on:
+  push:
+    branches: [fix/activity-panel-081]
+    paths: ['.github/workflows/activity-previews-081.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preserve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Retrieve checked native previews and test evidence
+        run: |
+          python3 - <<'PY'
+          import urllib.request,hashlib,zipfile,io,pathlib
+          base='https://sb-6hhukiqyxqp3.vercel.run/'
+          assets={'mebot-0.8.1-previews.zip':'fac041cfee2f27b1ca7792273017575e22e111b5f02b9cb97a109202119d3a2c','mebot-0.8.1-verification-evidence.zip':'6872c1797862443cb715d665765e97251c0d278828788c176d9f2f25be799f83'}
+          pathlib.Path('review-evidence').mkdir(exist_ok=True)
+          for name,expected in assets.items():
+              data=urllib.request.urlopen(base+name,timeout=30).read(2000000)
+              assert hashlib.sha256(data).hexdigest()==expected
+              pathlib.Path('review-evidence',name).write_bytes(data)
+              if name.endswith('-previews.zip'):
+                  with zipfile.ZipFile(io.BytesIO(data)) as z:
+                      for f in z.infolist():
+                          path=pathlib.PurePosixPath(f.filename)
+                          assert str(path).startswith('docs/screenshots/v081/') and '..' not in path.parts and not path.is_absolute()
+                      z.extractall('.')
+          p=pathlib.Path('docs/ACTIVITY-AND-DISCOVERY.md')
+          text=p.read_text()
+          if '## Interface previews' not in text:
+              text+='\n\n## Interface previews\n\nNative host renders with example content, not live account responses.\n\n'
+              for name,alt in [('detail-working','Readable source summary with a compact Show more action while MeBot works'),('activity-details','Fixed activity panel expanded into an operation history popover'),('streaming','Streaming MeBot answer with one top activity surface')]:
+                  text+=f'![{alt}](screenshots/v081/mebot-0.8.1-{name}.png)\n\n'
+              p.write_text(text)
+          PY
+          git config user.name 'MeBot documentation bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs
+          if ! git diff --cached --quiet; then
+            git commit -m 'docs: illustrate activity and detail changes with native test renders'
+            git push origin HEAD:fix/activity-panel-081
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mebot-0.8.1-native-review-evidence
+          path: review-evidence/
+          retention-days: 14
