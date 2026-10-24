@@ -1,0 +1,147 @@
+name: Publish official MeBot 0.8.0
+on:
+  push:
+    branches: [develop]
+    paths: ['.github/workflows/release-v080.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: mebot-official-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Retrieve and validate the approved public publication bundle
+        env:
+          BUNDLE_URL: 'https://sdmntprnortheu.oaiusercontent.com/files/00000000-5828-81f4-adf7-407434dad4ef/raw?se=2026-10-24T18%3A19%3A29Z&sp=r&sv=2026-02-06&sr=b&scid=0ce2ccf8-bc5c-5ab4-812d-16565811edce&skoid=0a4a0f0c-99ac-4752-9d87-cfac036fa93f&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-24T18%3A03%3A58Z&ske=2026-10-25T18%3A03%3A58Z&sks=b&skv=2026-02-06&sig=CzTQOAtmAaYe9nkuFzz8nTZzgweABvORqjJu4wuU0wM%3D'
+        run: |
+          python3 - <<'PY'
+          import hashlib,os,pathlib,shutil,stat,urllib.request,zipfile
+          root=pathlib.Path.cwd(); temporary=pathlib.Path(os.environ['RUNNER_TEMP'])
+          path=temporary/'mebot-publication.zip'
+          with urllib.request.urlopen(os.environ['BUNDLE_URL'],timeout=90) as response,path.open('wb') as out:
+              total=0
+              while chunk:=response.read(1048576):
+                  total+=len(chunk)
+                  assert total<40000000,'Publication bundle exceeds bound'
+                  out.write(chunk)
+          assert total==24575569
+          assert hashlib.sha256(path.read_bytes()).hexdigest()=='d90f2daada93afcecbf6a00e474d24fe98576c5a2443cc3db131b6dd21d6fb48'
+          release=temporary/'mebot-release';release.mkdir()
+          with zipfile.ZipFile(path) as archive:
+              assert sum(x.file_size for x in archive.infolist())<100000000
+              for item in archive.infolist():
+                  p=pathlib.PurePosixPath(item.filename)
+                  assert not p.is_absolute() and '..' not in p.parts and '.git' not in p.parts
+                  assert p.parts[0] in ('repo','release')
+                  assert not stat.S_ISLNK(item.external_attr>>16)
+                  if item.is_dir():continue
+                  dest=(root if p.parts[0]=='repo' else release).joinpath(*p.parts[1:])
+                  if p.parts[0]=='repo':
+                      assert dest.suffix.lower() not in ('.ttf','.otf','.woff','.woff2','.p12','.jks','.keystore')
+                      assert dest.name not in ('mebot-profile.json','local.properties')
+                  dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(archive.read(item))
+          # The one-time URL and transfer workflow are not part of the final source release.
+          pathlib.Path('.github/workflows/release-v080.yml').unlink()
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+              f.write(f'RELEASE_DIRECTORY={release}\nSERVICE_RESULTS={temporary}/service-tests.xml\n')
+          print('Public source and signed APK restored; no signing keys were transferred.')
+          PY
+          git config user.name 'MeBot release bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'release: import official MeBot 0.8.0 and illustrated guides'
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        with:
+          gradle-version: '8.13'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install exact SDK and prepare pinned resources
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          subprocess.run(['sdkmanager','platforms;android-36','build-tools;35.0.0'],input='y\n'*30,text=True,check=True)
+          PY
+          python3 scripts/prepare-build.py
+      - name: Verify full core and Android suites and release lint
+        run: gradle :core:test :app:testDebugUnitTest :app:assembleRelease :app:lintRelease --no-daemon --stacktrace --max-workers=2 -Pkotlin.incremental=false
+      - name: Verify original signed APK identity
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$RELEASE_DIRECTORY/mebot-0.8.0.apk" > "$RUNNER_TEMP/signature.txt"
+          grep -q 'b1b69dcefe26c815dbaec76223b7b80be76af06ba30da774637a806a7f75e3e9' "$RUNNER_TEMP/signature.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 4 "$RELEASE_DIRECTORY/mebot-0.8.0.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RELEASE_DIRECTORY/mebot-0.8.0.apk" > "$RUNNER_TEMP/package.txt"
+          grep -q "package: name='app.mynguli' versionCode='11' versionName='0.8.0'" "$RUNNER_TEMP/package.txt"
+          grep -q "application-label:'MeBot'" "$RUNNER_TEMP/package.txt"
+          if grep -q 'application-debuggable' "$RUNNER_TEMP/package.txt"; then exit 1; fi
+          python3 - <<'PY'
+          import os,pathlib,zipfile,hashlib
+          p=pathlib.Path(os.environ['RELEASE_DIRECTORY'])/'mebot-0.8.0.apk'
+          assert hashlib.sha256(p.read_bytes()).hexdigest()=='fc45ebdcb0ba183e6dd6dc5c30a1c9f738193bf0c7a336072b11ee0d689b6d81'
+          with zipfile.ZipFile(p) as z:
+              assert z.testzip() is None and 'assets/mebot-profile.json' not in z.namelist()
+          PY
+      - name: Verify service and browser journeys
+        run: |
+          python3 -m venv "$RUNNER_TEMP/mebot-validation"
+          "$RUNNER_TEMP/mebot-validation/bin/pip" install -r service/requirements-dev.txt 'playwright==1.56.0'
+          (cd service && "$RUNNER_TEMP/mebot-validation/bin/python" -m pytest -q --junitxml="$SERVICE_RESULTS")
+          "$RUNNER_TEMP/mebot-validation/bin/python" -m playwright install --with-deps chromium
+          python3 scripts/check-docs.py
+          python3 scripts/check-showcase.py
+          "$RUNNER_TEMP/mebot-validation/bin/python" scripts/test-showcase-browser.py
+      - name: Finalize exact source archive and verification files
+        run: python3 scripts/finalize-release.py
+      - name: Publish validated tag, source and official signed release
+        run: |
+          set -euo pipefail
+          git fetch origin main develop --tags
+          test "$(git rev-parse origin/develop)" = "${{ github.sha }}"
+          git merge-base --is-ancestor origin/main HEAD
+          if git rev-parse -q --verify refs/tags/v0.8.0 >/dev/null; then echo 'Version tag already exists; refusing to overwrite.'; exit 1; fi
+          git push origin HEAD:develop
+          git tag -a v0.8.0 -m 'MeBot 0.8.0 — official signed release'
+          git push origin refs/tags/v0.8.0
+          gh release create v0.8.0 --repo EmmanuelMmanda/MeBot --verify-tag --draft --title 'MeBot 0.8.0' --notes-file "$RUNNER_TEMP/release-notes.md"
+          gh release upload v0.8.0 "$RELEASE_DIRECTORY"/* --repo EmmanuelMmanda/MeBot
+          gh api repos/EmmanuelMmanda/MeBot/releases/tags/v0.8.0 > "$RUNNER_TEMP/uploaded-release.json"
+          python3 - <<'PY'
+          import pathlib,json,hashlib,os
+          assets={x['name']:x for x in json.loads(pathlib.Path(os.environ['RUNNER_TEMP'],'uploaded-release.json').read_text())['assets']}
+          for p in pathlib.Path(os.environ['RELEASE_DIRECTORY']).iterdir():
+              if p.is_file():
+                  a=assets[p.name];assert a['state']=='uploaded' and a['size']==p.stat().st_size
+                  if a.get('digest'):assert a['digest']=='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()
+          print('Every release asset uploaded and checked.')
+          PY
+          git push origin HEAD:main
+          gh release edit v0.8.0 --repo EmmanuelMmanda/MeBot --draft=false --latest
+          echo 'Official MeBot 0.8.0 published. Main and develop contain the validated release.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain release files and test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mebot-0.8.0-publication-evidence
+          path: |
+            ${{ runner.temp }}/mebot-release/
+            core/build/test-results/
+            app/build/test-results/
+            app/build/reports/lint-results-release.xml
+            website-evidence/
+            ${{ runner.temp }}/service-tests.xml
+          if-no-files-found: warn
+          retention-days: 14
