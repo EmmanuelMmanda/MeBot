@@ -1,0 +1,36 @@
+name: Review MeBot website
+on:
+  push:
+    branches: [develop]
+    paths: ['README.md', 'docs/**', 'scripts/check-docs.py', 'scripts/check-showcase.py', '.github/workflows/showcase.yml']
+  pull_request:
+    paths: ['README.md', 'docs/**', 'scripts/check-docs.py', 'scripts/check-showcase.py', '.github/workflows/showcase.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mebot-website-review-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Check documentation links
+        run: python3 scripts/check-docs.py
+      - name: Check showcase and release links
+        run: |
+          if [ -f scripts/check-showcase.py ]; then python3 scripts/check-showcase.py; fi
+          node --check docs/site.js
+      - name: Export website for review
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mebot-website-review
+          path: |
+            docs/
+            README.md
+            scripts/check-docs.py
+            scripts/check-showcase.py
+          include-hidden-files: true
+          retention-days: 7
