@@ -20,7 +20,10 @@ jobs:
         with:
           gradle-version: '8.13'
           cache-disabled: true
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
       - name: Load dependency setup scripts
         run: |
           python3 -m pip install PyYAML
