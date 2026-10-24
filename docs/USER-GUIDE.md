@@ -302,3 +302,8 @@ For an ordinary reproducible bug, include the app version, Android version, devi
 ### Implementation references
 
 The module/default/preference contracts are in [FeedModels.kt](../core/src/main/kotlin/app/mynguli/core/FeedModels.kt), [ModuleDefaults.kt](../core/src/main/kotlin/app/mynguli/core/ModuleDefaults.kt) and [ModulePreferences.kt](../core/src/main/kotlin/app/mynguli/core/ModulePreferences.kt). Request limits are defined by [RequestBudget.kt](../core/src/main/kotlin/app/mynguli/core/RequestBudget.kt). Storage and conversation bounds are described in [architecture](ARCHITECTURE.md) and [the feed contract](FEED-CONTRACT.md). See the [verification record](VERIFICATION.md) for tested behavior and remaining physical-device/live-provider checks.
+
+
+## Activity and refresh in 0.8.1
+
+See [the illustrated activity and discovery guide](ACTIVITY-AND-DISCOVERY.md) for the fixed top panel, selected-module pull-to-refresh, local defaults and verified downloads.

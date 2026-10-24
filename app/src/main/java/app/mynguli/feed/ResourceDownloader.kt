@@ -24,6 +24,52 @@ class ResourceDownloader(
     private val resolve: (String) -> Array<InetAddress> = InetAddress::getAllByName,
 ) {
     companion object { private val transfers = Semaphore(1) }
+    /** Small range probe: a URL suffix alone is not evidence that a file exists. */
+    suspend fun available(resource: DownloadResource): Boolean = withTimeout(8_000) {
+        withContext(Dispatchers.IO) {
+            var url = resource.url
+            repeat(4) { attempt ->
+                coroutineContext.ensureActive()
+                if (!FeedLogic.safeUrl(url, true)) return@withContext false
+                val addresses = resolve(URI(url).host)
+                if (addresses.isEmpty() || addresses.any {
+                    it.isAnyLocalAddress || it.isLoopbackAddress || it.isLinkLocalAddress || it.isSiteLocalAddress ||
+                        it.isMulticastAddress || (it.address.size == 16 && (it.address[0].toInt() and 0xfe) == 0xfc)
+                }) return@withContext false
+                val connection = open(url)
+                try {
+                    connection.instanceFollowRedirects = false
+                    connection.connectTimeout = 3_000; connection.readTimeout = 3_000
+                    connection.setRequestProperty("User-Agent", "MeBot/0.8.1")
+                    connection.setRequestProperty("Range", "bytes=0-511")
+                    connection.setRequestProperty("Accept-Encoding", "identity")
+                    val status = connection.responseCode
+                    if (status in 300..399 && attempt < 3) {
+                        url = URI(url).resolve(connection.getHeaderField("Location") ?: return@withContext false).toString()
+                        return@repeat
+                    }
+                    if (status !in setOf(200, 206)) return@withContext false
+                    val total = connection.getHeaderField("Content-Range")?.substringAfterLast('/')?.toLongOrNull()
+                        ?: connection.contentLengthLong
+                    if (total > DownloadResource.MAX_BYTES) return@withContext false
+                    val prefix = connection.inputStream.use { input ->
+                        val buffer = ByteArray(512); var read = 0
+                        while (read < buffer.size) {
+                            coroutineContext.ensureActive()
+                            val count = input.read(buffer, read, buffer.size - read)
+                            if (count < 0) break
+                            if (count == 0) break
+                            read += count
+                        }
+                        buffer.copyOf(read)
+                    }
+                    return@withContext prefix.isNotEmpty() && resource.accepts(connection.contentType.orEmpty(), prefix)
+                } finally { connection.disconnect() }
+            }
+            false
+        }
+    }
+
     suspend fun fetch(resource: DownloadResource): File = withTimeout(45_000) {
         transfers.withPermit {
             withContext(Dispatchers.IO) {
@@ -48,7 +94,7 @@ class ResourceDownloader(
                             connection.instanceFollowRedirects = false
                             connection.connectTimeout = 10_000
                             connection.readTimeout = 10_000
-                            connection.setRequestProperty("User-Agent", "MeBot/0.7.1")
+                            connection.setRequestProperty("User-Agent", "MeBot/0.8.1")
                             connection.setRequestProperty("Accept", resource.mime + ", application/octet-stream;q=0.5")
                             connection.setRequestProperty("Accept-Encoding", "identity")
                             val status = connection.responseCode

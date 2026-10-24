@@ -152,7 +152,10 @@ open class FeedEngine(
         val modules = selected(current)
         if (modules.isEmpty()) throw FeedFailure("invalid_input")
         val allowed = modules.associateBy { it.id }
-        val items = try { provider.search(current, modules, query.trim(), secret, language()) }
+        val items = try { AiActivityRegistry.run(moduleId ?: "search", modules.singleOrNull()?.kind ?: "general", "search") {
+                AiActivityRegistry.report("preparing", contextEntries = modules.flatMap { FeedLogic.scopedContext(current, it) }.distinctBy { it.id }.size)
+                provider.search(current, modules, query.trim(), secret, language())
+            } }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (error: FeedFailure) {
             throw FeedFailure(recordFailure(current.connection, generation, error.code, secret, error.diagnostic), error.diagnostic)
@@ -173,12 +176,19 @@ open class FeedEngine(
         return items.distinctBy { it.id }
     }
 
-    open suspend fun refresh(allowPlanRetry: Boolean = false): RefreshOutcome = refreshLock.withLock {
+    open suspend fun refresh(allowPlanRetry: Boolean = false): RefreshOutcome = refreshSelected(allowPlanRetry, null)
+
+    open suspend fun refreshModule(moduleId: String, allowPlanRetry: Boolean = false): RefreshOutcome =
+        refreshSelected(allowPlanRetry, moduleId)
+
+    private suspend fun refreshSelected(allowPlanRetry: Boolean, moduleId: String?): RefreshOutcome = refreshLock.withLock {
         val startingGeneration = credentialGeneration.get()
         val initial = repository.current()
         val now = System.currentTimeMillis()
         val beforeIds = initial.items.map { it.id }.toSet()
-        val active = initial.modules.filter { it.enabled }
+        val active = initial.modules.filter { it.enabled && (moduleId == null || it.id == moduleId) }
+        if (moduleId != null && active.isEmpty()) return@withLock RefreshOutcome(notice = "no_results")
+        if (allowPlanRetry) discovery?.invalidate(active.map { it.id }.toSet())
         val languageCode = language()
         var success = 0
         var failure: String? = null
@@ -226,16 +236,20 @@ open class FeedEngine(
             val semaphore = Semaphore(3)
             val calls = mutableListOf<suspend () -> List<FeedItem>>()
             modules.filter { discovery != null && it.kind in PublicDiscoveryProvider.supportedKinds && publicRead.add(it.id) }.forEach { module ->
-                calls += { discovery!!.discover(initial, module, languageCode, now).onEach {
+                calls += { AiActivityRegistry.track(module.id, module.kind, "discovery") {
+                    AiActivityRegistry.report("reading", contextEntries = FeedLogic.scopedContext(initial, module).size)
+                    discovery!!.discover(initial, module, languageCode, now).onEach {
                     FeedLogic.validateItem(it)
                     require(it.moduleId == module.id && it.kind == module.kind)
-                } }
+                }.also { AiActivityRegistry.report("ready", count = it.size) } } }
             }
-            if (includeRss) modules.flatMap { module -> module.sources.map { module to it } }.take(24).forEach { (module, source) ->
-                calls += { sources.read(source, module, now).onEach {
+            if (includeRss) modules.flatMap { module -> RegionalDefaults.sources(initial, module, languageCode).map { module to it } }.take(24).forEach { (module, source) ->
+                calls += { AiActivityRegistry.track(module.id, module.kind, "discovery") {
+                    AiActivityRegistry.report("reading", source = java.net.URI(source.url).host)
+                    sources.read(source, module, now).onEach {
                     FeedLogic.validateItem(it)
                     require(it.moduleId == module.id && it.kind == module.kind)
-                } }
+                }.also { AiActivityRegistry.report("ready", count = it.size) } } }
             }
             val results = Channel<Result<List<FeedItem>>>(Channel.BUFFERED)
             calls.forEach { request -> launch {
@@ -282,8 +296,14 @@ open class FeedEngine(
                     } ?: break
                     val reserved = reserveRequest()
                     if (credentialGeneration.get() != generation) break
-                    val items = AiActivityRegistry.run(module.id, module.kind, "discovery") { provider.feed(reserved, module, requestSecret, languageCode) }
-                    items.forEach { FeedLogic.validateItem(it); require(it.moduleId == module.id && it.kind == module.kind) }
+                    val items = AiActivityRegistry.run(module.id, module.kind, "discovery") {
+                        AiActivityRegistry.report("preparing", contextEntries = FeedLogic.scopedContext(reserved, module).size)
+                        val found = provider.feed(reserved, module, requestSecret, languageCode)
+                        AiActivityRegistry.report("validating")
+                        found.forEach { FeedLogic.validateItem(it); require(it.moduleId == module.id && it.kind == module.kind) }
+                        AiActivityRegistry.report("ready", count = found.size)
+                        found
+                    }
                     repository.update { latest ->
                         if (credentialGeneration.get() != generation || !samePersonalization(latest, initial) || latest.modules != initial.modules || latest.connection != initial.connection) latest
                         else {

@@ -314,7 +314,7 @@ private fun MeBotApp(ui: AppUiState, vm: MyNguliViewModel, feedUi: FeedUiState, 
                                 feedVm::hideItem, feedVm::clearMessage, nextAlarm, { page = "alarms" },
                                 onPrompt = { id, prompt ->
                                     feedVm.openConversation(id, prompt); page = "ai"
-                                }, onSearch = { page = "search" }, returnToTopRequest = feedTopRequest,
+                                }, onSearch = { page = "search" }, returnToTopRequest = feedTopRequest, onRefreshModule = feedVm::refreshModule,
                                 onExploreModules = { openModuleCatalog(ModuleDiscovery.DISABLED) })
                         }
                         "modules" -> ModulesScreen(feed, state,

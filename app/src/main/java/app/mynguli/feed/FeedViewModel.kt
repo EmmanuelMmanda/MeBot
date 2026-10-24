@@ -29,7 +29,7 @@ import java.nio.charset.CodingErrorAction
 
 data class FeedUiState(
     val state: FeedState? = null, val loading: Boolean = true,
-    val refreshing: Boolean = false, val connecting: Boolean = false,
+    val refreshing: Boolean = false, val refreshingModuleId: String? = null, val connecting: Boolean = false,
     val connected: Boolean = false, val error: String? = null, val notice: String? = null,
     val asking: Boolean = false, val answer: String? = null,
     val answerCitations: List<FeedCitation> = emptyList(),
@@ -129,7 +129,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     fun clearMessage() { _ui.update { it.copy(error = null, notice = null) } }
     fun clearNotice() { _ui.update { it.copy(notice = null) } }
     fun clearAnswer() { askGeneration++; askJob?.cancel(); _ui.update { it.copy(asking = false, answer = null, question = null, answerCitations = emptyList()) } }
-    private fun cancelRefresh() { refreshGeneration++; refreshJob?.cancel(); _ui.update { it.copy(refreshing = false) } }
+    private fun cancelRefresh() { refreshGeneration++; refreshJob?.cancel(); _ui.update { it.copy(refreshing = false, refreshingModuleId = null) } }
     private fun cancelConnection() { connectGeneration++; connectJob?.cancel(); chatGpt.cancelSignIn(); _ui.update { it.copy(connecting = false, chatGptVerifying = false) } }
     private fun cancelAiWork() { clearAnswer(); cancelDetail(); cancelSearch() }
     private fun diagnose(operation: String, error: Exception, moduleId: String? = null) {
@@ -154,18 +154,19 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun refresh() = refreshInternal(manual = true)
-    private fun refreshInternal(manual: Boolean) {
+    fun refreshModule(moduleId: String?) = refreshInternal(manual = true, moduleId = moduleId)
+    private fun refreshInternal(manual: Boolean, moduleId: String? = null) {
         if (refreshJob?.isActive == true) return
         val generation = ++refreshGeneration
         refreshJob = viewModelScope.launch {
-            _ui.update { it.copy(refreshing = true, error = null, notice = null) }
+            _ui.update { it.copy(refreshing = true, refreshingModuleId = moduleId, error = null, notice = null) }
             try {
                 if (manual) repository.update { it.copy(editionSequence = (it.editionSequence + 1) % 1_000_000_000L) }
-                val result = withContext(Dispatchers.IO) { engine.refresh(allowPlanRetry = manual) }
+                val result = withContext(Dispatchers.IO) { if (moduleId == null) engine.refresh(allowPlanRetry = manual) else engine.refreshModule(moduleId, allowPlanRetry = manual) }
                 if (generation == refreshGeneration) _ui.update { it.copy(error = result.error, notice = result.notice) }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (e: Exception) { if (generation == refreshGeneration) _ui.update { it.copy(error = (e as? FeedFailure)?.code ?: "provider_error") } }
-            finally { if (generation == refreshGeneration) _ui.update { it.copy(refreshing = false) } }
+            finally { if (generation == refreshGeneration) _ui.update { it.copy(refreshing = false, refreshingModuleId = null) } }
         }
     }
     fun connect(key: String, model: String = "gpt-6-luna", mode: String = "direct", serviceUrl: String = "") {

@@ -155,4 +155,20 @@ class FeedEditionEngineTest {
 
     private fun story(id: String, module: FeedModule) = FeedItem(id, module.id, "Fixture " + id, "Synthetic transport test",
         sourceName = "Example", sourceUrl = "https://example.com/" + id, kind = module.kind, relevance = 70)
+    @Test fun refreshingOneModuleDoesNotRequestOtherEnabledModules() = runBlocking {
+        vault.write("fixture-key")
+        val second = FeedModule(id = "learning", kind = "learning")
+        repository.update { it.copy(modules = listOf(news, second)) }
+        val result = FeedEngine(repository, vault, reader, provider).refreshModule("learning", true)
+        assertNull(result.error); assertEquals(listOf("learning"), aiModules)
+        assertEquals(1, repository.current().requestsToday)
+        Unit
+    }
+    @Test fun disabledModuleRefreshDoesNotUseAi() = runBlocking {
+        vault.write("fixture-key")
+        repository.update { it.copy(modules = listOf(news.copy(enabled = false))) }
+        FeedEngine(repository, vault, reader, provider).refreshModule("news", true)
+        assertTrue(aiModules.isEmpty()); assertEquals(0, repository.current().requestsToday)
+        Unit
+    }
 }

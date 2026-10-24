@@ -71,4 +71,22 @@ class ResourceDownloaderTest {
         catch (_: java.io.IOException) {}
         assertTrue(wire.closed)
     }
+    @Test fun availabilityProbeRejectsHtmlAndChecksPdfMagic() = runBlocking {
+        val good = Wire("%PDF-1.7\nfixture".toByteArray())
+        assertTrue(ResourceDownloader(context, { good }, ::publicAddress).available(pdf))
+        assertEquals("bytes=0-511", good.getRequestProperty("Range"))
+        assertNull(good.getRequestProperty("Authorization")); assertTrue(good.closed)
+        val bad = Wire("<html>missing</html>".toByteArray(), "text/html")
+        assertFalse(ResourceDownloader(context, { bad }, ::publicAddress).available(pdf))
+        assertTrue(bad.closed)
+    }
+    @Test fun unavailableAndPrivateProbeNeverOffersAFile() = runBlocking {
+        val gone = Wire(ByteArray(0), status = 404)
+        assertFalse(ResourceDownloader(context, { gone }, ::publicAddress).available(pdf))
+        var opened = false
+        assertFalse(ResourceDownloader(context, { opened = true; gone }, {
+            arrayOf(InetAddress.getByAddress(byteArrayOf(127,0,0,1)))
+        }).available(pdf))
+        assertFalse(opened)
+    }
 }

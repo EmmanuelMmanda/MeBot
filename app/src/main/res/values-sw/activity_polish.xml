@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="activity_summarizing_items">Ninaandaa taarifa zako</string>
+    <string name="activity_validating">Nakagua matokeo</string>
+    <string name="activity_results_ready">Naongeza taarifa mpya</string>
+    <string name="activity_preparing_feed">Natafuta taarifa zinazokufaa</string>
+    <string name="activity_checking_file">Nakagua faili</string>
+    <string name="activity_scope_discovery">Taarifa zako</string>
+    <string name="activity_scope_search">Utafutaji wako</string>
+    <string name="activity_seconds">Sekunde %1$d</string>
+    <string name="activity_preferences_used">Natumia mapendeleo yako %1$d yanayohusiana na hili</string>
+    <string name="activity_module_defaults">Natumia mipangilio ya mada hii</string>
+    <string name="activity_verified_count">Matokeo %1$d yamekaguliwa</string>
+    <string name="activity_provider_update">Maelezo kutoka kwa mtoa huduma</string>
+    <string name="activity_less">Onyesha machache</string>
+    <string name="detail_expand_notes">Onyesha zaidi</string>
+    <string name="detail_collapse_notes">Onyesha machache</string>
+    <string name="file_check_action">Kagua faili</string>
+    <string name="file_unavailable">Faili halipatikani. Fungua chanzo chake.</string>
+</resources>

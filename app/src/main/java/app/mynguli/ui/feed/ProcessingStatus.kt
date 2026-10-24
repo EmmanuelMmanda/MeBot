@@ -28,9 +28,12 @@ internal fun ProcessingStatus(ui: FeedUiState, page: String, itemId: String?, mo
         else -> null
     }
     // A fallback reports the request being prepared, not invented provider activity.
-    val fallback = remember(busyStage != null) {
-        if (busyStage != null) AiActivity("preparing", "app", "", "local", stage = busyStage) else null
+    val fallback = remember(busyStage, scope) {
+        if (busyStage != null) AiActivity("preparing-$busyStage", scope ?: "app", "", if (ui.refreshing) "refresh" else if (ui.searching) "search" else "answer", stage = busyStage) else null
     }
     val current = preferred ?: resources.values.lastOrNull() ?: fallback?.copy(stage = busyStage ?: "working")
-    AiActivityPanel(current, modifier, extraCount = (ui.activities.size + resources.size - if (preferred != null || resources.isNotEmpty()) 1 else 0).coerceAtLeast(0))
+    val moduleId = ui.state?.items?.find { it.id == current?.scope }?.moduleId ?: current?.scope
+    val module = ui.state?.modules?.find { it.id == moduleId }
+    val label = module?.let { moduleName(it) }.orEmpty()
+    AiActivityPanel(current, modifier, scopeLabel = label, extraCount = (ui.activities.size + resources.size - if (preferred != null || resources.isNotEmpty()) 1 else 0).coerceAtLeast(0))
 }

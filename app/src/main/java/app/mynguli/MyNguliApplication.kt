@@ -15,7 +15,7 @@ open class MyNguliApplication : Application() {
     open val chatGptAuth by lazy { ChatGptAuthManager(this, language = { repository.current().settings.language }) }
     open val feedMedia by lazy { FeedMediaRepository(this) }
     open val feedEngine by lazy {
-        FeedEngine(feedRepository, feedSecrets, chatGpt = chatGptAuth, discovery = PublicDiscoveryProvider(),
+        FeedEngine(feedRepository, feedSecrets, provider = OpenAiFeedProvider(streamDiscovery = true), chatGpt = chatGptAuth, discovery = PublicDiscoveryProvider(),
             enricher = PublisherMediaEnricher(), language = {
             when (val selected = repository.current().settings.language) {
                 "en", "sw" -> selected

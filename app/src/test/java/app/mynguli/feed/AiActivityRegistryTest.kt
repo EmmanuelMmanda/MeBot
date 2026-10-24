@@ -45,4 +45,31 @@ class AiActivityRegistryTest {
             assertEquals(280,AiActivityRegistry.state.value.values.single().summary.length)
         }
     }
+    @Test fun discoveryTextNeverClaimsToBeWritingAnAnswer() = runBlocking {
+        AiActivityRegistry.run("opportunities", "opportunities", "discovery") {
+            AiActivityRegistry.report("preparing", contextEntries = 2)
+            AiActivityRegistry.observe("response.output_text.delta", buildJsonObject { put("delta", "{items:") })
+            val a = AiActivityRegistry.state.value.values.single()
+            assertEquals("summarizing", a.stage); assertEquals(2, a.contextEntries)
+            assertNull(a.steps.last().count)
+            AiActivityRegistry.report("ready", count = 4)
+            assertEquals(4, AiActivityRegistry.state.value.values.single().steps.last().count)
+        }
+        assertTrue(AiActivityRegistry.state.value.isEmpty())
+    }
+    @Test fun searchAndAnswerUseDifferentStages() = runBlocking {
+        for (operation in listOf("search", "answer")) AiActivityRegistry.run("scope", "news", operation) {
+            AiActivityRegistry.observe("response.output_text.delta", buildJsonObject {})
+            assertEquals(if (operation == "search") "summarizing" else "writing", AiActivityRegistry.state.value.values.single().stage)
+        }
+    }
+    @Test fun repeatedTokensDoNotGrowTheTimelineAndCompletionClearsIt() = runBlocking {
+        AiActivityRegistry.run("bounded", "news", "discovery") {
+            repeat(100) { AiActivityRegistry.observe("response.output_text.delta", buildJsonObject {}) }
+            assertEquals(2, AiActivityRegistry.state.value.values.single().steps.size)
+            repeat(30) { AiActivityRegistry.report("ready", count = it) }
+            assertEquals(8, AiActivityRegistry.state.value.values.single().steps.size)
+        }
+        assertTrue(AiActivityRegistry.state.value.isEmpty())
+    }
 }

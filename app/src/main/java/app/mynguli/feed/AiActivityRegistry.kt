@@ -12,7 +12,12 @@ import kotlinx.serialization.json.*
 
 /** Ephemeral, request-scoped activity. Never persists prompts, credentials or raw reasoning. */
 data class AiActivity(val id: String, val scope: String, val kind: String, val operation: String,
-    val stage: String = "queued", val summary: String = "", val source: String = "", val startedAt: Long = System.currentTimeMillis())
+    val stage: String = "queued", val summary: String = "", val source: String = "", val startedAt: Long = System.currentTimeMillis(),
+    val steps: List<AiActivityStep> = emptyList(), val contextEntries: Int? = null)
+
+/** Only observed events and validated result counts, never simulated model thoughts. */
+data class AiActivityStep(val stage: String, val source: String = "", val count: Int? = null,
+    val at: Long = System.currentTimeMillis())
 
 object AiActivityRegistry {
     private val live = MutableStateFlow<Map<String, AiActivity>>(emptyMap())
@@ -21,22 +26,39 @@ object AiActivityRegistry {
     private val requests = Semaphore(2)
     // One background request leaves a slot for interactive work.
     private val background = Semaphore(1)
-    suspend fun <T> run(scope: String, kind: String, operation: String, block: suspend () -> T): T {
+    suspend fun <T> track(scope: String, kind: String, operation: String, block: suspend () -> T): T {
         val id = UUID.randomUUID().toString()
         live.update { it + (id to AiActivity(id, scope, kind, operation)) }
-        try {
-            return withContext(local.asContextElement(id)) {
-                suspend fun execute(): T = requests.withPermit { update("connecting"); block() }
-                if (operation == "discovery") background.withPermit { execute() } else execute()
-            }
-        } finally { live.update { it - id } }
+        try { return withContext(local.asContextElement(id)) { block() } }
+        finally { live.update { it - id } }
     }
-    private fun update(stage: String, summary: String? = null, source: String? = null) {
+    suspend fun <T> run(scope: String, kind: String, operation: String, block: suspend () -> T): T =
+        track(scope, kind, operation) {
+            suspend fun execute(): T = requests.withPermit { report("connecting"); block() }
+            if (operation == "discovery") background.withPermit { execute() } else execute()
+        }
+    fun report(stage: String, count: Int? = null, source: String? = null, contextEntries: Int? = null) {
         val id = local.get() ?: return
         live.update { states -> states[id]?.let { current ->
-            states + (id to current.copy(stage = stage, summary = summary ?: current.summary, source = source ?: current.source))
+            val actualStage = if (stage == "writing" && current.operation in setOf("discovery", "search", "refresh")) "summarizing" else stage
+            val host = source?.take(120)?.replace(Regex("[^a-zA-Z0-9. _-]"), "") ?: current.source
+            val step = AiActivityStep(actualStage, host, count?.coerceAtLeast(0))
+            val last = current.steps.lastOrNull()
+            val history = if (last?.stage == step.stage && last.source == step.source && last.count == step.count)
+                current.steps else (current.steps + step).takeLast(8)
+            val next = current.copy(stage = actualStage, source = host, steps = history,
+                contextEntries = contextEntries?.coerceAtLeast(0) ?: current.contextEntries)
+            if (next == current) states else states + (id to next)
         } ?: states }
     }
+    private fun update(stage: String, summary: String? = null, source: String? = null) {
+        report(stage, source = source)
+        if (summary != null) {
+            val id = local.get() ?: return
+            live.update { states -> states[id]?.let { states + (id to it.copy(summary = summary.take(600))) } ?: states }
+        }
+    }
+
     fun observe(type: String, event: JsonObject) {
         when (type) {
             "response.created", "response.in_progress" -> update("working")
@@ -59,7 +81,7 @@ object AiActivityRegistry {
                     "web_search_call" -> {
                         val action = item["action"] as? JsonObject
                         val query = (action?.get("query") as? JsonPrimitive)?.contentOrNull.orEmpty()
-                        update("searching", source = if (query.contains("youtube", true)) "youtube" else "")
+                        update(if (type.endsWith(".done")) "reading" else "searching", source = if (query.contains("youtube", true)) "youtube" else "")
                     }
                 }
             }

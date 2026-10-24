@@ -116,12 +116,3 @@ private fun FeedEmpty(title: Int, body: Int, action: Int, icon: androidx.compose
     }
 }
 
-@Composable
-private fun FeedLoading() {
-    Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(26.dp)) {
-        Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            repeat(3) { index -> Box(Modifier.fillMaxWidth(if (index == 2) .6f else 1f).height(18.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceContainer)) }
-            Text(stringResource(R.string.feed_refreshing), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}

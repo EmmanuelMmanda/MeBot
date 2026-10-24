@@ -143,7 +143,7 @@ fun AiWorkspace(
         Column(Modifier.widthIn(max = MeBotTokens.ContentWidth).fillMaxWidth().fillMaxHeight().imePadding()
             .padding(horizontal = MeBotTokens.ScreenPadding).testTag("ai-workspace")) {
             Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                MeBotMark(Modifier.size(32.dp)); Spacer(Modifier.width(10.dp))
+                MeBotActivityBadge(if (ui.asking) ui.activities.lastOrNull { it.operation == "answer" } ?: app.mynguli.feed.AiActivity("workspace-preparing", "workspace", "", "answer", "preparing") else null, Modifier.size(36.dp)); Spacer(Modifier.width(10.dp))
                 Text(stringResource(R.string.workspace_title), Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
                 IconButton(onClick = { showHistory = true }, enabled = conversations.isNotEmpty() && !ui.asking && !ui.importWorking,
                     modifier = Modifier.testTag("workspace-history")) { Icon(Icons.Outlined.History, stringResource(R.string.workspace_history)) }

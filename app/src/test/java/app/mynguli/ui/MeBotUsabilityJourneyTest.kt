@@ -271,7 +271,7 @@ class MeBotUsabilityTestApplication : MyNguliApplication() {
         FeedEngine(feedRepository, feedSecrets, object : SourceReader {
             override suspend fun read(source: FeedSource, module: FeedModule, now: Long): List<FeedItem> {
                 val gate = sourceGate
-                sourceCalls.incrementAndGet()
+                if (source.url == "https://publisher.example/feed.xml") sourceCalls.incrementAndGet()
                 sourceEntered?.complete(Unit)
                 gate?.await()
                 return sourceItems.filter { it.moduleId == module.id }

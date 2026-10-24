@@ -1,5 +1,5 @@
 <resources>
-    <string name="workspace_title">AI</string>
+    <string name="workspace_title">MeBot</string>
     <string name="workspace_history">Conversations</string>
     <string name="workspace_new">New conversation</string>
     <string name="workspace_general">All topics</string>

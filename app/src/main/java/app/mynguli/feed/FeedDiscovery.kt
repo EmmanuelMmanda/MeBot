@@ -12,6 +12,7 @@ import java.time.ZoneOffset
 
 /** Public data adapters. No profile notes, account tokens or private connectors are sent here. */
 interface PublicDiscovery {
+    suspend fun invalidate(moduleIds: Set<String>) = Unit
     suspend fun discover(state: FeedState, module: FeedModule, language: String, now: Long): List<FeedItem>
 }
 
@@ -25,6 +26,8 @@ class PublicDiscoveryProvider(private val http: FeedHttp = SecureFeedHttp()) : P
     private val cache = linkedMapOf<CacheKey, Cached>()
     private val lock = Mutex()
 
+    override suspend fun invalidate(moduleIds: Set<String>) { lock.withLock { cache.keys.removeAll { it.moduleId in moduleIds } } }
+
     override suspend fun discover(state: FeedState, module: FeedModule, language: String, now: Long): List<FeedItem> {
         if (module.kind !in supportedKinds) return emptyList()
         // Map equality is independent of entry order; take a snapshot so editing a
@@ -36,7 +39,7 @@ class PublicDiscoveryProvider(private val http: FeedHttp = SecureFeedHttp()) : P
             when (module.kind) {
                 "weather" -> weather(state, module, language, now)
                 "github" -> github(module, now)
-                "news" -> hackerNews(module, now)
+                "news" -> if (RegionalDefaults.useTechnicalNewsAdapter(state, module)) hackerNews(module, now) else emptyList()
                 else -> emptyList()
             }
         } catch (cancel: CancellationException) { throw cancel }

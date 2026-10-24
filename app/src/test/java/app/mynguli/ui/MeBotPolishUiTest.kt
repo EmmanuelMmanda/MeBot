@@ -55,14 +55,14 @@ class MeBotPolishUiTest {
         compose.onNodeWithTag("workspace-messages").performScrollToNode(hasTestTag("workspace-draft"))
         compose.onNodeWithTag("workspace-draft").assertTextContains("A useful answer", substring = true)
         compose.onAllNodesWithTag("workspace-importing").assertCountEquals(0)
-        screenshot("mebot-0.8.0-streaming")
+        screenshot("mebot-0.8.1-streaming")
         compose.runOnIdle { ui.value = ui.value.copy(asking = false, answer = null, activities = emptyList(), state = state) }
         compose.onAllNodesWithTag("ai-activity-panel").assertCountEquals(0)
         compose.onNodeWithTag("workspace-messages").performScrollToNode(hasTestTag("turn-source-a-resources"))
-        compose.onNodeWithTag("turn-source-a-filter-files").performClick()
+        compose.onAllNodesWithTag("turn-source-a-filter-files").assertCountEquals(0) // A filename is not a verified file.
         compose.onNodeWithTag("workspace-messages").performScrollToNode(hasTestTag("download-resource"))
         compose.onNodeWithTag("download-resource").assertIsEnabled()
-        screenshot("mebot-0.8.0-ai-resources")
+        screenshot("mebot-0.8.1-ai-resources")
     }
 
     @Test fun customAccentAndSkinCanBeChangedAndRestored() {
@@ -81,7 +81,7 @@ class MeBotPolishUiTest {
         compose.runOnIdle { assertEquals("tinted", setting.value.skin) }
         restore.emulateSavedInstanceStateRestore()
         compose.onNodeWithTag("accent-custom").performScrollTo().assertIsSelected()
-        screenshot("mebot-0.8.0-appearance")
+        screenshot("mebot-0.8.1-appearance")
     }
 
     @Test fun detailKeepsOriginalNotesAndFileActionsAvailable() {
@@ -96,9 +96,44 @@ class MeBotPolishUiTest {
         compose.onNodeWithText(item.summary).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(item.nextStep).performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("detail-tab-sources").performScrollTo().performClick()
-        compose.onNodeWithTag("detail-citation-filter-files").performScrollTo().performClick()
+        compose.onAllNodesWithTag("detail-citation-filter-files").assertCountEquals(0)
         compose.onAllNodesWithTag("download-resource").onLast().performScrollTo().assertIsEnabled()
-        screenshot("mebot-0.8.0-detail-files")
+        screenshot("mebot-0.8.1-detail-files")
+    }
+
+    @Test fun anchoredActivityShowsActualDiscoveryAndStopsAfterCancellation() {
+        val ui = mutableStateOf(FeedUiState(state = state, loading = false, refreshing = true,
+            activities = listOf(AiActivity("discover", "news", "news", "discovery", "summarizing",
+                steps = listOf(app.mynguli.feed.AiActivityStep("preparing"), app.mynguli.feed.AiActivityStep("reading")), contextEntries = 2))))
+        compose.setContent { MeBotTheme { Scaffold(topBar = { ProcessingStatus(ui.value, "home", null) }) { padding ->
+            Column(Modifier.padding(padding)) { Text("Your information stays visible") }
+        } } }
+        compose.onNodeWithText("Preparing your updates").assertIsDisplayed()
+        compose.onNodeWithText("Writing answer").assertDoesNotExist()
+        compose.onAllNodesWithTag("mebot-active-ring", useUnmergedTree = true).assertCountEquals(1)
+        compose.onNodeWithTag("ai-activity-panel").performClick()
+        compose.onNodeWithTag("activity-details-popup").assertIsDisplayed()
+        compose.onNodeWithText("Using 2 relevant saved preferences").assertIsDisplayed()
+        screenshot("mebot-0.8.1-activity-details")
+        compose.onNodeWithText("Show less").performClick()
+        compose.runOnIdle { ui.value = ui.value.copy(refreshing = false, activities = emptyList()) }
+        compose.onAllNodesWithTag("mebot-active-ring", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithTag("ai-activity-panel").assertCountEquals(0)
+    }
+
+    @Test fun detailSummaryStaysReadableWhileMeBotWorks() {
+        val item = FeedItem("working", "opportunities", "An opportunity to explore", "Read the source requirements before applying.",
+            sourceUrl = "https://example.com/opportunity", sourceName = "Example employer", kind = "opportunities")
+        val ui = FeedUiState(state = state.copy(items = listOf(item)), loading = false, connected = true,
+            detailItemId = item.id, detailLoading = true,
+            activities = listOf(AiActivity("lookup", item.id, item.kind, "answer", "searching")))
+        compose.setContent { MeBotTheme { Scaffold(topBar = { ProcessingStatus(ui, "item", item.id) }) { padding ->
+            Box(Modifier.padding(padding)) { FeedDetail(ui, item.id, {}, {}, {}) }
+        } } }
+        compose.onNodeWithText(item.summary).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("detail-story-notes").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Show more").assertIsDisplayed()
+        screenshot("mebot-0.8.1-detail-working")
     }
 
     private fun screenshot(name: String) {

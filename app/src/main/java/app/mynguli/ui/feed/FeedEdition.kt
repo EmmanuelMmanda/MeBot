@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -41,16 +42,19 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 /** The first edition stays finite; each card has a source action and a useful next step. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, onYou: () -> Unit,
     onConnect: () -> Unit, onAsk: () -> Unit, onRefresh: () -> Unit, onSave: (String) -> Unit,
     onHide: (String) -> Unit, onDismissError: () -> Unit, nextAlarm: AlarmPlan?, onAlarms: () -> Unit,
     onPrompt: (String?, String) -> Unit = { _, _ -> onAsk() }, onSearch: (() -> Unit)? = null,
-    returnToTopRequest: Int = 0, onExploreModules: () -> Unit = onModules) {
+    returnToTopRequest: Int = 0, onExploreModules: () -> Unit = onModules,
+    onRefreshModule: ((String?) -> Unit)? = null) {
     val state = ui.state ?: return
     var filter by rememberSaveable { mutableStateOf("all") }
     val enabled = remember(state.modules) { state.modules.filter { it.enabled } }
     LaunchedEffect(enabled.map { it.id }) { if (filter != "all" && enabled.none { it.id == filter }) filter = "all" }
+    val refreshSelected: () -> Unit = { if (onRefreshModule == null) onRefresh() else onRefreshModule(filter.takeUnless { it == "all" }) }
     val now = LocalFeedClock.current
     val edition = remember(state.items, state.modules, state.hiddenIds, state.timezone, state.viewedAtMillis, state.readingHistoryEnabled, state.editionSequence, now / 60_000) {
         FeedLogic.edition(state, now)
@@ -77,19 +81,21 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                 consumedTopRequest = returnToTopRequest
                 visibleCount = 5
                 listState.scrollToItem(0)
+                refreshSelected()
             }
         }
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        PullToRefreshBox(isRefreshing = ui.refreshing, onRefresh = refreshSelected,
+            modifier = Modifier.fillMaxSize().testTag("feed-pull-refresh"), indicator = {}) {
             LazyColumn(Modifier.testTag("feed-screen").widthIn(max = MeBotTokens.ContentWidth).fillMaxWidth().imePadding(),
                 state = listState, contentPadding = PaddingValues(horizontal = MeBotTokens.ScreenPadding, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 item(key = "header", contentType = "header") {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            MeBotMark(Modifier.size(30.dp))
+                            MeBotActivityBadge(if (ui.refreshing) ui.activities.lastOrNull { it.operation == "discovery" } ?: app.mynguli.feed.AiActivity("feed-preparing", filter, "", "refresh", "preparing") else null, Modifier.size(34.dp))
                             Spacer(Modifier.width(9.dp))
                             Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                            IconButton(onClick = onRefresh, enabled = !ui.refreshing, modifier = Modifier.testTag("feed-refresh")) {
+                            IconButton(onClick = refreshSelected, enabled = !ui.refreshing, modifier = Modifier.testTag("feed-refresh")) {
                                 Icon(Icons.Outlined.Refresh, stringResource(R.string.feed_refresh), Modifier.size(23.dp))
                             }
                             Surface(onClick = onYou, color = MaterialTheme.colorScheme.primaryContainer, shape = CircleShape,
@@ -131,21 +137,21 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                     }
                 }
                 if (ui.error != null) item(key = "status", contentType = "status") {
-                    FeedStatus(ui.error, if (!ui.refreshing) onRefresh else null, onDismissError, onConnect)
+                    FeedStatus(ui.error, if (!ui.refreshing) refreshSelected else null, onDismissError, onConnect)
                 }
 
                 when {
-                    ui.refreshing && items.isEmpty() -> item(key = "loading", contentType = "loading") { EditionLoading() }
+                    ui.refreshing && items.isEmpty() -> Unit // Activity is rendered once, above the page.
                     enabled.isEmpty() -> item(key = "empty", contentType = "empty") {
                         EditionEmpty(R.string.feed_no_modules, R.string.feed_no_modules_body, R.string.feed_manage_modules, onModules)
                     }
                     items.isEmpty() -> {
                         item(key = "empty", contentType = "empty") {
                             EditionEmpty(R.string.edition_empty_title, if (ui.connected) R.string.edition_empty_connected else R.string.edition_empty_body,
-                                if (ui.connected) R.string.feed_load else R.string.feed_connect, if (ui.connected) onRefresh else onConnect)
+                                if (ui.connected) R.string.feed_load else R.string.feed_connect, if (ui.connected) refreshSelected else onConnect)
                         }
                         if (!ui.connected) item(key = "public-updates", contentType = "action") {
-                            TextButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.edition_public_updates)) }
+                            TextButton(onClick = refreshSelected, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.edition_public_updates)) }
                         }
                     }
                     else -> {
@@ -423,18 +429,6 @@ private fun EditionEmpty(title: Int, body: Int, action: Int, onAction: () -> Uni
     }
 }
 
-@Composable
-private fun EditionLoading() {
-    Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(28.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(23.dp)) {
-            Box(Modifier.fillMaxWidth().height(170.dp).clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceContainer)) {
-                Icon(Icons.Outlined.Article, null, Modifier.size(36.dp).align(Alignment.Center), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Text(stringResource(R.string.edition_loading), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(R.string.edition_loading_body), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
 
 internal fun resourceAction(type: String): Int = when (type) {
     "video" -> R.string.edition_watch

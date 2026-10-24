@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="activity_summarizing_items">Preparing your updates</string>
+    <string name="activity_validating">Checking the results</string>
+    <string name="activity_results_ready">Adding new results</string>
+    <string name="activity_preparing_feed">Finding updates for you</string>
+    <string name="activity_checking_file">Checking the file</string>
+    <string name="activity_scope_discovery">Your updates</string>
+    <string name="activity_scope_search">Your search</string>
+    <string name="activity_seconds">%1$ds</string>
+    <string name="activity_preferences_used">Using %1$d relevant saved preferences</string>
+    <string name="activity_module_defaults">Using this topic’s settings</string>
+    <string name="activity_verified_count">%1$d results checked</string>
+    <string name="activity_provider_update">Provider update</string>
+    <string name="activity_less">Show less</string>
+    <string name="detail_expand_notes">Show more</string>
+    <string name="detail_collapse_notes">Show less</string>
+    <string name="file_check_action">Check file</string>
+    <string name="file_unavailable">File not available. Open the source instead.</string>
+</resources>

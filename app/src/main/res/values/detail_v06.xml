@@ -6,7 +6,7 @@
     <string name="detail_sources_count">Sources · %1$d</string>
     <string name="detail_ai_summary">AI summary</string>
     <string name="detail_source_summary">Source summary</string>
-    <string name="detail_discuss">Discuss with AI</string>
+    <string name="detail_discuss">Ask MeBot</string>
     <string name="detail_adjust_module">Adjust topics and preferences</string>
     <string name="detail_related">More from this module</string>
     <string name="detail_about_update">About this update</string>

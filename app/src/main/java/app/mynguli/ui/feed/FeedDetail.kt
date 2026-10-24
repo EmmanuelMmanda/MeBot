@@ -28,6 +28,9 @@ import androidx.compose.ui.unit.dp
 import app.mynguli.R
 import app.mynguli.core.*
 import app.mynguli.feed.FeedUiState
+import app.mynguli.feed.AiActivity
+import app.mynguli.feed.ResourceChecks
+import kotlinx.coroutines.launch
 import app.mynguli.ui.*
 import java.net.URI
 import java.time.Instant
@@ -156,12 +159,17 @@ fun FeedDetail(
                     WeatherStrip(item) { openSource(context, item.sourceUrl) }
                     Text(stringResource(R.string.edition_feels_like, weather.feelsLikeC.toInt()), style = MaterialTheme.typography.bodyMedium)
                 }
-                Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(22.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TextButton(onClick = { storyNotesOpen = !storyNotesOpen }, modifier = Modifier.fillMaxWidth()
-                            .testTag("detail-story-notes"), contentPadding = PaddingValues(0.dp)) {
-                            Text(stringResource(R.string.detail_more_context), Modifier.weight(1f))
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Useful cached text is readable immediately, independently of the answer stream.
+                    val hasAnswer = ui.detailItemId == item.id && (ui.detailText.isNotBlank() || ui.detailTurns.any { it.role == "assistant" })
+                    if (!hasAnswer && item.summary.isNotBlank() && !storyNotesOpen) {
+                        RichResponse(item.summary)
+                    }
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { storyNotesOpen = !storyNotesOpen }, modifier = Modifier.heightIn(min = 48.dp)
+                            .testTag("detail-story-notes"), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {
+                            Text(stringResource(if (storyNotesOpen) R.string.detail_collapse_notes else R.string.detail_expand_notes))
+                            Spacer(Modifier.width(6.dp))
                             Icon(if (storyNotesOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
                         }
                         if (storyNotesOpen) {
@@ -281,10 +289,12 @@ private fun DetailBrief(ui: FeedUiState, item: FeedItem, onRetry: () -> Unit, on
         }
     }
     Column(Modifier.fillMaxWidth().testTag("detail-brief"), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MeBotMark(Modifier.size(25.dp))
-            Text(stringResource(R.string.detail_deeper), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        if (turns.isNotEmpty() || draft.isNotBlank() || error != null || !ui.connected) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        if (turns.isNotEmpty() || draft.isNotBlank() || error != null || loading || !ui.connected) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            val activity = if (loading) ui.activities.lastOrNull { it.scope == item.id }
+                ?: AiActivity("detail-preparing", item.id, item.kind, "answer", stage = "preparing") else null
+            MeBotActivityBadge(activity, Modifier.size(30.dp))
+            Text(stringResource(R.string.workspace_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             if (loading) TextButton(onClick = onCancel, modifier = Modifier.testTag("detail-brief-stop")) { Text(stringResource(R.string.workspace_stop)) }
         }
         if (responseTime > 0) Text(stringResource(R.string.detail_last_response, detailDate(responseTime, ui.state?.timezone.orEmpty())),
@@ -358,7 +368,13 @@ internal fun ConversationSources(sources: List<FeedCitation>, tagPrefix: String)
     }
     if (valid.isEmpty()) return
     val media = remember(valid) { valid.filter { RichContent.type(it.url) in setOf("image", "youtube", "audio", "video") } }
-    val documents = remember(valid) { valid.filter { RichContent.type(it.url) == "document" } }
+    val context = LocalContext.current
+    val fileChecks by ResourceChecks.state.collectAsState()
+    val fileLinks = remember(valid) { valid.filter { RichContent.type(it.url) == "document" } }
+    LaunchedEffect(fileLinks.map { it.url }) {
+        fileLinks.take(8).forEach { source -> launch { ResourceChecks.check(context, source.url) } }
+    }
+    val documents = remember(fileLinks, fileChecks) { fileLinks.filter { fileChecks[it.url]?.available == true } }
     var selected by rememberSaveable(tagPrefix) { mutableStateOf("all") }
     var expanded by rememberSaveable(tagPrefix, selected) { mutableStateOf(false) }
     val shown = when (selected) { "media" -> media; "files" -> documents; else -> valid }

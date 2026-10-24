@@ -30,6 +30,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.mynguli.R
+import app.mynguli.feed.ResourceChecks
 import app.mynguli.core.*
 import java.net.URI
 import java.util.UUID
@@ -48,6 +49,8 @@ internal object MediaPreviewSession {
 internal fun RichSourcePreview(source: FeedCitation, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val type = remember(source.url) { RichContent.type(source.url) }
+    val checks by ResourceChecks.state.collectAsState()
+    val verifiedFile = checks[source.url]?.available == true
     val key = remember(source.url) { UUID.randomUUID().toString() }
     val selected by MediaPreviewSession.state.collectAsState()
     val preview = selected == key
@@ -66,7 +69,7 @@ internal fun RichSourcePreview(source: FeedCitation, modifier: Modifier = Modifi
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(source.title.ifBlank { hostname }, style = MaterialTheme.typography.titleSmall,
                         maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(if (type == "document") "${DownloadResource.from(source.url)?.extension?.uppercase().orEmpty()} · $hostname"
+                    Text(if (type == "document" && verifiedFile) "${DownloadResource.from(source.url)?.extension?.uppercase().orEmpty()} · $hostname"
                         else hostname, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -92,7 +95,7 @@ internal fun RichSourcePreview(source: FeedCitation, modifier: Modifier = Modifi
                     Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(16.dp))
                 }
             }
-            if (type == "document") Text(stringResource(R.string.resource_file_limit),
+            if (type == "document" && verifiedFile) Text(stringResource(R.string.resource_file_limit),
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (preview && type == "image") ResourceDownloadButton(source.url)
         }
