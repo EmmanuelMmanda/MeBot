@@ -126,7 +126,10 @@ def check_catalog():
         return
     try:
         catalog = json.loads(path.read_text())
-        integrity = json.loads((DOCS / 'release-integrity.json').read_text())
+        integrity_path = (DOCS / catalog.get('integrityFile', 'release-integrity.json')).resolve()
+        if not integrity_path.is_relative_to(DOCS.resolve()):
+            raise ValueError('Integrity file must stay inside docs')
+        integrity = json.loads(integrity_path.read_text())
         entries = catalog['releases']
         versions = [entry['version'] for entry in entries]
         if len(versions) != len(set(versions)):
@@ -137,7 +140,7 @@ def check_catalog():
             error(path, 'current public integrity must exclude a personal profile')
         for entry in [catalog, *entries]:
             version = entry['version']
-            if not re.fullmatch(r'\d+\.\d+\.\d+', version) or entry['tag'] != 'v' + version:
+            if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9.]+)?', version) or entry['tag'] != 'v' + version:
                 error(path, f'invalid version/tag {version!r}')
             if entry['status'] not in {'pending', 'published'}:
                 error(path, f'unknown publication state for {version}')

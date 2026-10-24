@@ -174,7 +174,7 @@
       document.querySelectorAll('[data-release-source]').forEach(link => {
         link.href = `${repository}/releases/download/v${release.version}/mebot-${release.version}-source.zip`; link.hidden = false;
       });
-      releaseNodes.forEach(item => { item.textContent = `Version ${release.version} · Public release`; });
+      releaseNodes.forEach(item => { item.textContent = `Version ${release.version} · ${release.channel === 'beta' ? 'Testing release' : 'Public release'}`; });
       document.querySelectorAll('[data-release-filename]').forEach(item => { item.textContent = file; });
       document.querySelectorAll('[data-release-version]').forEach(item => { item.textContent = release.version; });
       if (/^[a-f0-9]{64}$/i.test(release.sha256 || '')) {
@@ -182,7 +182,7 @@
         document.querySelectorAll('[data-release-integrity]').forEach(item => { item.hidden = false; });
       }
       if (Number.isSafeInteger(release.sizeBytes) && release.sizeBytes > 0)
-        document.querySelectorAll('[data-release-size]').forEach(item => { item.textContent = `${(release.sizeBytes / 1048576).toFixed(1)} MB`; });
+        document.querySelectorAll('[data-release-size]').forEach(item => { item.textContent = `${(release.sizeBytes / 1000000).toFixed(1)} MB`; });
     }).catch(() => {
       document.querySelectorAll('[data-release-load-error]').forEach(item => { item.hidden = false; });
     });
