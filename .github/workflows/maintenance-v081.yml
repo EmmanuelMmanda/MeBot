@@ -33,6 +33,28 @@ jobs:
               subprocess.run(['git','apply','--unidiff-zero','-'],input=patch,check=True)
               for p in parts:p.unlink()
           assert 'versionName = "0.8.1"' in Path('app/build.gradle.kts').read_text()
+          def replace(path, old, new):
+              p=Path(path);text=p.read_text()
+              if old in text: p.write_text(text.replace(old,new))
+              else: assert new in text,path
+          replace('app/src/main/java/app/mynguli/feed/FeedRepository.kt',
+              'suspend fun erase(): FeedState = store.updateData { FeedState(personalSeedApplied = true) }',
+              'suspend fun erase(): FeedState = store.updateData {\n        // Rotate the local, non-identifying diversity seed; never retain an erased profile\'s seed.\n        FeedState(personalSeedApplied = true, timezone = java.time.ZoneId.systemDefault().id,\n            recommendationSeed = java.util.UUID.randomUUID().toString())\n    }')
+          replace('app/src/main/java/app/mynguli/feed/FeedNetwork.kt',
+              'ModuleDefaults.requestContext(module) + "\\n" + DiscoveryDefaults.guidance(state)',
+              'ModuleDefaults.requestContext(module)')
+          replace('app/src/test/java/app/mynguli/feed/FeedRepositoryTest.kt',
+              'assertEquals(FeedState(personalSeedApplied = true), erased)',
+              'assertTrue(erased.recommendationSeed.isNotBlank())\n        assertEquals(java.time.ZoneId.systemDefault().id, erased.timezone)\n        assertEquals(FeedState(personalSeedApplied = true, timezone = erased.timezone,\n            recommendationSeed = erased.recommendationSeed), erased)')
+          p=Path('app/src/test/java/app/mynguli/ui/MeBotUsabilityJourneyTest.kt');text=p.read_text()
+          if '// Count the single configured fixture source' not in text:
+              assert text.count('sourceCalls.incrementAndGet()')==1
+              text=text.replace('sourceCalls.incrementAndGet()', '// Count the single configured fixture source, not the newly supported\n                // default fallback sources on the other enabled modules. This remains\n                // the per-refresh probe used to assert tap coalescing and paging.\n                if (source.url == "https://publisher.example/feed.xml") sourceCalls.incrementAndGet()')
+              p.write_text(text)
+          p=Path('app/src/main/java/app/mynguli/ui/feed/AiActivityPanel.kt');text=p.read_text()
+          if 'trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)' not in text:
+              assert 'strokeWidth = 2.dp)' in text
+              p.write_text(text.replace('strokeWidth = 2.dp)', 'strokeWidth = 2.dp, trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))',1))
           PY
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
