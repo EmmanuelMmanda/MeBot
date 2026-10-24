@@ -1,0 +1,119 @@
+name: Publish verified MeBot 0.8.0 assets
+on:
+  push:
+    branches: [release/publish-v0.8.0]
+    paths: ['.github/workflows/publish-verified-v080.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: mebot-official-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_COMMIT: 29cd175c01a8b3157483f3bc158c79c3c47f39ac
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 29cd175c01a8b3157483f3bc158c79c3c47f39ac
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: mebot-0.8.0-publication-evidence
+          run-id: 40119881960
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/evidence
+      - name: Validate full test evidence and retain the exact signed APK
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,shutil,subprocess,zipfile
+          root=Path.cwd();evidence=Path(os.environ['RUNNER_TEMP'])/'evidence'
+          release=evidence/'_temp/mebot-release'
+          checks=(release/'SHA256SUMS.txt').read_text().splitlines()
+          for line in checks:
+              digest,name=line.split(None,1);p=release/name.strip().lstrip('*')
+              assert p.parent==release and hashlib.sha256(p.read_bytes()).hexdigest()==digest,p.name
+          metadata=json.loads((release/'release-metadata.json').read_text())
+          assert metadata['apk_sha256']=='fc45ebdcb0ba183e6dd6dc5c30a1c9f738193bf0c7a336072b11ee0d689b6d81'
+          assert metadata['source_sha256']=='5e45b363baa277a8138a0264ee36b7cf2cf80da9105ecb4af5f9062e777e5759'
+          assert sum(t['tests'] for t in metadata['tests'].values())==678
+          for t in metadata['tests'].values():assert t['failures']==t['errors']==t['skipped']==0
+          assert metadata['website_checks']==45
+          # The only change after full verification is a release-note correction.
+          changed=subprocess.check_output(['git','diff','--name-only',metadata['release_commit'],os.environ['RELEASE_COMMIT']],text=True).splitlines()
+          assert changed==['docs/RELEASE-0.8.0.md'],changed
+          with zipfile.ZipFile(release/'mebot-0.8.0-source.zip') as original:
+              for member in original.infolist():
+                  if member.is_dir():continue
+                  relative=Path(member.filename).relative_to('MeBot')
+                  if relative.as_posix()=='docs/RELEASE-0.8.0.md':continue
+                  assert (root/relative).read_bytes()==original.read(member),str(relative)
+          original_commit=metadata['release_commit'];old_hash=metadata['source_sha256']
+          subprocess.run(['git','archive','--format=zip','--prefix=MeBot/','-o',str(release/'mebot-0.8.0-source.zip'),os.environ['RELEASE_COMMIT']],check=True)
+          metadata['release_commit']=os.environ['RELEASE_COMMIT']
+          metadata['source_sha256']=hashlib.sha256((release/'mebot-0.8.0-source.zip').read_bytes()).hexdigest()
+          metadata['source_bytes']=(release/'mebot-0.8.0-source.zip').stat().st_size
+          metadata['verification_run']='https://github.com/EmmanuelMmanda/MeBot/actions/runs/40119881960'
+          metadata['publication_run']='https://github.com/EmmanuelMmanda/MeBot/actions/runs/'+os.environ['GITHUB_RUN_ID']
+          (release/'release-metadata.json').write_text(json.dumps(metadata,indent=2)+'\n')
+          report=release/'mebot-0.8.0-verification.txt'
+          text=report.read_text().replace(original_commit,metadata['release_commit']).replace(old_hash,metadata['source_sha256'])
+          text+='\nPublication uses retained full-CI artifacts; no application code was changed or rebuilt.\nOnly documentation changed after verification.\nVerification: '+metadata['verification_run']+'\nPublication: '+metadata['publication_run']+'\n'
+          report.write_text(text)
+          resource=release/'mebot-0.8.0-resources.zip';temporary=release/'resources-repacked.zip'
+          with zipfile.ZipFile(resource) as src,zipfile.ZipFile(temporary,'w',zipfile.ZIP_DEFLATED) as dst:
+              for member in src.infolist():
+                  if member.filename.endswith('verification.txt'):
+                      dst.writestr(member.filename,text)
+                  elif member.filename.endswith('release-metadata.json'):
+                      dst.writestr(member.filename,(release/'release-metadata.json').read_bytes())
+                  else:dst.writestr(member,src.read(member))
+          temporary.replace(resource)
+          with zipfile.ZipFile(release/'mebot-0.8.0-documentation.zip','w',zipfile.ZIP_DEFLATED) as z:
+              for p in sorted((root/'docs').rglob('*')):
+                  if p.is_file():
+                      assert p.suffix.lower() not in ('.ttf','.otf','.woff','.woff2')
+                      z.write(p,p.relative_to(root/'docs'))
+          (release/'SHA256SUMS.txt').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(release.iterdir()) if p.is_file() and p.name!='SHA256SUMS.txt'))
+          with open(os.environ['GITHUB_ENV'],'a') as f:f.write('RELEASE_DIRECTORY='+str(release)+'\n')
+          print('Verified 678 passing tests, 45 browser checks and unchanged signed APK; exact source archive prepared.')
+          PY
+          python3 scripts/check-docs.py
+          python3 scripts/check-showcase.py
+      - name: Create immutable version identity and upload every checked file
+        run: |
+          set -euo pipefail
+          git config user.name 'MeBot release bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if git rev-parse -q --verify refs/tags/v0.8.0 >/dev/null; then
+            test "$(git rev-parse v0.8.0^{commit})" = "$RELEASE_COMMIT"
+          else
+            git tag -a v0.8.0 "$RELEASE_COMMIT" -m 'MeBot 0.8.0 — official signed release'
+            git push origin refs/tags/v0.8.0
+          fi
+          gh release create v0.8.0 --repo EmmanuelMmanda/MeBot --verify-tag --draft --title 'MeBot 0.8.0' --notes-file docs/RELEASE-0.8.0.md
+          gh release upload v0.8.0 "$RELEASE_DIRECTORY"/* --repo EmmanuelMmanda/MeBot
+          gh api repos/EmmanuelMmanda/MeBot/releases/tags/v0.8.0 > "$RUNNER_TEMP/uploaded.json"
+          python3 - <<'PY'
+          import pathlib,json,hashlib,os
+          assets={x['name']:x for x in json.loads(pathlib.Path(os.environ['RUNNER_TEMP'],'uploaded.json').read_text())['assets']}
+          for p in pathlib.Path(os.environ['RELEASE_DIRECTORY']).iterdir():
+              if p.is_file():
+                  a=assets[p.name];assert a['state']=='uploaded' and a['size']==p.stat().st_size
+                  assert a.get('digest')=='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest(),p.name
+          print('All uploaded release assets match the finalized checksums.')
+          PY
+          gh release edit v0.8.0 --repo EmmanuelMmanda/MeBot --draft=false --latest
+          echo 'MeBot 0.8.0 is publicly released with the original signing identity.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: mebot-0.8.0-published-files
+          path: ${{ runner.temp }}/evidence/_temp/mebot-release/
+          retention-days: 14
