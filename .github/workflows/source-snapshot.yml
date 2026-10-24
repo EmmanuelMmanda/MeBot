@@ -1,0 +1,25 @@
+name: Export source snapshot
+on:
+  push:
+    branches: [develop]
+    paths: ['.github/workflows/source-snapshot.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Archive checked-in source
+        run: |
+          mkdir -p snapshot
+          git archive --format=zip HEAD > snapshot/mebot-source-snapshot.zip
+          git rev-parse HEAD > snapshot/COMMIT.txt
+          sha256sum snapshot/mebot-source-snapshot.zip > snapshot/SHA256SUMS.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mebot-source-snapshot
+          path: snapshot/
+          retention-days: 7
