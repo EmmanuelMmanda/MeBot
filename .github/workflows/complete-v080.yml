@@ -1,0 +1,71 @@
+name: Complete official MeBot 0.8.0 publication
+on:
+  push:
+    branches: [release/publish-v0.8.0]
+    paths: ['.github/workflows/complete-v080.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 29cd175c01a8b3157483f3bc158c79c3c47f39ac
+          fetch-depth: 0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: mebot-0.8.0-published-files
+          run-id: 40120780055
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/published-files
+      - name: Verify the already uploaded release by ID
+        run: |
+          test "$(git rev-parse v0.8.0^{commit})" = '29cd175c01a8b3157483f3bc158c79c3c47f39ac'
+          gh api repos/EmmanuelMmanda/MeBot/releases/422907728 > "$RUNNER_TEMP/release.json"
+          python3 - <<'PY'
+          import pathlib,json,hashlib,os
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])
+          release=json.loads((root/'release.json').read_text())
+          assert release['tag_name']=='v0.8.0' and release['name']=='MeBot 0.8.0'
+          assert release['prerelease'] is False
+          assets={x['name']:x for x in release['assets']}
+          files=root/'published-files'
+          assert len(assets)==len(list(files.iterdir()))==11
+          for p in files.iterdir():
+              assert p.is_file()
+              a=assets[p.name]
+              assert a['state']=='uploaded' and a['size']==p.stat().st_size
+              assert a['digest']=='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest(),p.name
+          metadata=json.loads((files/'release-metadata.json').read_text())
+          assert metadata['release_commit']=='29cd175c01a8b3157483f3bc158c79c3c47f39ac'
+          assert metadata['source_sha256']=='318fccb31c9bed368f0730eeeaf9afe0730d74f0ad135b999339c58ffa3a5be4'
+          assert metadata['apk_sha256']=='fc45ebdcb0ba183e6dd6dc5c30a1c9f738193bf0c7a336072b11ee0d689b6d81'
+          assert sum(t['tests'] for t in metadata['tests'].values())==678
+          for t in metadata['tests'].values():assert t['failures']==t['errors']==t['skipped']==0
+          print('Tag, all 11 assets, checksums and complete test evidence verified.')
+          PY
+      - name: Publish the existing release without replacing any asset
+        run: |
+          gh api --method PATCH repos/EmmanuelMmanda/MeBot/releases/422907728 -F draft=false -F prerelease=false -f make_latest=true -f target_commitish=29cd175c01a8b3157483f3bc158c79c3c47f39ac > "$RUNNER_TEMP/published.json"
+          gh api repos/EmmanuelMmanda/MeBot/releases/tags/v0.8.0 > "$RUNNER_TEMP/public.json"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,json,hashlib,urllib.request
+          r=json.loads(Path(os.environ['RUNNER_TEMP'],'public.json').read_text())
+          assert r['id']==422907728 and not r['draft'] and not r['prerelease']
+          a=next(a for a in r['assets'] if a['name']=='mebot-0.8.0.apk')
+          req=urllib.request.Request(a['browser_download_url'],headers={'User-Agent':'MeBot-release-verification'})
+          with urllib.request.urlopen(req,timeout=60) as response:
+              digest=hashlib.sha256();n=0
+              while chunk:=response.read(1048576):digest.update(chunk);n+=len(chunk)
+          assert digest.hexdigest()=='fc45ebdcb0ba183e6dd6dc5c30a1c9f738193bf0c7a336072b11ee0d689b6d81'
+          assert n==15884939
+          print(r['html_url'])
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write('Published MeBot 0.8.0. Unauthenticated direct APK download, all 11 files and checksums verified.\n')
+          PY
