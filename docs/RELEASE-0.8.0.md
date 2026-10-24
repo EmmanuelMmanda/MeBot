@@ -63,12 +63,20 @@ Configure release signing through private `MEBOT_*` environment variables. Witho
 the original release key, a fork cannot replace an official installation.
 
 ## Verification
-See the accompanying `mebot-0.8.0-verification.txt` for this delivery's exact test
-counts, lint results, certificate, checksums and limitations. Native host-rendered
-screens are examples, not live provider results or evidence of overnight delivery.
-Physical phone alarms, the Android save picker with each storage provider, live
-subscription authorization, and third-party playback need device checks.
+Full CI completed **678 application tests**: 137 core, 396 Android and 145 service,
+with no failures, errors, exclusions or skipped tests. This includes the Android 34
+alarm suites that were unavailable in the earlier local offline run. The website
+passed **45 browser scenarios**. Release lint has **zero errors**, with 133 warnings
+and one hint preserved in its report.
 
-The offline environment has an Android 35 Robolectric runtime. Six existing
-Android 34 alarm suites were not rerun against their declared runtime; they are
-unchanged and remain in the source. This limitation is not a passing test result.
+[Verification run](https://github.com/EmmanuelMmanda/MeBot/actions/runs/40119881960)
+completed all build, test and browser checks. Its final publishing step encountered
+a workflow-write permission restriction; the verified artifacts were retained and
+published separately without rebuilding or changing the application code.
+
+The accompanying `mebot-0.8.0-verification.txt` records the tested code commit,
+release commit, original certificate, file checksums and remaining device checks.
+Native host-rendered screens use example content. They are not live AI responses
+or evidence of physical overnight delivery. Physical phone alarms, the Android
+save picker with each storage provider, real account authorization/inference and
+third-party playback still require device checks.
