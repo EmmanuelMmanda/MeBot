@@ -162,7 +162,6 @@ fun AiWorkspace(
                     WorkspaceScopeControl(scopeLabel, !ui.asking && !ui.importWorking, { showScopes = true }, Modifier.widthIn(max = 160.dp))
                 }
             }
-            AiActivityPanel(ui.activities.lastOrNull { it.scope == (story?.id ?: conversation?.id ?: "general") }, Modifier.padding(top = 8.dp))
             if (story != null) Text(story.title, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
             LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth().testTag("workspace-messages"),
                 contentPadding = PaddingValues(top = 14.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
@@ -175,14 +174,11 @@ fun AiWorkspace(
                 if (ui.asking || (ui.answer?.isNotBlank() == true && turns.lastOrNull()?.text != ui.answer)) item(key = "pending") {
                     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag("workspace-pending"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (!ui.answer.isNullOrBlank()) {
-                            Text(stringResource(if (ui.asking) R.string.workspace_writing else R.string.workspace_partial),
+                            if (!ui.asking) Text(stringResource(R.string.workspace_partial),
                                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             RichResponse(ui.answer.orEmpty(), Modifier.testTag("workspace-draft"), ui.answerCitations)
                         }
-                        if (ui.asking) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                            Text(stringResource(R.string.feed_ask_thinking), style = MaterialTheme.typography.bodyMedium)
-                        }
+
                     }
                 }
                 if (ui.error != null) item(key = "error") { FeedStatus(ui.error, onConnect = onConnect) }
@@ -195,7 +191,7 @@ fun AiWorkspace(
                         modifier = Modifier.size(32.dp).testTag("attachment-remove-${attachment.id}")) { Icon(Icons.Outlined.Close, stringResource(R.string.workspace_remove_attachment), Modifier.size(16.dp)) } },
                     modifier = Modifier.testTag("attachment-${attachment.id}")) }
             }
-            if (ui.importWorking) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 6.dp).testTag("workspace-importing"))
+
             Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(22.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 Column {

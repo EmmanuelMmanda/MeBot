@@ -27,6 +27,8 @@ data class Settings(
     val language: String = "en",
     val theme: String = "system",
     val accent: String = "ember",
+    val customAccent: String = "#7251B5",
+    val skin: String = "classic",
     val enabledModules: Set<String> = setOf("daily", "focus", "alarms", "history"),
     val defaultFocusMinutes: Int = 15,
     val checkpointLabel: String = "",

@@ -95,9 +95,8 @@ fun SearchScreen(ui: FeedUiState, onSearch: (String, String?) -> Unit, onItem: (
             }
             if (ui.searching) item(key = "progress") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LinearProgressIndicator(Modifier.fillMaxWidth().testTag("search-progress"))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(stringResource(R.string.search_working), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        Spacer(Modifier.weight(1f))
                         TextButton(onClick = onCancel, modifier = Modifier.testTag("search-cancel")) { Text(stringResource(R.string.cancel)) }
                     }
                 }

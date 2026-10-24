@@ -1,17 +1,23 @@
-name: Check MeBot documentation
+name: Documentation checks
+
 on:
   push:
     branches: [develop, main]
-    paths: ['docs/**', 'README.md', 'scripts/check-docs.py']
+    paths: ['docs/**', '*.md', 'scripts/check-docs.py', '.github/workflows/docs.yml']
   pull_request:
-    paths: ['docs/**', 'README.md', 'scripts/check-docs.py']
+    paths: ['docs/**', '*.md', 'scripts/check-docs.py', '.github/workflows/docs.yml']
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - run: python3 scripts/check-docs.py
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check local links, images and release metadata
+        run: python3 scripts/check-docs.py
+      - name: Check browser script syntax
+        run: node --check docs/site.js

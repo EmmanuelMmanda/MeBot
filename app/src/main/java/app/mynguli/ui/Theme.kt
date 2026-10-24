@@ -20,6 +20,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.mynguli.R
 import app.mynguli.core.Settings
+import app.mynguli.core.Appearance
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.lerp
 
 /** Shared design decisions. Feature screens use semantic colors from MaterialTheme. */
 object MeBotTokens {
@@ -78,23 +81,12 @@ private val MeBotTypography = Typography(
 @Composable
 fun MeBotTheme(settings: Settings = Settings(), content: @Composable () -> Unit) {
     val dark = when (settings.theme) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
-    val primary = when (settings.accent) {
-        "sage" -> if (dark) Color(0xFF8DD8B5) else Color(0xFF23724F)
-        "blue" -> if (dark) Color(0xFF8FC4FF) else Color(0xFF2468BD)
-        else -> if (dark) Color(0xFFFF7A9F) else MeBotPalette.Brand
-    }
-    val accentContainer = when (settings.accent) {
-        "sage" -> if (dark) Color(0xFF183C30) else Color(0xFFE5F5ED)
-        "blue" -> if (dark) Color(0xFF183654) else Color(0xFFE6F1FF)
-        else -> if (dark) Color(0xFF471A2C) else Color(0xFFFFEAF1)
-    }
-    val onAccentContainer = when (settings.accent) {
-        "sage" -> if (dark) Color(0xFFB1E9D0) else Color(0xFF22563E)
-        "blue" -> if (dark) Color(0xFFB9D9FF) else Color(0xFF194F8F)
-        else -> if (dark) Color(0xFFFFB9CE) else Color(0xFF9F1641)
-    }
-    val onPrimary = if (dark) Color(0xFF211019) else Color.White
-    val scheme = if (dark) darkColorScheme(
+    val baseAccent = Color(0xFF000000L or Appearance.rgb(settings).toLong())
+    val primary = Color(0xFF000000L or Appearance.readableAccent(Appearance.rgb(settings), dark).toLong())
+    val onPrimary = Color(0xFF000000L or Appearance.foreground(primary.toArgb()).toLong())
+    val accentContainer = lerp(if (dark) Color(0xFF1C1E27) else Color.White, baseAccent, if (dark) .24f else .10f)
+    val onAccentContainer = Color(0xFF000000L or Appearance.foreground(accentContainer.toArgb()).toLong())
+    val baseScheme = if (dark) darkColorScheme(
         primary = primary, onPrimary = onPrimary,
         primaryContainer = accentContainer, onPrimaryContainer = onAccentContainer,
         secondary = primary, onSecondary = onPrimary,
@@ -136,6 +128,21 @@ fun MeBotTheme(settings: Settings = Settings(), content: @Composable () -> Unit)
         violetSurface = Color(0xFF312942), onViolet = Color(0xFFD0BAFF),
         mintSurface = Color(0xFF183B30), onMint = Color(0xFFA5DDC6),
     ) else FeatureColors()
+    val scheme = when (settings.skin) {
+        "paper" -> baseScheme.copy(
+            background = if (dark) Color(0xFF171613) else Color(0xFFF7F3EB),
+            surface = if (dark) Color(0xFF23211D) else Color(0xFFFFFCF5),
+            surfaceContainerLow = if (dark) Color(0xFF1D1B17) else Color(0xFFF0EBDF),
+            surfaceContainer = if (dark) Color(0xFF29251E) else Color(0xFFECE5D8))
+        "tinted" -> baseScheme.copy(
+            background = lerp(baseScheme.background, baseAccent, if (dark) .06f else .035f),
+            surface = lerp(baseScheme.surface, baseAccent, .025f),
+            surfaceContainerLow = lerp(baseScheme.surfaceContainerLow, baseAccent, .06f),
+            surfaceContainer = lerp(baseScheme.surfaceContainer, baseAccent, .08f))
+        "oled" -> if (dark) baseScheme.copy(background = Color.Black, surface = Color(0xFF0B0C0F),
+            surfaceContainerLow = Color(0xFF101115), surfaceContainer = Color(0xFF181A20)) else baseScheme
+        else -> baseScheme
+    }
     CompositionLocalProvider(LocalFeatureColors provides featureColors) {
         MaterialTheme(
             colorScheme = scheme,

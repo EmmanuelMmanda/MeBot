@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0
+
+Official MeBot package (`app.mynguli`), version code 11. Includes the single top activity panel, compact answers and story resources, independent media/file loading, supported direct-file saving, eight accents and custom colours, and four page styles. This publishes the verified 0.7.1 delivery changes under the requested public version. No account, alarm or recommendation implementation is replaced by the version bump.
+
+[Release details](docs/RELEASE-0.8.0.md) · [Illustrated guide](https://emmanuelmmanda.github.io/MeBot/tour.html).
+
+
 ## Open-source documentation — 2026-10-23
 
 - Added the illustrated GitHub Pages user guide, repository overview, contribution and security reporting instructions, and documentation checks.

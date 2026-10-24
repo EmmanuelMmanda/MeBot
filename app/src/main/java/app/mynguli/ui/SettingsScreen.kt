@@ -87,10 +87,7 @@ fun SettingsScreen(state: AppState, vm: MyNguliViewModel, onErase: () -> Unit = 
                         OutlinedTextField(intention, { if (it.length <= 500) intention = it }, label = { Text(stringResource(R.string.your_intention)) }, minLines = 2, maxLines = 5, modifier = Modifier.fillMaxWidth())
                     }
                     "appearance" -> {
-                        Text(stringResource(R.string.secondary_theme), style = MaterialTheme.typography.titleSmall)
-                        ChoiceRow(listOf("system" to stringResource(R.string.theme_system), "light" to stringResource(R.string.theme_light), "dark" to stringResource(R.string.theme_dark)), state.settings.theme) { selected -> vm.saveSettings { it.copy(theme = selected) } }
-                        Text(stringResource(R.string.secondary_accent), style = MaterialTheme.typography.titleSmall)
-                        ChoiceRow(listOf("ember" to stringResource(R.string.mb_raspberry), "sage" to stringResource(R.string.accent_sage), "blue" to stringResource(R.string.accent_blue)), state.settings.accent) { selected -> vm.saveSettings { it.copy(accent = selected) } }
+                        AppearanceControls(state.settings, vm::saveSettings)
                     }
                     "language" -> ChoiceRow(listOf("en" to stringResource(R.string.english), "sw" to stringResource(R.string.swahili), "system" to stringResource(R.string.theme_system)), state.settings.language) { selected -> vm.saveSettings { it.copy(language = selected) } }
                     "duration" -> DurationChoices(state.settings.defaultFocusMinutes) { selected -> vm.saveSettings { it.copy(defaultFocusMinutes = selected) } }

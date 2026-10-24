@@ -217,9 +217,12 @@ class MeBotEditionUiTest {
 
     @Test fun detailRetainsPublisherAttributionAndOriginalResource() {
         show(detail = true)
+        compose.onNodeWithTag("detail-story-notes").performScrollTo().performClick()
         compose.onNodeWithText(ui.value.state!!.items.first { it.id == "google" }.summary).performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("detail-tab-sources").performScrollTo().performClick()
-        compose.onNodeWithText(GOOGLE_SOURCE).performScrollTo().assertExists()
+        compose.onNodeWithTag("detail-citation-0").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("detail-citation-0").performClick()
+        assertEquals(GOOGLE_SOURCE, shadowOf(compose.activity).nextStartedActivity.dataString)
         compose.onNodeWithTag("detail-tab-overview").performScrollTo().performClick()
         compose.onNodeWithTag("detail-save").performScrollTo().performClick()
         assertEquals(listOf("google"), saved)

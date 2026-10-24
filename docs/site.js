@@ -140,8 +140,7 @@
         && /^[a-f0-9]{64}$/i.test(item.sha256 || '')
         && Number.isSafeInteger(item.sizeBytes) && item.sizeBytes > 0;
       const validSource = item => item.sourceFilename === `mebot-${item.version}-source.zip`
-        && /^[a-f0-9]{64}$/i.test(item.sourceSha256 || '')
-        && Number.isSafeInteger(item.sourceSizeBytes) && item.sourceSizeBytes > 0
+        && ((/^[a-f0-9]{64}$/i.test(item.sourceSha256 || '') && Number.isSafeInteger(item.sourceSizeBytes) && item.sourceSizeBytes > 0) || item.sourceIntegrityFile === 'SHA256SUMS.txt')
         && /^[a-f0-9]{40}$/i.test(item.sourceCommit || '');
       const unavailable = () => document.querySelectorAll('[data-release-load-error]').forEach(item => { item.hidden = false; });
       if (!valid(release)) throw new Error('Invalid release version');
@@ -174,7 +173,7 @@
       document.querySelectorAll('[data-release-source]').forEach(link => {
         link.href = `${repository}/releases/download/v${release.version}/mebot-${release.version}-source.zip`; link.hidden = false;
       });
-      releaseNodes.forEach(item => { item.textContent = `Version ${release.version} · ${release.channel === 'beta' ? 'Testing release' : 'Public release'}`; });
+      releaseNodes.forEach(item => { item.textContent = `Version ${release.version} · ${release.channel === 'beta' ? 'Testing release' : 'Official release'}`; });
       document.querySelectorAll('[data-release-filename]').forEach(item => { item.textContent = file; });
       document.querySelectorAll('[data-release-version]').forEach(item => { item.textContent = release.version; });
       if (/^[a-f0-9]{64}$/i.test(release.sha256 || '')) {

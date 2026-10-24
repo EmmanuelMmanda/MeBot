@@ -1,0 +1,10 @@
+{
+  "version": "0.8.0",
+  "apk_file": "mebot-0.8.0.apk",
+  "apk_sha256": "fc45ebdcb0ba183e6dd6dc5c30a1c9f738193bf0c7a336072b11ee0d689b6d81",
+  "apk_size_bytes": 15884939,
+  "application_id": "app.mynguli",
+  "version_code": 11,
+  "certificate_sha256": "b1b69dcefe26c815dbaec76223b7b80be76af06ba30da774637a806a7f75e3e9",
+  "personal_profile_asset_present": false
+}

@@ -30,6 +30,8 @@ object StateValidation {
         require(state.settings.language in setOf("en", "sw", "system")) { "Unsupported language." }
         require(state.settings.theme in setOf("system", "light", "dark")) { "Unsupported theme." }
         text(state.settings.accent, 40, "Accent", allowBlank = false)
+        require(Appearance.normalizeHex(state.settings.customAccent) != null) { "Use a six-digit color such as #7251B5." }
+        require(state.settings.skin in Appearance.skins) { "Unsupported appearance style." }
         require(state.settings.enabledModules.all { it in modules }) { "Backup contains an unsupported module." }
         require("daily" in state.settings.enabledModules) { "The daily module must remain available." }
         focusMinutes(state.settings.defaultFocusMinutes)

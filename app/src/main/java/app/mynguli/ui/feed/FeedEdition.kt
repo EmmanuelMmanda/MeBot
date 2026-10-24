@@ -83,7 +83,6 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
             LazyColumn(Modifier.testTag("feed-screen").widthIn(max = MeBotTokens.ContentWidth).fillMaxWidth().imePadding(),
                 state = listState, contentPadding = PaddingValues(horizontal = MeBotTokens.ScreenPadding, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                if(ui.activities.isNotEmpty()) item(key="activity", contentType="activity") { AiActivityPanel(ui.activities.lastOrNull { it.operation == "discovery" }) }
                 item(key = "header", contentType = "header") {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -91,8 +90,7 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                             Spacer(Modifier.width(9.dp))
                             Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                             IconButton(onClick = onRefresh, enabled = !ui.refreshing, modifier = Modifier.testTag("feed-refresh")) {
-                                if (ui.refreshing) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                                else Icon(Icons.Outlined.Refresh, stringResource(R.string.feed_refresh), Modifier.size(23.dp))
+                                Icon(Icons.Outlined.Refresh, stringResource(R.string.feed_refresh), Modifier.size(23.dp))
                             }
                             Surface(onClick = onYou, color = MaterialTheme.colorScheme.primaryContainer, shape = CircleShape,
                                 modifier = Modifier.size(48.dp).semantics { contentDescription = youLabel }) {
@@ -134,9 +132,6 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                 }
                 if (ui.error != null) item(key = "status", contentType = "status") {
                     FeedStatus(ui.error, if (!ui.refreshing) onRefresh else null, onDismissError, onConnect)
-                } else if (ui.refreshing && items.isNotEmpty()) item(key = "status", contentType = "progress") {
-                    LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.outlineVariant)
                 }
 
                 when {
@@ -433,10 +428,9 @@ private fun EditionLoading() {
     Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(28.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(23.dp)) {
             Box(Modifier.fillMaxWidth().height(170.dp).clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceContainer)) {
-                MeBotMark(Modifier.size(50.dp).align(Alignment.Center))
+                Icon(Icons.Outlined.Article, null, Modifier.size(36.dp).align(Alignment.Center), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(stringResource(R.string.edition_loading), style = MaterialTheme.typography.titleMedium)
-            LinearProgressIndicator(Modifier.fillMaxWidth(), trackColor = MaterialTheme.colorScheme.outlineVariant)
             Text(stringResource(R.string.edition_loading_body), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

@@ -120,7 +120,6 @@ fun ConnectionScreen(
 
         if (planBusy) {
             AppCard(color = MaterialTheme.colorScheme.primaryContainer) {
-                CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
                 Text(stringResource(if (ui.chatGpt.phase == "waiting") R.string.chatgpt_waiting_title else R.string.chatgpt_verifying_title), style = MaterialTheme.typography.headlineSmall)
                 Text(stringResource(if (ui.chatGpt.phase == "waiting") R.string.chatgpt_waiting_body else R.string.chatgpt_verifying_body), style = MaterialTheme.typography.bodyMedium)
                 TextButton(onClick = { connectionRequested = false; onChatGptCancel() }, modifier = Modifier.testTag("chatgpt-cancel")) {
@@ -299,7 +298,7 @@ fun ConnectionScreen(
                         onConnect(key.trim(), apiModel.trim(), apiMode, serviceUrl.trim())
                     }
                 }, enabled = !ui.connecting && key.isNotBlank(), modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("connection-connect"), shape = RoundedCornerShape(16.dp)) {
-                    if (ui.connecting && !planBusy) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary); Spacer(Modifier.width(9.dp)) }
+                    
                     Text(stringResource(if (ui.connecting && !planBusy) R.string.feed_connecting else R.string.feed_check_connect))
                 }
             }

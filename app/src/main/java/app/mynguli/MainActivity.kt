@@ -276,8 +276,10 @@ private fun MeBotApp(ui: AppUiState, vm: MyNguliViewModel, feedUi: FeedUiState, 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
+          Column(Modifier.statusBarsPadding()) {
+            ProcessingStatus(feedUi, page, itemId, Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
             if ((onboarded && ((page !in basePages && page != "tour") || activeAlarm != null)) || (!onboarded && page == "connect")) {
-                Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp).height(52.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(52.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (page !in basePages) IconButton(onClick = ::back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back)) }
                     Spacer(Modifier.weight(1f))
                     if (activeAlarm != null) FilledTonalButton(onClick = { context.startActivity(Intent(context, AlarmActivity::class.java)) }) {
@@ -285,6 +287,7 @@ private fun MeBotApp(ui: AppUiState, vm: MyNguliViewModel, feedUi: FeedUiState, 
                     }
                 }
             }
+          }
         },
         bottomBar = { if (onboarded && page in basePages) MeBotNavigation(page) { destination ->
             if (destination == "feed" && page == "feed") {

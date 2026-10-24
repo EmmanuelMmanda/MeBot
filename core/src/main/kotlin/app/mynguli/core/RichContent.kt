@@ -24,7 +24,7 @@ object RichContent {
         if (youtubeId(url) != null) return "youtube"
         val path = runCatching { URI(url).path.lowercase() }.getOrDefault("")
         return when {
-            path.endsWith(".pdf") -> "document"
+            listOf(".pdf", ".docx", ".xlsx", ".pptx", ".txt", ".csv").any(path::endsWith) -> "document"
             listOf(".jpg", ".jpeg", ".png", ".webp").any(path::endsWith) -> "image"
             listOf(".mp3", ".m4a", ".ogg", ".wav").any(path::endsWith) -> "audio"
             listOf(".mp4", ".webm").any(path::endsWith) -> "video"

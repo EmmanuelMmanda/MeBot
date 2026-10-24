@@ -180,7 +180,10 @@ class ChatGptConnectedJourneyTest {
         assertTrue(app.askedQuestions.single().startsWith("Explain this item"))
         assertEquals(listOf(approved), app.askedContexts.single())
         compose.onNodeWithTag("detail-tab-sources").performScrollTo().performClick()
-        compose.onNodeWithText(url).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("detail-citation-0").performScrollTo().assertIsDisplayed()
+        while (shadowOf(compose.activity).nextStartedActivity != null) { /* discard earlier browser intents */ }
+        compose.onNodeWithTag("detail-citation-0").performClick()
+        assertEquals(url, shadowOf(compose.activity).nextStartedActivity.dataString)
 
         compose.activityRule.scenario.recreate()
         waitForTag("detail-screen")

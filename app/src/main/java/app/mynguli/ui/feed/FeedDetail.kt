@@ -60,8 +60,12 @@ fun FeedDetail(
     val now = LocalFeedClock.current
     var section by rememberSaveable(id) { mutableStateOf("overview") }
     var menu by rememberSaveable(id) { mutableStateOf(false) }
-    var showPlayer by rememberSaveable(id) { mutableStateOf(false) }
-    fun openResource(url: String) { if(RichContent.type(url) in setOf("youtube", "audio", "video")) showPlayer = true else openSource(context,url) }
+    var storyNotesOpen by rememberSaveable(id) { mutableStateOf(!ui.connected) }
+    val previewKey = "detail-$id"
+    val activePreview by MediaPreviewSession.state.collectAsState()
+    val showPlayer = activePreview == previewKey
+    DisposableEffect(previewKey) { onDispose { MediaPreviewSession.clear(previewKey) } }
+    fun openResource(url: String) { if(RichContent.type(url) in setOf("youtube", "audio", "video")) MediaPreviewSession.select(previewKey) else openSource(context,url) }
     val loadBrief by rememberUpdatedState(onLoadBrief)
     LaunchedEffect(item?.id, ui.connected) { if (item != null) loadBrief() }
     ScreenContainer(Modifier.testTag("detail-screen"), scrollKey = id.orEmpty()) {
@@ -101,7 +105,7 @@ fun FeedDetail(
                 Text(if (item.kind == "horoscope") stringResource(R.string.feed_entertainment) else itemTimestamp(item),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            item.media?.let { media ->
+            if (!showPlayer) item.media?.let { media ->
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Box(Modifier.fillMaxWidth().height(184.dp).clip(RoundedCornerShape(24.dp))) {
                         PublisherImage(item, Modifier.fillMaxSize(), large = true)
@@ -131,9 +135,14 @@ fun FeedDetail(
                     Icon(Icons.Outlined.Share, stringResource(R.string.detail_share))
                 }
             }
+            if (DownloadResource.from(item.sourceUrl) != null && RichContent.type(item.sourceUrl) == "document")
+                ResourceDownloadButton(item.sourceUrl)
             if(showPlayer && originalAvailable) {
                 OfficialMediaPlayer(item.sourceUrl)
-                TextButton(onClick={openSource(context,item.sourceUrl)}) { Text(if(LocalConfiguration.current.locales[0].language == "sw") "Fungua kwenye chanzo" else "Open original player") }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    TextButton(onClick = { MediaPreviewSession.clear(previewKey) }) { Text(stringResource(R.string.detail_close_player)) }
+                    TextButton(onClick = { openSource(context, item.sourceUrl) }) { Text(stringResource(R.string.resource_open)) }
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = section == "overview", onClick = { section = "overview" },
@@ -147,6 +156,15 @@ fun FeedDetail(
                     WeatherStrip(item) { openSource(context, item.sourceUrl) }
                     Text(stringResource(R.string.edition_feels_like, weather.feelsLikeC.toInt()), style = MaterialTheme.typography.bodyMedium)
                 }
+                Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(22.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        TextButton(onClick = { storyNotesOpen = !storyNotesOpen }, modifier = Modifier.fillMaxWidth()
+                            .testTag("detail-story-notes"), contentPadding = PaddingValues(0.dp)) {
+                            Text(stringResource(R.string.detail_more_context), Modifier.weight(1f))
+                            Icon(if (storyNotesOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
+                        }
+                        if (storyNotesOpen) {
                 if (item.summary.isNotBlank()) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(if (item.aiGenerated) R.string.detail_ai_summary else R.string.detail_source_summary),
                         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -175,6 +193,9 @@ fun FeedDetail(
                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Icon(Icons.Outlined.EventAvailable, null, tint = MeBotPalette.current.onMint)
                         Text(stringResource(R.string.feed_deadline, item.deadline), style = MaterialTheme.typography.titleSmall, color = MeBotPalette.current.onMint)
+                    }
+                }
+                        }
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -225,7 +246,7 @@ fun FeedDetail(
                     if (item.kind == "horoscope") SupportingText(stringResource(R.string.feed_entertainment))
                 }
                 if (sources.isEmpty()) SupportingText(stringResource(R.string.detail_no_sources))
-                else sources.forEachIndexed { index, citation -> DetailSource(citation, Modifier.testTag("detail-citation-$index")) }
+                else ConversationSources(sources, "detail-citation")
             }
         }
     }
@@ -287,14 +308,9 @@ private fun DetailBrief(ui: FeedUiState, item: FeedItem, onRetry: () -> Unit, on
             }
         } }
         if (draft.isNotBlank()) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(if (loading) R.string.workspace_writing else R.string.workspace_partial),
+            if (!loading) Text(stringResource(R.string.workspace_partial),
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             RichResponse(draft, Modifier.testTag("detail-brief-draft"), ui.detailCitations)
-        }
-        AiActivityPanel(ui.activities.lastOrNull { it.scope == item.id })
-        if (loading && ui.activities.none { it.scope == item.id }) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-            Text(stringResource(R.string.feed_ask_thinking), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (error != null) FeedStatus(error, onRetry = onRetry, onConnect = onConnect)
         else if (ui.connected && active && !loading && turns.isEmpty() && draft.isBlank()) TextButton(onClick = onRetry, modifier = Modifier.testTag("detail-brief-retry")) {
@@ -328,7 +344,7 @@ internal fun DetailSource(source: FeedCitation, modifier: Modifier = Modifier) {
         Row(Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(source.title.ifBlank { runCatching { URI(source.url).host }.getOrNull().orEmpty() }, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(source.url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(runCatching { URI(source.url).host.removePrefix("www.") }.getOrDefault(source.url), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             Icon(Icons.AutoMirrored.Outlined.OpenInNew, stringResource(R.string.feed_open_source), Modifier.size(18.dp))
         }
@@ -337,15 +353,34 @@ internal fun DetailSource(source: FeedCitation, modifier: Modifier = Modifier) {
 
 @Composable
 internal fun ConversationSources(sources: List<FeedCitation>, tagPrefix: String) {
-    val valid = remember(sources) { sources.filter { FeedLogic.safeUrl(it.url) }.distinctBy { FeedLogic.canonicalUrl(it.url) } }
-    var expanded by rememberSaveable(tagPrefix) { mutableStateOf(false) }
-    if (valid.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        (if (expanded) valid else valid.take(2)).forEachIndexed { index, source ->
-            if(RichContent.type(source.url) != "link") RichSourcePreview(source, Modifier.testTag("$tagPrefix-$index"))
-            else DetailSource(source, Modifier.testTag("$tagPrefix-$index"))
+    val valid = remember(sources) {
+        sources.filter { FeedLogic.safeUrl(it.url) }.distinctBy { FeedLogic.canonicalUrl(it.url) }
+    }
+    if (valid.isEmpty()) return
+    val media = remember(valid) { valid.filter { RichContent.type(it.url) in setOf("image", "youtube", "audio", "video") } }
+    val documents = remember(valid) { valid.filter { RichContent.type(it.url) == "document" } }
+    var selected by rememberSaveable(tagPrefix) { mutableStateOf("all") }
+    var expanded by rememberSaveable(tagPrefix, selected) { mutableStateOf(false) }
+    val shown = when (selected) { "media" -> media; "files" -> documents; else -> valid }
+    Column(Modifier.fillMaxWidth().testTag("$tagPrefix-resources"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.resource_heading, valid.size), style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (media.isNotEmpty() || documents.isNotEmpty()) HorizontalRail(
+            listOf("all" to (stringResource(R.string.resource_sources) + " ${valid.size}")) +
+                (if (media.isNotEmpty()) listOf("media" to (stringResource(R.string.resource_media) + " ${media.size}")) else emptyList()) +
+                (if (documents.isNotEmpty()) listOf("files" to (stringResource(R.string.resource_documents) + " ${documents.size}")) else emptyList()),
+            itemKey = { it.first }) { (id, label) ->
+            FilterChip(selected == id, onClick = { selected = id }, label = { Text(label) },
+                modifier = Modifier.heightIn(min = 48.dp).testTag("$tagPrefix-filter-$id"))
         }
-        if (valid.size > 2) TextButton(onClick = { expanded = !expanded }, contentPadding = PaddingValues(0.dp), modifier = Modifier.testTag("$tagPrefix-toggle")) {
-            Text(if (expanded) stringResource(R.string.detail_fewer_sources) else stringResource(R.string.detail_more_sources, valid.size - 2))
+        (if (expanded) shown else shown.take(2)).forEach { source -> key(source.url) {
+            val index = valid.indexOf(source)
+            if (RichContent.type(source.url) != "link") RichSourcePreview(source, Modifier.testTag("$tagPrefix-$index"))
+            else DetailSource(source, Modifier.testTag("$tagPrefix-$index"))
+        } }
+        if (shown.size > 2) TextButton(onClick = { expanded = !expanded },
+            contentPadding = PaddingValues(0.dp), modifier = Modifier.testTag("$tagPrefix-toggle")) {
+            Text(if (expanded) stringResource(R.string.resource_less) else stringResource(R.string.resource_all, shown.size))
         }
     }
 }

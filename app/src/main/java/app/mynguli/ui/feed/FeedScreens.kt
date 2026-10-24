@@ -77,7 +77,6 @@ fun AskScreen(ui: FeedUiState, itemId: String?, onAsk: (String) -> Unit, onConne
             OutlinedTextField(value = question, onValueChange = { if (it.length <= 2000) question = it }, modifier = Modifier.fillMaxWidth().testTag("ask-question"),
                 label = { Text(stringResource(R.string.feed_ask_question)) }, minLines = 2, maxLines = 5, shape = RoundedCornerShape(18.dp), enabled = !ui.asking)
             Button(onClick = { onAsk(question.trim()) }, enabled = question.isNotBlank() && !ui.asking, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("ask-submit"), shape = RoundedCornerShape(16.dp)) {
-                if (ui.asking) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary); Spacer(Modifier.width(10.dp)) }
                 Text(stringResource(if (ui.asking) R.string.feed_ask_thinking else R.string.feed_ask_send))
             }
             ui.error?.let { FeedStatus(it, onConnect = onConnect) }
@@ -121,7 +120,6 @@ private fun FeedEmpty(title: Int, body: Int, action: Int, icon: androidx.compose
 private fun FeedLoading() {
     Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(26.dp)) {
         Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            LinearProgressIndicator(Modifier.fillMaxWidth())
             repeat(3) { index -> Box(Modifier.fillMaxWidth(if (index == 2) .6f else 1f).height(18.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceContainer)) }
             Text(stringResource(R.string.feed_refreshing), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

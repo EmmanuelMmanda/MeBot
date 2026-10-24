@@ -3,14 +3,6 @@ name: Android and service verification
 on:
   push:
     branches: [develop, main]
-    paths:
-      - 'app/**'
-      - 'core/**'
-      - 'service/**'
-      - 'gradle/**'
-      - '*.gradle.kts'
-      - 'gradle.properties'
-      - 'scripts/prepare-build.py'
   pull_request:
   workflow_dispatch:
 
@@ -27,68 +19,95 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Check out source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
       - name: Set up Java 17
-        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+
+      - name: Set up Gradle and validate wrapper
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
           gradle-version: '8.13'
           cache-read-only: ${{ github.event_name == 'pull_request' }}
+
       - name: Prepare Android command-line tools
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
         with:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
+
       - name: Install the pinned Android SDK packages
         run: |
           python3 - <<'PY'
           import subprocess
-          subprocess.run(['sdkmanager', 'platforms;android-36', 'build-tools;35.0.0'], input='y\n'*30, text=True, check=True)
+          subprocess.run(
+              ["sdkmanager", "platforms;android-36", "build-tools;35.0.0"],
+              input="y\n" * 30,
+              text=True,
+              check=True,
+          )
           PY
-      - name: Test, lint and assemble the separately installed beta
+
+      - name: Test, lint and assemble
         run: |
           python3 scripts/prepare-build.py
-          gradle :core:test :app:testDebugUnitTest :app:assembleBeta :app:lintBeta --no-daemon --stacktrace -Pkotlin.incremental=false
-      - name: Upload beta APK
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+          gradle :core:test :app:testDebugUnitTest :app:assembleRelease :app:lintRelease --no-daemon --stacktrace -Pkotlin.incremental=false
+
+      - name: Upload unsigned build evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: MeBot-beta-${{ github.sha }}
-          path: app/build/outputs/apk/beta/*.apk
+          name: MeBot-unsigned-${{ github.sha }}
+          path: app/build/outputs/apk/release/*unsigned.apk
           if-no-files-found: error
           retention-days: 14
+
       - name: Upload verification reports
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: verification-${{ github.sha }}
           path: |
+            core/build/reports/tests/
             core/build/test-results/
+            app/build/reports/tests/
             app/build/test-results/
+            app/build/reports/lint-results-*.html
             app/build/reports/lint-results-*.xml
             app/build/outputs/screenshots/
           if-no-files-found: warn
           retention-days: 14
+
   verify-service:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
       run:
         working-directory: service
+    env:
+      PYTHONNOUSERSITE: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Test the optional service
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Create an isolated Python environment
         run: |
+          python3 -c 'import sys; assert sys.version_info >= (3, 12), "Python 3.12 or later is required"'
           python3 -m venv "$RUNNER_TEMP/mebot-service-venv"
           "$RUNNER_TEMP/mebot-service-venv/bin/python" -m pip install -r requirements-dev.txt
-          "$RUNNER_TEMP/mebot-service-venv/bin/python" -m pytest -q --junitxml=test-results.xml
-      - name: Upload service report
+          "$RUNNER_TEMP/mebot-service-venv/bin/python" -m pip check
+
+      - name: Verify the service with its local fake provider
+        run: '"$RUNNER_TEMP/mebot-service-venv/bin/python" -m pytest -q --junitxml=test-results.xml'
+
+      - name: Upload service verification report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: service-verification-${{ github.sha }}
           path: service/test-results.xml
+          if-no-files-found: warn
           retention-days: 14

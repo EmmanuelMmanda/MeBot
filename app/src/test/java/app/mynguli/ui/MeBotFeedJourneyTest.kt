@@ -17,6 +17,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
@@ -71,7 +72,10 @@ class MeBotFeedJourneyTest {
         waitForTag("detail-save")
         compose.onNodeWithText(stories().first().summary).assertExists()
         compose.onNodeWithTag("detail-tab-sources").performScrollTo().performClick()
-        compose.onNodeWithText("https://example.com/toolkit").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("detail-citation-0").performScrollTo().assertIsDisplayed()
+        while (shadowOf(compose.activity).nextStartedActivity != null) { }
+        compose.onNodeWithTag("detail-citation-0").performClick()
+        assertEquals("https://example.com/toolkit", shadowOf(compose.activity).nextStartedActivity.dataString)
         compose.onNodeWithTag("detail-save").performScrollTo()
         screenshot("23-mebot-update-detail")
         back()
@@ -214,8 +218,12 @@ class MeBotFeedJourneyTest {
         assertEquals(app.answerText, conversation.turns.last().text)
         compose.onNodeWithTag("workspace-messages").performScrollToNode(hasText(app.answerText))
         compose.onNodeWithText(app.answerText).assertIsDisplayed()
-        compose.onNodeWithTag("workspace-messages").performScrollToNode(hasText("https://example.com/toolkit"))
-        compose.onNodeWithText("https://example.com/toolkit").assertIsDisplayed()
+        val sourceTag = "turn-source-${conversation.turns.last().id}-0"
+        compose.onNodeWithTag("workspace-messages").performScrollToNode(hasTestTag(sourceTag))
+        compose.onNodeWithTag(sourceTag).assertIsDisplayed()
+        while (shadowOf(compose.activity).nextStartedActivity != null) { }
+        compose.onNodeWithTag(sourceTag).performClick()
+        assertEquals("https://example.com/toolkit", shadowOf(compose.activity).nextStartedActivity.dataString)
         assertEquals(requestsBeforeQuestion + 2, state().requestsToday)
         screenshot("26-mebot-ask")
         compose.activityRule.scenario.recreate()

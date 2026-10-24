@@ -4,7 +4,9 @@ plugins {
 }
 
 kotlin {
-    jvmToolchain(17)
+    // CI uses 17. A local JDK 21 is also supported; bytecode stays at 17.
+    jvmToolchain(providers.gradleProperty("mebot.buildJdk").orElse("17").get().toInt())
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
 }
 
 dependencies {
@@ -18,3 +20,5 @@ tasks.test {
         events("failed", "skipped")
     }
 }
+
+tasks.withType<JavaCompile>().configureEach { sourceCompatibility = "17"; targetCompatibility = "17" }

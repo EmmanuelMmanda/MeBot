@@ -30,3 +30,11 @@ service/__pycache__/
 *.otf
 *.woff
 *.woff2
+
+# Local Python test state
+.pytest_cache/
+
+# Generated verification and publication outputs
+website-evidence/
+service/test-results.xml
+.release-stage/

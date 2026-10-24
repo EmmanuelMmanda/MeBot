@@ -12,8 +12,8 @@ android {
         applicationId = "app.mynguli"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.7.0-beta.1"
+        versionCode = 11
+        versionName = "0.8.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
@@ -36,7 +36,7 @@ android {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += "release"
-            resValue("string", "app_name", "MeBot Test")
+            resValue("string", "app_name", "MeBot")
         }
         release {
             isMinifyEnabled = false
