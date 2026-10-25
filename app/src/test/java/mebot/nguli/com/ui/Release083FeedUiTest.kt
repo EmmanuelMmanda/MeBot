@@ -8,6 +8,7 @@ import java.io.File
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.*
 import androidx.compose.ui.test.*
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import mebot.nguli.com.core.*
@@ -104,6 +105,36 @@ class Release083FeedUiTest {
         compose.onNodeWithTag("saved-library").performScrollToNode(hasText("Cancel"))
         compose.onNodeWithText("Cancel").performClick()
         compose.onNodeWithTag("collection-name").assertDoesNotExist()
+    }
+    @Test fun iconOnlyStarSitsBesideBookmarkWithoutManagementCopy() {
+        val state = mutableStateOf(FeedState(items=listOf(story("one","A compact story"))))
+        compose.setContent { MeBotTheme { CompositionLocalProvider(LocalRelevanceContext provides RelevanceUiContext(
+            state=state.value,onStar={state.value=StarredStories.toggle(state.value,it,100)})) {
+            StoryRow(state.value.items.single(),false,{}, {}, null)
+        } } }
+        val star = compose.onNodeWithTag("star-one")
+        val bookmark = compose.onNodeWithTag("save-one")
+        star.assertContentDescriptionEquals("Star and follow this story")
+        star.assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp)
+        val starBounds = star.fetchSemanticsNode().boundsInRoot
+        val bookmarkBounds = bookmark.fetchSemanticsNode().boundsInRoot
+        assertEquals(starBounds.top, bookmarkBounds.top, 1f)
+        assertEquals(starBounds.right, bookmarkBounds.left, 1f)
+        star.performClick().assertIsSelected().assertContentDescriptionEquals("Unstar this story")
+        compose.onNodeWithTag("star-settings-one").assertDoesNotExist()
+        compose.onNodeWithText("Starred", substring=true).assertDoesNotExist()
+    }
+    @Test fun emptyFollowingExplainsStarsAndSavedExplainsBookmarks() {
+        compose.setContent { MeBotTheme { SavedFeed(FeedState(), {}, {}, {}) } }
+        compose.onNodeWithTag("library-starred").performClick()
+        compose.onNodeWithTag("saved-library").performScrollToNode(hasText("Follow a story"))
+        compose.onNodeWithText("Follow a story").assertIsDisplayed()
+        compose.onNodeWithText("Tap the bookmark on an update.", substring=true).assertDoesNotExist()
+        compose.onNodeWithTag("saved-library").performScrollToIndex(0)
+        compose.onNodeWithTag("library-saved").performClick()
+        compose.onNodeWithTag("saved-library").performScrollToNode(hasText("Keep something useful"))
+        compose.onNodeWithText("Keep something useful").assertIsDisplayed()
+        compose.onNodeWithText("Follow a story").assertDoesNotExist()
     }
     @Test fun mountingShortFeedDoesNotAutomaticallySpendRequests() {
         var refreshes = 0

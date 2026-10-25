@@ -11,7 +11,7 @@
     <string name="star_last_checked">Last checked: %1$s</string>
     <string name="library_title">Your library</string>
     <string name="library_body">Keep useful reads together. Follow the stories you want to revisit.</string>
-    <string name="library_search">Search titles, sources and notes</string>
+    <string name="library_search">Search your library</string>
     <string name="library_all">Saved</string>
     <string name="library_starred">Following</string>
     <string name="library_all_types">All topics</string>
@@ -27,10 +27,14 @@
     <string name="library_oldest">Oldest first</string>
     <string name="library_sort">Reading order</string>
     <string name="library_reset">Clear filters</string>
-    <string name="library_count">%1$d items</string>
+    <string name="library_count">Items: %1$d</string>
     <string name="feed_find_more_083">Find more stories</string>
     <string name="feed_loading_more_083">Preparing more stories…</string>
     <string name="feed_no_more_083">You are up to date. Refresh when you want another look.</string>
     <string name="feedback_less_083">Less like this</string>
     <string name="feedback_undo_083">Undo feedback</string>
+    <string name="star_add_label">Star and follow this story</string>
+    <string name="star_remove_label">Unstar this story</string>
+    <string name="library_following_empty">Follow a story</string>
+    <string name="library_following_empty_body">Tap the star beside a bookmark to follow a story. Manage its update checks here.</string>
 </resources>

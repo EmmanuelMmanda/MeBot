@@ -11,7 +11,7 @@
     <string name="star_last_checked">Iliangaliwa: %1$s</string>
     <string name="library_title">Maktaba yako</string>
     <string name="library_body">Panga ulivyohifadhi na ufuatilie habari zinazokuvutia.</string>
-    <string name="library_search">Tafuta kichwa, chanzo au maelezo</string>
+    <string name="library_search">Tafuta kwenye maktaba yako</string>
     <string name="library_all">Ulivyohifadhi</string>
     <string name="library_starred">Unavyofuatilia</string>
     <string name="library_all_types">Mada zote</string>
@@ -33,4 +33,8 @@
     <string name="feed_no_more_083">Umeziona zote. Leta habari mpya ukitaka kuangalia tena.</string>
     <string name="feedback_less_083">Punguza habari kama hizi</string>
     <string name="feedback_undo_083">Ondoa maoni yangu</string>
+    <string name="star_add_label">Weka nyota na ufuatilie habari hii</string>
+    <string name="star_remove_label">Ondoa nyota kwenye habari hii</string>
+    <string name="library_following_empty">Fuatilia habari</string>
+    <string name="library_following_empty_body">Gusa nyota karibu na alamisho ili kufuatilia habari. Dhibiti ukaguzi wa masasisho yake hapa.</string>
 </resources>

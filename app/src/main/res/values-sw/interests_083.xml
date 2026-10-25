@@ -21,7 +21,7 @@
     <string name="interests_search">Tafuta mambo unayopenda</string>
     <string name="interests_selected">Umechagua %1$d · unaweza kubadili baadaye</string>
     <string name="interests_empty">Hakuna mada inayolingana. Jaribu neno lingine.</string>
-    <string name="interests_hint">Chagua unachotaka kuona hapa. Huhifadhiwi mpaka ubonyeze kuhifadhi.</string>
+    <string name="interests_hint">Chagua unachotaka kuona hapa. Chaguo zako hazitahifadhiwa mpaka ubonyeze Hifadhi.</string>
     <string name="interests_more">Onyesha mada zaidi</string>
     <string name="interests_less">Onyesha mada chache</string>
     <string name="interests_choose">Chagua unachopenda</string>
@@ -36,13 +36,13 @@
     <string name="modules_optional_ai">Mada za AI zinahitaji uunganishe mtoa huduma. Zana za kawaida hufanya kazi bila AI.</string>
     <string name="preferences_title_083">Kukuhusu</string>
     <string name="preferences_body_083">Andika kinachosaidia MeBot kukuchagulia taarifa nzuri. Hakuna cha lazima.</string>
-    <string name="preferences_details_083">MeBot ikujue kwa nini?</string>
+    <string name="preferences_details_083">MeBot ijue nini kukuhusu?</string>
     <string name="preferences_import_083">Ingiza mapendeleo kutoka faili</string>
     <string name="preferences_help_083">Anza na jambo moja. Chagua mada zinazoweza kulitumia. Usiweke nywila au namba za akaunti binafsi.</string>
     <string name="preferences_interest_083">Ninachopenda</string>
     <string name="preferences_work_083">Kazi na kujifunza</string>
     <string name="preferences_goal_083">Ninachotaka kufikia</string>
-    <string name="preferences_style_083">Navyopenda taarifa</string>
+    <string name="preferences_style_083">Ninavyopenda maelezo</string>
     <string name="preferences_interest_hint_083">Mfano: mapishi, mpira au kujifunza gitaa</string>
     <string name="preferences_work_hint_083">Mfano: nina duka na nataka mbinu rahisi za kupanga bidhaa</string>
     <string name="preferences_goal_hint_083">Mfano: nataka kujifunza kutumia kompyuta</string>

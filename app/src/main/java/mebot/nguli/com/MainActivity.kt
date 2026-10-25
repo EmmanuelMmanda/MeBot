@@ -207,9 +207,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
         }
     }
     val onboarded = feed?.onboardingComplete == true
-    LaunchedEffect(onboarded, feed?.quickGuideSeen) {
-        if (onboarded && feed?.quickGuideSeen == false && feed.interestsConfigured) showQuickGuide = true
-    }
+    // The completed tour leads straight to the feed. The quick guide stays available in Help.
     LaunchedEffect(page, onboarded, owner) {
         if (page == "feed" && onboarded) owner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             feedVm.refreshIfStale()

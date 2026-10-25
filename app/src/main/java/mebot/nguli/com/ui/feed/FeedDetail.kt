@@ -66,6 +66,8 @@ fun FeedDetail(
     var section by rememberSaveable(id) { mutableStateOf("overview") }
     var menu by rememberSaveable(id) { mutableStateOf(false) }
     var storyNotesOpen by rememberSaveable(id) { mutableStateOf(false) }
+    var fullscreenImage by rememberSaveable(id) { mutableStateOf(false) }
+    if (fullscreenImage) item?.media?.let { media -> FullscreenMediaPreview(media.url, item.title, onClose = { fullscreenImage = false }, image = true) }
     val previewKey = "detail-$id"
     val activePreview by MediaPreviewSession.state.collectAsState()
     val showPlayer = activePreview == previewKey
@@ -122,6 +124,10 @@ fun FeedDetail(
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Box(Modifier.fillMaxWidth().height(184.dp).clip(RoundedCornerShape(24.dp))) {
                         PublisherImage(item, Modifier.fillMaxSize(), large = true)
+                        IconButton(onClick = { fullscreenImage = true }, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).size(48.dp).testTag("detail-image-fullscreen"),
+                            colors = IconButtonDefaults.filledIconButtonColors()) {
+                            Icon(Icons.Outlined.Fullscreen, stringResource(R.string.media_fullscreen))
+                        }
                         if (item.contentType == "video" && originalAvailable) FilledIconButton(
                             onClick = { openResource(item.sourceUrl) }, modifier = Modifier.align(Alignment.Center).size(56.dp).testTag("detail-play"),
                             shape = CircleShape,
@@ -139,6 +145,7 @@ fun FeedDetail(
                     Text(stringResource(resourceAction(item.contentType)), modifier = Modifier.weight(1f, fill = false))
                     Spacer(Modifier.width(8.dp)); Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(18.dp))
                 } else Spacer(Modifier.weight(1f))
+                RelevanceControls(item)
                 val saved = item.id in state.savedIds
                 FilledTonalIconButton(onClick = { onSave(item.id) }, modifier = Modifier.size(48.dp).testTag("detail-save")) {
                     Icon(if (saved) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
@@ -172,8 +179,6 @@ fun FeedDetail(
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     RichResponse(DetailPresentation.introduction(item.summary))
                 }
-                RelevanceControls(item)
-                StarManagement(item)
                 DetailBrief(ui, item, onRetryBrief, onCancelBrief, onFollowUp, onConnect ?: onAsk)
                 item.weather?.let { weather ->
                     WeatherStrip(item) { openSource(context, item.sourceUrl) }

@@ -102,7 +102,9 @@ fun SavedFeed(state: FeedState, onItem: (String) -> Unit, onSave: (String) -> Un
             }
         }
         if (available.isEmpty()) item(key = "empty") {
-            FeedEmpty(R.string.feed_saved_empty, R.string.feed_saved_empty_body, R.string.feed_back_feed, Icons.Outlined.BookmarkBorder, onFeed)
+            FeedEmpty(if (tab == "starred") R.string.library_following_empty else R.string.feed_saved_empty,
+                if (tab == "starred") R.string.library_following_empty_body else R.string.feed_saved_empty_body,
+                R.string.feed_back_feed, if (tab == "starred") Icons.Outlined.StarOutline else Icons.Outlined.BookmarkBorder, onFeed)
         } else if (filtered.isEmpty()) item(key = "no-match") {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.library_empty_filter))

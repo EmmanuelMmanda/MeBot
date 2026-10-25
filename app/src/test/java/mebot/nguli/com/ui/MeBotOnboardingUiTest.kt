@@ -43,6 +43,25 @@ class MeBotOnboardingUiTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val restoration = StateRestorationTester(compose)
 
+    @Test fun pendingPreferenceSaveConsumesBackAndAllowsRecoveryWithoutChangingStep() {
+        var opened = 0
+        var complete: ((Boolean) -> Unit)? = null
+        compose.setContent { MeBotTheme { FeedOnboarding(FeedState(), "en", {}, { opened++ }, {},
+            onPreferences = { _, _, _, done -> complete = done }) } }
+        compose.onNodeWithTag("onboarding-next").performClick()
+        compose.onNodeWithTag("onboarding-step-1").assertExists()
+        compose.onNodeWithTag("onboarding-start").performClick()
+        compose.onNodeWithTag("onboarding-back").assertIsNotEnabled()
+        compose.onNodeWithTag("onboarding-language").assertIsNotEnabled()
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithTag("onboarding-step-1").assertExists()
+        assertEquals(0, opened)
+        compose.runOnIdle { complete!!.invoke(false) }
+        compose.onNodeWithTag("onboarding-start").assertIsEnabled().performClick()
+        compose.runOnIdle { complete!!.invoke(true) }
+        assertEquals(1, opened)
+    }
+
     @Test fun sixStepsKeepNavigationExplicitAndOfferBothConnectionAndDirectEntry() {
         var opened = 0
         var connected = 0

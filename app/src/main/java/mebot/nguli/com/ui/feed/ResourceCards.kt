@@ -6,6 +6,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceError
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebChromeClient
+import android.view.View
 import android.widget.MediaController
 import android.widget.VideoView
 import androidx.compose.foundation.BorderStroke
@@ -54,6 +56,8 @@ internal fun RichSourcePreview(source: FeedCitation, modifier: Modifier = Modifi
     val key = remember(source.url) { UUID.randomUUID().toString() }
     val selected by MediaPreviewSession.state.collectAsState()
     val preview = selected == key
+    var fullscreen by rememberSaveable(source.url) { mutableStateOf(false) }
+    if (fullscreen) FullscreenMediaPreview(source.url, source.title, onClose = { fullscreen = false })
     var pdfPreview by rememberSaveable(source.url) { mutableStateOf(false) }
     if (pdfPreview) PdfResourcePreview(source.url, source.title, onClose = { pdfPreview = false })
     DisposableEffect(key) { onDispose { MediaPreviewSession.clear(key) } }
@@ -75,12 +79,12 @@ internal fun RichSourcePreview(source: FeedCitation, modifier: Modifier = Modifi
                         else hostname, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            if (preview && type == "image") {
+            if (preview && !fullscreen && type == "image") {
                 val item = remember(source) { FeedItem(FeedLogic.itemId(source.url), "preview", source.title, "",
                     sourceUrl = source.url, media = FeedMedia(source.url, source.url)) }
                 PublisherImage(item, Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(12.dp)))
             }
-            if (preview && type in setOf("youtube", "video", "audio")) OfficialMediaPlayer(source.url)
+            if (preview && !fullscreen && type in setOf("youtube", "video", "audio")) OfficialMediaPlayer(source.url)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 if (type in setOf("image", "youtube", "video", "audio")) TextButton(onClick = {
@@ -101,6 +105,10 @@ internal fun RichSourcePreview(source: FeedCitation, modifier: Modifier = Modifi
                     Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(16.dp))
                 }
             }
+            if (type == "image") TextButton(onClick = { fullscreen = true; MediaPreviewSession.clear(key) },
+                modifier = Modifier.testTag("media-open-fullscreen")) {
+                Icon(Icons.Outlined.Fullscreen, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.media_fullscreen))
+            }
             if (RichContent.isPdf(source.url)) ResourceDownloadButton(source.url)
             if (type == "document" && verifiedFile) Text(stringResource(R.string.resource_file_limit),
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -109,15 +117,35 @@ internal fun RichSourcePreview(source: FeedCitation, modifier: Modifier = Modifi
     }
 }
 
+internal class MediaPlaybackPosition(var millis: Int = 0)
+
 /** Player resources are allocated only after an explicit tap, never on an AI token. */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-internal fun OfficialMediaPlayer(url: String) {
+internal fun OfficialMediaPlayer(url: String, expanded: Boolean = false, playback: MediaPlaybackPosition? = null) {
     if (!FeedLogic.safeUrl(url, true)) return
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
+    val position = playback ?: remember(url) { MediaPlaybackPosition() }
     val youtube = remember(url) { RichContent.youtubeId(url) }
     var failed by remember(url) { mutableStateOf(false) }
+    var fullscreen by rememberSaveable(url) { mutableStateOf(false) }
+    var customView by remember(url) { mutableStateOf<View?>(null) }
+    var customCallback by remember(url) { mutableStateOf<WebChromeClient.CustomViewCallback?>(null) }
+    fun hideCustom() { customView = null; val callback = customCallback; customCallback = null; callback?.onCustomViewHidden() }
+    customView?.let { providerView ->
+        FullscreenMediaShell(stringResource(R.string.media_fullscreen), { hideCustom() }) {
+            AndroidView(factory = { providerView }, modifier = Modifier.fillMaxSize())
+        }
+    }
+    if (fullscreen) {
+        FullscreenMediaPreview(url, stringResource(R.string.media_fullscreen), onClose = { fullscreen = false }, playback = position)
+        return
+    }
+    if (!expanded && youtube == null) TextButton(onClick = { fullscreen = true }, modifier = Modifier.testTag("media-open-fullscreen")) {
+        Icon(Icons.Outlined.Fullscreen, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.media_fullscreen))
+    }
+    val playerModifier = if (expanded) Modifier.fillMaxSize() else Modifier.fillMaxWidth().height(if (RichContent.type(url) == "audio") 110.dp else 220.dp).clip(RoundedCornerShape(12.dp))
     if (failed) {
         Text(stringResource(R.string.resource_preview_failed), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("resource-preview-error"))
@@ -146,6 +174,13 @@ internal fun OfficialMediaPlayer(url: String) {
                         if (request.isForMainFrame) failed = true
                     }
                 }
+                webChromeClient = object : WebChromeClient() {
+                    override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+                        if (customView != null) { callback.onCustomViewHidden(); return }
+                        customView = view; customCallback = callback
+                    }
+                    override fun onHideCustomView() { hideCustom() }
+                }
                 // Official embed, visible controls, identity/referrer; no audio extraction or JS bridge.
                 loadDataWithBaseURL("https://emmanuelmmanda.github.io/MeBot/",
                     """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="strict-origin-when-cross-origin"></head><body style="margin:0;background:#111"><iframe title="YouTube video" style="position:fixed;border:0;width:100%;height:100%" src="https://www.youtube.com/embed/$youtube?playsinline=1&amp;enablejsapi=1&amp;origin=https%3A%2F%2Femmanuelmmanda.github.io" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></body></html>""",
@@ -160,9 +195,11 @@ internal fun OfficialMediaPlayer(url: String) {
                 } else if (event == Lifecycle.Event.ON_START) view.onResume()
             }
             owner.lifecycle.addObserver(observer)
-            onDispose { owner.lifecycle.removeObserver(observer); view.stopLoading(); view.loadUrl("about:blank"); view.destroy() }
+            onDispose { hideCustom(); owner.lifecycle.removeObserver(observer); view.stopLoading(); view.loadUrl("about:blank"); view.destroy() }
         }
-        AndroidView(factory = { view }, modifier = Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(12.dp)))
+        AndroidView(factory = { view }, modifier = playerModifier)
+        if (!expanded) Text(stringResource(R.string.media_youtube_controls), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     } else {
         val type = remember(url) { RichContent.type(url) }
         if (type !in setOf("audio", "video")) return
@@ -171,15 +208,14 @@ internal fun OfficialMediaPlayer(url: String) {
                 setMediaController(MediaController(context).also { it.setAnchorView(this) })
                 setOnErrorListener { _, _, _ -> failed = true; true }
                 setVideoURI(Uri.parse(url))
-                setOnPreparedListener { seekTo(1) }
+                setOnPreparedListener { seekTo(position.millis.coerceAtLeast(1)) }
             }
         }
         DisposableEffect(view, owner) {
             val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) view.pause() }
             owner.lifecycle.addObserver(observer)
-            onDispose { owner.lifecycle.removeObserver(observer); view.stopPlayback() }
+            onDispose { position.millis = view.currentPosition.coerceAtLeast(0); owner.lifecycle.removeObserver(observer); view.stopPlayback() }
         }
-        AndroidView(factory = { view }, modifier = Modifier.fillMaxWidth().height(if (type == "audio") 110.dp else 220.dp)
-            .clip(RoundedCornerShape(12.dp)))
+        AndroidView(factory = { view }, modifier = playerModifier)
     }
 }

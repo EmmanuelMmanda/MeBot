@@ -68,6 +68,6 @@ class Release083LibraryCaptureTest {
       val w=compose.activity.window;w.decorView.invalidate()
       Bitmap.createBitmap(w.decorView.width,w.decorView.height,Bitmap.Config.ARGB_8888).also{var result:Int?=null;PixelCopy.request(w,it,{r->result=r},Handler(Looper.getMainLooper()));assertEquals(PixelCopy.SUCCESS,result)}
    }
-   val file=File("build/outputs/screenshots/v083/$name.png");file.parentFile!!.mkdirs();file.outputStream().use{assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG,100,it))}
+   val file=File("build/outputs/screenshots/v084/$name.png");file.parentFile!!.mkdirs();file.outputStream().use{assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG,100,it))}
  }
 }

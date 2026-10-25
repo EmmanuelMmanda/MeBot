@@ -61,7 +61,7 @@ internal fun MeBotOnboarding(state: FeedState, language: String, onLanguage: (St
     }
     val usesSwahili = language == "sw" || (language == "system" && LocalConfiguration.current.locales[0].language == "sw")
     val contentScroll = rememberScrollState()
-    BackHandler(step > 0) { step-- }
+    BackHandler(step > 0 || saving) { if (!saving) step-- }
     LaunchedEffect(step) { contentScroll.scrollTo(0) }
     Box(Modifier.fillMaxSize().testTag("onboarding-screen"), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.widthIn(max = 620.dp).fillMaxSize().safeDrawingPadding()) {
@@ -71,7 +71,7 @@ internal fun MeBotOnboarding(state: FeedState, language: String, onLanguage: (St
                     MeBotMark(Modifier.size(30.dp))
                     Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge)
                 }
-                TextButton(onClick = { onLanguage(if (usesSwahili) "en" else "sw") }, modifier = Modifier.testTag("onboarding-language")) {
+                TextButton(onClick = { onLanguage(if (usesSwahili) "en" else "sw") }, enabled = !saving, modifier = Modifier.testTag("onboarding-language")) {
                     Icon(Icons.Outlined.Language, null, Modifier.size(18.dp)); Spacer(Modifier.width(7.dp))
                     Text(stringResource(if (usesSwahili) R.string.english else R.string.swahili))
                 }
@@ -125,7 +125,7 @@ internal fun MeBotOnboarding(state: FeedState, language: String, onLanguage: (St
                         Button(onClick = { if (step == tourSteps.lastIndex) finish(onConnect) else step++ }, enabled = !saving,
                             modifier = Modifier.weight(1f).heightIn(min = 54.dp).testTag(if (step == tourSteps.lastIndex) "onboarding-finish" else "onboarding-next"),
                             shape = RoundedCornerShape(18.dp)) {
-                            Text(stringResource(if (step == tourSteps.lastIndex) R.string.tour_connect else R.string.tour_next))
+                            Text(stringResource(if (saving) R.string.delivery_saving else if (step == tourSteps.lastIndex) R.string.tour_connect else R.string.tour_next))
                             Spacer(Modifier.width(9.dp)); Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.size(18.dp))
                         }
                     }

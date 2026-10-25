@@ -219,7 +219,7 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                                     visible.subList(1, 3).forEach { item -> key(item.id) { StoryRow(item, item.id in state.savedIds, onItem, onSave, onHide) } }
                                 } else if (visible.size >= 3) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     visible.subList(1, 3).forEach { item ->
-                                        key(item.id) { CompactStory(item, Modifier.weight(1f), onItem) { openSource(context, item.sourceUrl) } }
+                                        key(item.id) { CompactStory(item, Modifier.weight(1f), item.id in state.savedIds, onSave, onItem) { openSource(context, item.sourceUrl) } }
                                     }
                                 } else key(visible[1].id) { StoryRow(visible[1], visible[1].id in state.savedIds, onItem, onSave, onHide) }
                             }
@@ -329,7 +329,6 @@ private fun LeadStory(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
                 }
             }
             Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 7.dp, bottom = 8.dp)) {
-            RelevanceControls(item, modifier = Modifier.padding(horizontal = 6.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 if (item.sourceUrl.isNotBlank()) TextButton(onClick = { openSource(context, item.sourceUrl) }, modifier = Modifier.weight(1f).testTag("source-" + item.id)) {
                     Text(stringResource(resourceAction(item.contentType)), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)); Spacer(Modifier.width(5.dp))
@@ -355,7 +354,7 @@ private fun LeadStory(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
 }
 
 @Composable
-private fun CompactStory(item: FeedItem, modifier: Modifier, onItem: (String) -> Unit, onOpen: () -> Unit) {
+private fun CompactStory(item: FeedItem, modifier: Modifier, saved: Boolean, onSave: (String) -> Unit, onItem: (String) -> Unit, onOpen: () -> Unit) {
     Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface, modifier = modifier) {
         Column {
             Surface(onClick = { onItem(item.id) }, color = Color.Transparent, modifier = Modifier.testTag("item-" + item.id)) {
@@ -375,7 +374,7 @@ private fun CompactStory(item: FeedItem, modifier: Modifier, onItem: (String) ->
                     }
                 }
             }
-            RelevanceControls(item, compact = true, modifier = Modifier.padding(horizontal = 10.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { StoryActions(item, saved, onSave, null) }
             if (item.sourceUrl.isNotBlank()) TextButton(onClick = onOpen, modifier = Modifier.padding(start = 6.dp, end = 6.dp, bottom = 5.dp).testTag("source-" + item.id)) {
                 Text(stringResource(resourceAction(item.contentType)), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
                 Spacer(Modifier.width(4.dp)); Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(14.dp))
@@ -402,7 +401,6 @@ internal fun StoryRow(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
                     Box(Modifier.size(82.dp).clip(RoundedCornerShape(16.dp))) { PublisherImage(item, Modifier.fillMaxSize()) }
                 }
             }
-            RelevanceControls(item, compact = true, modifier = Modifier.padding(horizontal = 16.dp))
             Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 8.dp, top = 2.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (item.sourceUrl.isNotBlank()) TextButton(onClick = { openSource(context, item.sourceUrl) }, modifier = Modifier.testTag("source-" + item.id)) {
                     Text(stringResource(resourceAction(item.contentType)), style = MaterialTheme.typography.labelMedium)
@@ -423,7 +421,8 @@ private fun StoryActions(item: FeedItem, saved: Boolean, onSave: (String) -> Uni
     val context = LocalContext.current
     val star = ctx.state?.starredStories?.any { it.itemId == item.id } == true
     val vote = ctx.state?.let { RelevanceFeedback.current(it, item) }
-    IconButton(onClick = { onSave(item.id) }, modifier = Modifier.testTag("save-" + item.id)) {
+    RelevanceControls(item)
+    IconButton(onClick = { onSave(item.id) }, modifier = Modifier.size(48.dp).testTag("save-" + item.id)) {
         Icon(if (saved) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder, stringResource(if (saved) R.string.feed_unsave else R.string.feed_save),
             Modifier.size(21.dp), tint = if (saved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
     }

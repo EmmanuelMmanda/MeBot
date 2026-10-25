@@ -9,6 +9,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
 import mebot.nguli.com.R
 import mebot.nguli.com.core.*
@@ -23,21 +25,17 @@ data class RelevanceUiContext(
 val LocalRelevanceContext = staticCompositionLocalOf { RelevanceUiContext() }
 
 /** Following is explicit and independent from a bookmark or negative relevance feedback. */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun RelevanceControls(item: FeedItem, compact: Boolean = false, modifier: Modifier = Modifier) {
+internal fun RelevanceControls(item: FeedItem, modifier: Modifier = Modifier) {
     val ctx = LocalRelevanceContext.current
     val state = ctx.state ?: return
     val onStar = ctx.onStar ?: return
-    val star = state.starredStories.find { it.itemId == item.id }
-    FlowRow(modifier.fillMaxWidth().testTag("relevance-${item.id}"), horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-        FilterChip(selected = star != null, onClick = { onStar(item.id) },
-            label = { Text(stringResource(if (star == null) R.string.star_follow else R.string.star_following), style = MaterialTheme.typography.labelSmall) },
-            leadingIcon = { Icon(if (star == null) Icons.Outlined.StarOutline else Icons.Outlined.Star, null, Modifier.size(17.dp)) },
-            modifier = Modifier.heightIn(min = 44.dp).testTag("star-${item.id}"))
-        if (!compact) Text(stringResource(if (star == null) R.string.star_hint else R.string.star_active_hint),
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val starred = state.starredStories.any { it.itemId == item.id }
+    IconButton(onClick = { onStar(item.id) }, modifier = modifier.size(48.dp).testTag("star-${item.id}")
+        .semantics { selected = starred }) {
+        Icon(if (starred) Icons.Outlined.Star else Icons.Outlined.StarOutline,
+            stringResource(if (starred) R.string.star_remove_label else R.string.star_add_label), Modifier.size(22.dp),
+            tint = if (starred) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

@@ -31,7 +31,7 @@
     <string name="interests_example">For example: piano, small business, mystery films</string>
     <string name="interests_first_feed">Your selected topics shape your first feed. You can change them anytime.</string>
     <string name="modules_filters_title">Find your next interest</string>
-    <string name="modules_results_count">%1$d topics shown</string>
+    <string name="modules_results_count">Topics shown: %1$d</string>
     <string name="modules_categories_label">Browse by area</string>
     <string name="modules_optional_ai">Topics with AI need a connected provider. Your local tools work without it.</string>
     <string name="preferences_title_083">About you</string>
