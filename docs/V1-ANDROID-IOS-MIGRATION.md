@@ -13,14 +13,16 @@ The existing `core/` is **Kotlin/JVM, not yet KMP**. Android `app/` owns Jetpack
 | Surface | v1 decision |
 | --- | --- |
 | User-facing name | **MeBot** / **MeBot Daily** (no MyNguli or Demo) |
-| Product website | **https://mebot.nguli.com/**, only after DNS/ownership and TLS are verified |
+| Website | **Not selected.** `mebot.nguli.com` is a package identifier, **not** a website address. Documentation hosting is an independent decision. |
 | GitHub | **EmmanuelMmanda/MeBot**; no replacement repository |
-| Stable Android application ID | **`app.mynguli`** (must remain for in-place upgrades) |
-| New iOS bundle ID | **`com.nguli.mebot`** (reserve before first App Store Connect upload) |
-| Shared source namespace | Gradually adopt `com.nguli.mebot` where safe; do **not** couple namespace rename to Android application ID |
+| Android v1 application ID | **`mebot.nguli.com`** — a new application, installed alongside legacy `app.mynguli` |
+| iOS v1 bundle identifier | **`mebot.nguli.com`** — validate availability and register before first App Store Connect upload |
+| Shared source namespace | **`mebot.nguli.com`** for new shared Kotlin code; migrate source packages separately from legacy runtime storage and component identifiers |
 | Version | Target `1.0.0`; do not tag before BOTH platform gates pass |
 
-The domain is a website, not an app's visible name, and is not the Android application ID. If a new Android application ID is forced, existing installations cannot receive an in-place update, and a documented export/import migration is required. Avoid that.
+`mebot.nguli.com` is the **literal application/package identifier** selected by the owner, not an HTTP hostname for MeBot. The conventional reverse-domain ordering `com.nguli.mebot` is *not* the approved identifier. Android and iOS accept the characters used here, although Apple recommends reverse-DNS ordering. Validate final iOS App ID registration before shipping.
+
+**Migration consequence:** `mebot.nguli.com` is not an update to `app.mynguli`. Existing Android users must retain their original installation while exporting selected personal data and importing it into v1. User-controlled backups cannot automatically transfer Android Keystore credentials, active accounts, OS alarm registrations, or all protected operational state. Reconnect accounts, review alarm plans and permissions, and test delivery. Never silently uninstall or delete the legacy app.
 
 ## Proposed structure
 
@@ -58,13 +60,13 @@ Android retains its tested AlarmManager, foreground sound and math/QR dismissal.
 
 ## Release gates (no silent substitutions)
 
-1. **Baseline lock:** Record v0.8.1 Git tag, signing fingerprint, app ID, current test results and data migration fixtures. Ensure Android build and alarm tests remain green.
+1. **Baseline lock:** Record v0.8.1 Git tag, signing fingerprint, app ID, current test results and data migration fixtures. Ensure Android build and alarm tests remain green, and preserve legacy backup compatibility.
 2. **Core portability:** Convert `core` to `kotlin("multiplatform")` with Android/JVM + iOS targets. Remove JVM-specific dependencies from `commonMain`, retaining platform-specific implementations. Test domain rules on both targets.
 3. **First iOS vertical slice:** A real Xcode project displays onboarding -> personalized offline feed -> sourced detail -> MeBot conversation, with persistence and accessible layout. Build/run in iOS Simulator using macOS and Xcode.
 4. **AI/media and local data:** Validate streaming and a working signed-in request, verified source links, images, video embed/playback, PDF/document open/save, cache/refresh, background jobs, locale and account switching on iOS.
 5. **Alarm and platform acceptance:** Deliver supported iOS AlarmKit features and honest fallback; physical iPhone testing, permissions, sound, lock-screen, process termination/restart, Apple review and device-specific accessibility.
-6. **Release candidate:** Matching default topics/recommendations on both devices for controlled fixtures, no profile/key leakage, app update migration on Android, no lost saved items, and documented iOS onboarding and feature differences. CI for Android and macOS/iOS.
-7. **Version 1.0:** Archive signed Android release and iOS/TestFlight build with checksums and screenshots; set documentation website and repository About URL only after public URL is live; create immutable `v1.0.0` tag only after checks pass.
+6. **Release candidate:** Matching default topics/recommendations on both devices for controlled fixtures, no profile/key leakage, **explicit Android legacy-to-v1 export/import migration**, no lost portable saved items, verified reauthorization of alarms/accounts, and documented iOS onboarding and feature differences. CI for Android and macOS/iOS.
+7. **Version 1.0:** Archive signed Android release and iOS/TestFlight build with checksums and screenshots; keep the documentation hostname separate from package identity; create immutable `v1.0.0` tag only after checks pass.
 
 ## Build and account prerequisites
 
@@ -72,8 +74,8 @@ iOS compile, simulator, provisioning, TestFlight and App Store operations requir
 
 ## v1 definition of done
 
-- Android v1 updates the installed `app.mynguli` signed package without data loss.
-- iOS v1 is independently installed as `com.nguli.mebot`, tested on a real iPhone.
+- Android v1 installs independently as `mebot.nguli.com`; tested export/import transfers allowed data from legacy `app.mynguli`, without uninstalling the existing app or promising automatic token/alarm transfer.
+- iOS v1 is independently installed as `mebot.nguli.com`, registered in Apple Developer and tested on a real iPhone.
 - Both have the same core feed, AI and personalization workflows with localized English/Kiswahili and accessible controls.
 - At least one real end-to-end AI interaction and public-source fallback succeed on each platform.
 - Media failure cannot block text; background jobs cannot block interactive requests.
