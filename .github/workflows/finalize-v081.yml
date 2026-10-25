@@ -1,0 +1,72 @@
+name: Finalize verified MeBot 0.8.1
+on:
+  push:
+    branches: [release/publish-v0.8.1]
+    paths: ['.github/workflows/finalize-v081.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: mebot-official-v081
+  cancel-in-progress: false
+jobs:
+  finalize:
+    if: github.ref == 'refs/heads/release/publish-v0.8.1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Recheck every uploaded asset before publishing
+        run: |
+          test "$(git rev-parse v0.8.1^{commit})" = c01898f924261902c91a351e5786b0d67287e654
+          mkdir -p "$RUNNER_TEMP/verified-release"
+          gh release download v0.8.1 --dir "$RUNNER_TEMP/verified-release"
+          gh api repos/EmmanuelMmanda/MeBot/releases/423120209 > "$RUNNER_TEMP/release.json"
+          python3 - <<'PY'
+          import hashlib,json,os,zipfile
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP']);d=root/'verified-release'
+          release=json.loads((root/'release.json').read_text());meta=json.loads((d/'release-metadata.json').read_text())
+          assert release['tag_name']=='v0.8.1' and not release['prerelease']
+          assert meta['sourceCommit']=='c01898f924261902c91a351e5786b0d67287e654'
+          assert meta['applicationSourceCommit']=='59ef0bf50c4e7d5a1d66d9221535f5d571eba94f'
+          assert meta['signerCertificateSha256']=='b1b69dcefe26c815dbaec76223b7b80be76af06ba30da774637a806a7f75e3e9'
+          assets={a['name']:a for a in release['assets']}
+          for entry in meta['assets']:
+              p=d/entry['name'];digest=hashlib.sha256(p.read_bytes()).hexdigest()
+              assert p.stat().st_size==entry['bytes'] and digest==entry['sha256'],p.name
+              assert assets[p.name]['state']=='uploaded' and assets[p.name]['digest']=='sha256:'+digest
+              if p.suffix=='.zip':
+                  with zipfile.ZipFile(p) as z:assert z.testzip() is None
+          assert hashlib.sha256((d/'mebot-0.8.1.apk').read_bytes()).hexdigest()=='eedcf93d4f7b0ae0bcb46669449e40feffd25e873b59c90e4122a104e4e45f9a'
+          for line in (d/'SHA256SUMS.txt').read_text().splitlines():
+              digest,name=line.split('  ',1)
+              assert '/' not in name and hashlib.sha256((d/name).read_bytes()).hexdigest()==digest
+          print('Every draft asset re-downloaded and verified; source commit, APK and original certificate evidence match.')
+          PY
+      - name: Publish the verified existing release
+        run: |
+          gh api --method PATCH repos/EmmanuelMmanda/MeBot/releases/423120209 -F draft=false -F prerelease=false -f make_latest=true -f target_commitish=c01898f924261902c91a351e5786b0d67287e654 > "$RUNNER_TEMP/publication.json"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,json,urllib.request,hashlib
+          r=json.loads(Path(os.environ['RUNNER_TEMP'],'publication.json').read_text())
+          assert r['tag_name']=='v0.8.1' and not r['draft'] and not r['prerelease']
+          a=next(a for a in r['assets'] if a['name']=='mebot-0.8.1.apk')
+          assert '/download/v0.8.1/' in a['browser_download_url']
+          req=urllib.request.Request(a['browser_download_url'],headers={'User-Agent':'MeBot-release-verification'})
+          with urllib.request.urlopen(req,timeout=90) as response:
+              digest=hashlib.sha256()
+              while chunk:=response.read(1024*1024):digest.update(chunk)
+          assert digest.hexdigest()=='eedcf93d4f7b0ae0bcb46669449e40feffd25e873b59c90e4122a104e4e45f9a'
+          print('Unauthenticated public APK download and checksum verified:',a['browser_download_url'])
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mebot-v081-publication-evidence
+          path: ${{ runner.temp }}/publication.json
+          retention-days: 14
