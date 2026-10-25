@@ -94,8 +94,9 @@ object FeedLogic {
                 item.copy(media = old.media)
             else item
         }
-        val saved = existing.values.filter { it.id in state.savedIds }
-        val recent = existing.values.filter { it.id !in state.savedIds }
+        val retainedIds = state.savedIds + state.starredStories.map { it.itemId }
+        val saved = existing.values.filter { it.id in retainedIds }
+        val recent = existing.values.filter { it.id !in retainedIds }
             .sortedByDescending { it.publishedAtMillis.takeIf { n -> n > 0 } ?: it.fetchedAtMillis }.take(250)
         return state.copy(items = (saved + recent).distinctBy { it.id }, lastRefreshMillis = now)
     }
@@ -113,6 +114,8 @@ object FeedLogic {
         require(s.schemaVersion == 1)
         require(s.prefetchBatches in 1..3)
         RelevanceFeedback.validate(s.relevanceSignals)
+        StarredStories.validate(s)
+        require(s.speechRate.isFinite() && s.speechRate in 0.6f..1.5f && s.speechVoice.length <= 200)
         require(s.dismissedNotices.size <= 8 && s.dismissedNotices.all { (k, v) -> k in setOf("connection", "preferences") && v in 0..32_503_680_000_000L })
         require(s.name.length <= 80 && s.region.length <= 100 && s.timezone.length <= 80)
         if (s.timezone.isNotBlank()) ZoneId.of(s.timezone)

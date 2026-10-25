@@ -35,5 +35,5 @@ internal fun ProcessingStatus(ui: FeedUiState, page: String, itemId: String?, mo
     val moduleId = ui.state?.items?.find { it.id == current?.scope }?.moduleId ?: current?.scope
     val module = ui.state?.modules?.find { it.id == moduleId }
     val label = module?.let { moduleName(it) }.orEmpty()
-    AiActivityPanel(current, modifier, scopeLabel = label, extraCount = (ui.activities.size + resources.size - if (preferred != null || resources.isNotEmpty()) 1 else 0).coerceAtLeast(0))
+    AiActivityPanel(current, modifier, scopeLabel = label, showDetails = ui.state?.readingPreferences?.showActivityDetails != false, extraCount = (ui.activities.size + resources.size - if (preferred != null || resources.isNotEmpty()) 1 else 0).coerceAtLeast(0))
 }

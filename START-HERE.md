@@ -1,3 +1,7 @@
+<!-- preview-083:start -->
+> **0.8.3 preview:** Starred follow-ups, searchable collections, rich conversation resources, broader interests and an offline price comparison tool. [Candidate guide](docs/RELEASE-0.8.3.md). 817 automated tests passed; physical-device verification and original-identity signing remain pending; the official downloadable release remains **0.8.2**.
+<!-- preview-083:end -->
+
 # Start here — MeBot 0.8.2
 
 [Download Android APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.2/mebot-0.8.2.apk) · [Release files](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.8.2) · [Full user guide](docs/USER-GUIDE.md)

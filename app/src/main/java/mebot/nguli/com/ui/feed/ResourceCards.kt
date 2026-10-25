@@ -54,6 +54,8 @@ internal fun RichSourcePreview(source: FeedCitation, modifier: Modifier = Modifi
     val key = remember(source.url) { UUID.randomUUID().toString() }
     val selected by MediaPreviewSession.state.collectAsState()
     val preview = selected == key
+    var pdfPreview by rememberSaveable(source.url) { mutableStateOf(false) }
+    if (pdfPreview) PdfResourcePreview(source.url, source.title, onClose = { pdfPreview = false })
     DisposableEffect(key) { onDispose { MediaPreviewSession.clear(key) } }
     val hostname = remember(source.url) { runCatching { URI(source.url).host.removePrefix("www.") }.getOrDefault("") }
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(18.dp),
@@ -88,6 +90,10 @@ internal fun RichSourcePreview(source: FeedCitation, modifier: Modifier = Modifi
                         null, Modifier.size(18.dp))
                     Spacer(Modifier.width(5.dp))
                     Text(stringResource(if (preview) R.string.resource_hide else R.string.resource_preview))
+                } else if (RichContent.isPdf(source.url)) TextButton(onClick = { pdfPreview = true },
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("pdf-open"), contentPadding = PaddingValues(horizontal = 8.dp)) {
+                    Icon(Icons.Outlined.PictureAsPdf, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp))
+                    Text(stringResource(R.string.rich_pdf_preview))
                 } else if (DownloadResource.from(source.url) != null) ResourceDownloadButton(source.url)
                 TextButton(onClick = { openSource(context, source.url) },
                     modifier = Modifier.heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
@@ -95,6 +101,7 @@ internal fun RichSourcePreview(source: FeedCitation, modifier: Modifier = Modifi
                     Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(16.dp))
                 }
             }
+            if (RichContent.isPdf(source.url)) ResourceDownloadButton(source.url)
             if (type == "document" && verifiedFile) Text(stringResource(R.string.resource_file_limit),
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (preview && type == "image") ResourceDownloadButton(source.url)

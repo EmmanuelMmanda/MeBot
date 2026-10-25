@@ -45,7 +45,8 @@ open class FeedEngine(
     private val credentialGeneration = AtomicLong(0)
 
     private fun samePersonalization(a: FeedState, b: FeedState): Boolean =
-        a.context == b.context && a.name == b.name && a.region == b.region && a.timezone == b.timezone && a.relevanceSignals == b.relevanceSignals
+        a.context == b.context && a.name == b.name && a.region == b.region && a.timezone == b.timezone && a.relevanceSignals == b.relevanceSignals &&
+            a.starredStories.map { it.copy(lastCheckedAtMillis = 0) } == b.starredStories.map { it.copy(lastCheckedAtMillis = 0) }
 
     open suspend fun connect(connection: AiConnection, secret: String) = credentialsLock.withLock {
         if (connection.mode == "chatgpt") throw FeedFailure("invalid_input")
@@ -313,9 +314,11 @@ open class FeedEngine(
                     } ?: break
                     val reserved = reserveRequest()
                     if (credentialGeneration.get() != generation) break
+                    val dueStars = StarredStories.due(reserved, module.id, now)
+                    val discoveryModule = StarredStories.query(reserved, module, now)
                     val items = AiActivityRegistry.run(module.id, module.kind, "discovery") {
                         AiActivityRegistry.report("preparing", contextEntries = FeedLogic.scopedContext(reserved, module).size)
-                        val found = provider.feed(reserved, module, requestSecret, languageCode)
+                        val found = provider.feed(reserved, discoveryModule, requestSecret, languageCode)
                         AiActivityRegistry.report("validating")
                         found.forEach { FeedLogic.validateItem(it); require(it.moduleId == module.id && it.kind == module.kind) }
                         AiActivityRegistry.report("ready", count = found.size)
@@ -325,7 +328,8 @@ open class FeedEngine(
                         if (credentialGeneration.get() != generation || !samePersonalization(latest, initial) || latest.modules != initial.modules || latest.connection != initial.connection) latest
                         else {
                             fetchedIds += items.map { it.id }
-                            FeedLogic.merge(latest, items, System.currentTimeMillis()).copy(lastAiRefreshMillis = System.currentTimeMillis(), aiPauseCode = "")
+                            StarredStories.checked(FeedLogic.merge(latest, items, System.currentTimeMillis()), dueStars, System.currentTimeMillis())
+                                .copy(lastAiRefreshMillis = System.currentTimeMillis(), aiPauseCode = "")
                         }
                     }
                     published(module.id,true)

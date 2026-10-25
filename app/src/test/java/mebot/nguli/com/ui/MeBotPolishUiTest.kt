@@ -59,7 +59,10 @@ class MeBotPolishUiTest {
         compose.runOnIdle { ui.value = ui.value.copy(asking = false, answer = null, activities = emptyList(), state = state) }
         compose.onAllNodesWithTag("ai-activity-panel").assertCountEquals(0)
         compose.onNodeWithTag("workspace-messages").performScrollToNode(hasTestTag("turn-source-a-resources"))
-        compose.onAllNodesWithTag("turn-source-a-filter-files").assertCountEquals(0) // A filename is not a verified file.
+        // File candidates are categorized by URL; verification happens only after an explicit action.
+        compose.onNodeWithTag("turn-source-a-filter-files").assertExists().performClick()
+        compose.onNodeWithTag("turn-source-a-0").assertExists()
+        compose.onNodeWithTag("turn-source-a-1").assertDoesNotExist()
         compose.onNodeWithTag("workspace-messages").performScrollToNode(hasTestTag("download-resource"))
         compose.onNodeWithTag("download-resource").assertIsEnabled()
         screenshot("mebot-0.8.1-ai-resources")
@@ -96,7 +99,9 @@ class MeBotPolishUiTest {
         compose.onNodeWithText(item.summary).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(item.nextStep).performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("detail-tab-sources").performScrollTo().performClick()
-        compose.onAllNodesWithTag("detail-citation-filter-files").assertCountEquals(0)
+        compose.onNodeWithTag("detail-citation-filter-files").assertExists().performClick()
+        compose.onNodeWithTag("detail-citation-0").assertExists()
+        compose.onNodeWithTag("detail-citation-1").assertDoesNotExist()
         compose.onAllNodesWithTag("download-resource").onLast().performScrollTo().assertIsEnabled()
         screenshot("mebot-0.8.1-detail-files")
     }

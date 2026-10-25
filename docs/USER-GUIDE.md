@@ -1,3 +1,7 @@
+<!-- preview-083:start -->
+> **0.8.3 preview:** Starred follow-ups, searchable collections, rich conversation resources, broader interests and an offline price comparison tool. [Candidate guide](RELEASE-0.8.3.md). 817 automated tests passed; physical-device verification and original-identity signing remain pending; the official downloadable release remains **0.8.2**.
+<!-- preview-083:end -->
+
 # MeBot user guide — 0.8.2
 
 [Start here](../START-HERE.md) · [Illustrated guide](guides/release-082.html) · [Release notes](RELEASE-0.8.2.md)

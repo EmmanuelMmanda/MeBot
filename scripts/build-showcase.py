@@ -188,3 +188,7 @@ The in-app guide is skippable and replayable from Help. Captures use dated publi
 '''
 (ROOT/'START-HERE.md').write_text(start)
 print(f'Rendered {v}: five product pages, {len(screens)} captures, README and Start Here.')
+
+# Keep candidate guidance separate from the current official download manifest.
+import runpy
+runpy.run_path(str(ROOT/'scripts/build-preview-083.py'), run_name='__main__')

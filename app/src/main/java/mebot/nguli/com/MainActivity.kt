@@ -238,7 +238,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
         page = when (page) {
             "checkpoint" -> checkpointReturn
             "alarm-edit" -> "alarms"
-            "alarms", "focus", "history", "daily", "module-edit" -> "modules"
+            "alarms", "focus", "history", "daily", "module-edit", "compare_prices" -> "modules"
             "item" -> detailReturn
             "ask" -> if (itemId != null) "item" else "feed"
             "connect" -> if (onboarded) connectionReturn else "feed"
@@ -285,7 +285,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
         if ((page == "history" && "history" !in enabled) ||
             (page.startsWith("alarm") && "alarms" !in enabled) || (page == "focus" && "focus" !in enabled)) page = "modules"
     }
-    CompositionLocalProvider(LocalRelevanceContext provides RelevanceUiContext(feedUi.state, feedVm::rateRelevance)) {
+    CompositionLocalProvider(LocalRelevanceContext provides RelevanceUiContext(feedUi.state, feedVm::rateRelevance, feedVm::toggleStar, feedVm::configureStar, feedVm::setSavedCollection)) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -328,7 +328,8 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                                     feedVm.openConversation(id, prompt); page = "ai"
                                 }, onSearch = { page = "search" }, returnToTopRequest = feedTopRequest, onRefreshModule = feedVm::refreshModule,
                                 onExploreModules = { openModuleCatalog(ModuleDiscovery.DISABLED) },
-                                onContext = { contextReturn = "feed"; page = "context" }, onDismissNotice = feedVm::dismissSetupNotice)
+                                onContext = { contextReturn = "feed"; page = "context" }, onDismissNotice = feedVm::dismissSetupNotice,
+                                onLoadMore = feedVm::loadMore)
                         }
                         "modules" -> ModulesScreen(feed, state,
                             onEdit = ::openModule, onToggle = feedVm::setModuleEnabled,
@@ -377,13 +378,14 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                         "ai" -> AiWorkspace(feedUi, feedVm::newConversation, feedVm::selectConversation, feedVm::deleteConversation,
                             feedVm::sendConversation, feedVm::clearAnswer, ::openConnection,
                             { contextReturn = "ai"; feedVm.clearMessage(); screenStates.removeState("context"); page = "context" },
-                            feedVm::importTextAttachment, feedVm::removeAttachment, onSelectModel = feedVm::switchModel, onDismissNotice = feedVm::dismissSetupNotice)
+                            feedVm::importTextAttachment, feedVm::removeAttachment, onSelectModel = feedVm::switchModel, onDismissNotice = feedVm::dismissSetupNotice, onSpeechPreferences = feedVm::updateSpeechPreferences)
                         "search" -> SearchScreen(feedUi, feedVm::search, ::openItem, feedVm::toggleSaved, ::openConnection, feedVm::cancelSearch)
                         "ask" -> AskScreen(feedUi, itemId, { question -> feedVm.ask(itemId, question) }, ::openConnection)
                         "daily" -> {
                             val initial = remember(page) { DailyLogic.draftForDate(state, visitDate) }
                             DailyScreen(initial, vm::saveDraft) { vm.finishVisit(it) { page = "modules" } }
                         }
+                        "compare_prices" -> UnitPriceScreen()
                         "history" -> HistoryScreen(state)
                         "focus" -> FocusScreen(state, vm, suggestedTitle, suggestedMinutes)
                         "alarms" -> AlarmsScreen(state, vm, ::openAlarm, { checkpointReturn = "alarms"; page = "checkpoint" })

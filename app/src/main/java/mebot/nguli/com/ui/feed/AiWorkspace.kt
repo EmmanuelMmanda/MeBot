@@ -58,6 +58,7 @@ fun AiWorkspace(
     onRemoveAttachment: (String) -> Unit,
     onSelectModel: (String) -> Unit = {},
     onDismissNotice: ((String) -> Unit)? = null,
+    onSpeechPreferences: (Float, String) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
@@ -81,13 +82,17 @@ fun AiWorkspace(
     fun setDraft(value: String) { drafts = HashMap(drafts).apply { if (value.isEmpty()) remove(draftKey) else put(draftKey, value.take(2000)) } }
     var submittedKey by rememberSaveable { mutableStateOf<String?>(null) }
     var submittedText by rememberSaveable { mutableStateOf<String?>(null) }
+    var previousTurnId by rememberSaveable { mutableStateOf<String?>(null) }
+    var sentAttachmentIds by rememberSaveable(draftKey) { mutableStateOf(arrayListOf<String>()) }
+    var showConversationFiles by rememberSaveable { mutableStateOf(false) }
+    var showVoiceSettings by rememberSaveable { mutableStateOf(false) }
     var showHistory by rememberSaveable { mutableStateOf(false) }
     var showScopes by rememberSaveable { mutableStateOf(false) }
     var showModels by rememberSaveable { mutableStateOf(false) }
     var apiModel by rememberSaveable { mutableStateOf("") }
     var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
     var reviewAttachmentId by rememberSaveable { mutableStateOf<String?>(null) }
-    val speech = rememberWorkspaceSpeech()
+    val speech = rememberWorkspaceSpeech(state?.speechRate ?: 1f, state?.speechVoice.orEmpty())
     val voiceAvailable = remember(context) {
         runCatching { context.packageManager.resolveActivity(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH), 0) != null }.getOrDefault(false)
     }
@@ -113,19 +118,30 @@ fun AiWorkspace(
         }
         previousThread = conversation?.id
     }
-    LaunchedEffect(turns.lastOrNull()?.id, ui.asking) {
-        if (!ui.asking && turns.lastOrNull()?.role == "assistant" && submittedText != null) {
-            val lastQuestion = turns.dropLast(1).lastOrNull { it.role == "user" }?.text
-            if (lastQuestion == submittedText) {
-                drafts = HashMap(drafts).apply { submittedKey?.let { key -> if (get(key) == submittedText) remove(key) } }
-                submittedText = null; submittedKey = null
+    LaunchedEffect(turns.lastOrNull()?.id, ui.asking, ui.activeConversationId) {
+        val submitted = submittedText
+        val accepted = turns.lastOrNull { it.role == "user" }
+        if (submitted != null && accepted != null && accepted.id != previousTurnId && accepted.text == submitted &&
+            (submittedKey == draftKey || submittedKey == "new")) {
+            drafts = HashMap(drafts).apply {
+                submittedKey?.let { key -> if (get(key)?.trim() == submitted) remove(key) }
+                if (get(draftKey)?.trim() == submitted) remove(draftKey)
             }
+            sentAttachmentIds = ArrayList((sentAttachmentIds + conversation?.attachments.orEmpty().map { it.id }).distinct())
+            submittedText = null; submittedKey = null
         }
     }
     fun send(value: String) {
         if (!ui.connected || ui.asking || ui.importWorking || value.isBlank()) return
+        previousTurnId = turns.lastOrNull { it.role == "user" }?.id
         submittedKey = draftKey; submittedText = value.trim()
         onAsk(value.trim())
+        // Retrying an unanswered durable question reuses its turn id. Only clear that exact
+        // text, never another unsent draft; new attachments still await their persisted timestamp.
+        if (turns.lastOrNull()?.let { it.role == "user" && it.text == value.trim() } == true) {
+            drafts = HashMap(drafts).apply { if (get(draftKey)?.trim() == value.trim()) remove(draftKey) }
+            submittedText = null; submittedKey = null
+        }
     }
     val module = state?.modules?.find { it.id == conversation?.moduleId }
     val story = state?.items?.find { it.id == conversation?.itemId }
@@ -196,10 +212,22 @@ fun AiWorkspace(
 
                     }
                 }
-                if (ui.error != null) item(key = "error") { FeedStatus(ui.error, onConnect = onConnect) }
+                if (ui.error != null) item(key = "error") {
+                    FeedStatus(ui.error, onConnect = onConnect)
+                    turns.lastOrNull()?.takeIf { it.role == "user" }?.let { unanswered ->
+                        TextButton(onClick = { send(unanswered.text) }, enabled = ui.connected && !ui.asking && !ui.importWorking,
+                            modifier = Modifier.testTag("workspace-retry")) { Text(stringResource(R.string.rich_retry_question)) }
+                    }
+                }
             }
-            if (conversation?.attachments?.isNotEmpty() == true) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                conversation.attachments.forEach { attachment -> InputChip(selected = false, onClick = { reviewAttachmentId = attachment.id },
+            val composerFiles = conversation?.attachments.orEmpty().filterNot { it.usedAtMillis > 0 || it.id in sentAttachmentIds }
+            if (conversation?.attachments.orEmpty().any { it.usedAtMillis > 0 || it.id in sentAttachmentIds }) TextButton(onClick = { showConversationFiles = true },
+                modifier = Modifier.testTag("workspace-conversation-files")) {
+                Icon(Icons.Outlined.FolderOpen, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.rich_conversation_files, conversation?.attachments.orEmpty().size))
+            }
+            if (composerFiles.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                composerFiles.forEach { attachment -> InputChip(selected = false, onClick = { reviewAttachmentId = attachment.id },
                     label = { Text(attachment.name, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 180.dp)) },
                     leadingIcon = { Icon(Icons.Outlined.Description, null, Modifier.size(16.dp)) },
                     trailingIcon = { IconButton(onClick = { onRemoveAttachment(attachment.id) }, enabled = !ui.asking && !ui.importWorking,
@@ -232,6 +260,9 @@ fun AiWorkspace(
                         }, enabled = !ui.asking && !ui.importWorking, modifier = Modifier.testTag("workspace-voice")) {
                             Icon(Icons.Outlined.MicNone, stringResource(R.string.workspace_voice_input))
                         }
+                        IconButton(onClick = { showVoiceSettings = true }, modifier = Modifier.testTag("workspace-voice-options")) {
+                            Icon(Icons.Outlined.RecordVoiceOver, stringResource(R.string.rich_voice_settings))
+                        }
                         if (speech.readingId != null) IconButton(onClick = speech.stop) { Icon(Icons.Outlined.VolumeOff, stringResource(R.string.workspace_stop_audio)) }
                         Spacer(Modifier.weight(1f))
                         if (ui.asking) FilledTonalButton(onClick = onCancel, modifier = Modifier.heightIn(min = 44.dp).testTag("workspace-cancel")) {
@@ -239,6 +270,38 @@ fun AiWorkspace(
                         } else FilledIconButton(onClick = { send(draft) }, enabled = ui.connected && draft.isNotBlank() && !ui.importWorking,
                             modifier = Modifier.size(44.dp).testTag("workspace-send")) { Icon(Icons.AutoMirrored.Outlined.Send, stringResource(R.string.feed_ask_send), Modifier.size(20.dp)) }
                     }
+                }
+            }
+        }
+    }
+    if (showConversationFiles) ModalBottomSheet(onDismissRequest = { showConversationFiles = false }) {
+        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(stringResource(R.string.rich_conversation_files, conversation?.attachments.orEmpty().size), style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.rich_conversation_files_help), style = MaterialTheme.typography.bodyMedium)
+            conversation?.attachments.orEmpty().forEach { attachment ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { reviewAttachmentId = attachment.id }, modifier = Modifier.weight(1f)) { Text(attachment.name) }
+                    IconButton(onClick = { onRemoveAttachment(attachment.id) }, enabled = !ui.asking && !ui.importWorking) {
+                        Icon(Icons.Outlined.Close, stringResource(R.string.workspace_remove_attachment))
+                    }
+                }
+            }
+        }
+    }
+    if (showVoiceSettings) ModalBottomSheet(onDismissRequest = { showVoiceSettings = false }) {
+        Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(stringResource(R.string.rich_voice_settings), style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.rich_voice_help), style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.rich_voice_speed), style = MaterialTheme.typography.labelLarge)
+            var rate by remember { mutableFloatStateOf(state?.speechRate ?: 1f) }
+            Slider(value = rate, onValueChange = { rate = it }, valueRange = 0.6f..1.5f,
+                onValueChangeFinished = { onSpeechPreferences(rate, state?.speechVoice.orEmpty()) }, modifier = Modifier.testTag("workspace-speech-rate"))
+            Text(stringResource(R.string.rich_voice_choice), style = MaterialTheme.typography.labelLarge)
+            if (!speech.available) Text(stringResource(R.string.rich_voice_unavailable), style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = { speech.stop(); onSpeechPreferences(rate, "") }) { Text(stringResource(R.string.rich_voice_default)) }
+            speech.voices.forEach { (name, label) ->
+                TextButton(onClick = { speech.stop(); onSpeechPreferences(rate, name) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(label, Modifier.weight(1f)); if (state?.speechVoice == name) Icon(Icons.Outlined.Check, null, Modifier.size(18.dp))
                 }
             }
         }
@@ -349,7 +412,8 @@ private fun WorkspaceTurn(turn: AiTurn, speech: WorkspaceSpeech) {
             if(user) SelectionContainer { Text(turn.text, style=MaterialTheme.typography.bodyLarge, color=MaterialTheme.colorScheme.onPrimaryContainer) }
             else RichResponse(turn.text, citations=turn.citations)
             if (!user) {
-                ConversationSources(turn.citations, "turn-source-${turn.id}")
+                val represented = remember(turn.text) { RichContent.links(turn.text).map { FeedLogic.canonicalUrl(it.url) }.toSet() }
+                ConversationSources(turn.citations.filterNot { FeedLogic.canonicalUrl(it.url) in represented }, "turn-source-${turn.id}")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = {
                         context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText(clipboardLabel, turn.text))

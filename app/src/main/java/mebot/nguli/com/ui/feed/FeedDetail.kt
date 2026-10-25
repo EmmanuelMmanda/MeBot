@@ -61,6 +61,7 @@ fun FeedDetail(
     val state = ui.state
     val item = state?.items?.find { it.id == id }
     val context = LocalContext.current
+    val relevanceContext = LocalRelevanceContext.current
     val now = LocalFeedClock.current
     var section by rememberSaveable(id) { mutableStateOf("overview") }
     var menu by rememberSaveable(id) { mutableStateOf(false) }
@@ -99,6 +100,14 @@ fun FeedDetail(
                             Icon(Icons.Outlined.MoreHoriz, stringResource(R.string.detail_more_actions))
                         }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            if (originalAvailable) DropdownMenuItem(text = { Text(stringResource(R.string.detail_share)) },
+                                leadingIcon = { Icon(Icons.Outlined.Share, null) },
+                                onClick = { menu = false; shareResource(context, item.title, item.sourceUrl) })
+                            DropdownMenuItem(text = { Text(stringResource(if (item.id in state.savedIds) R.string.feed_unsave else R.string.feed_save)) },
+                                leadingIcon = { Icon(Icons.Outlined.BookmarkBorder, null) }, onClick = { menu = false; onSave(item.id) })
+                            relevanceContext.onVote?.let { rate -> DropdownMenuItem(text = { Text(stringResource(R.string.feedback_less_083)) },
+                                leadingIcon = { Icon(Icons.Outlined.NotInterested, null) }, onClick = { menu = false; rate(item.id, false) }) }
+
                             DropdownMenuItem(text = { Text(stringResource(R.string.detail_hide)) },
                                 leadingIcon = { Icon(Icons.Outlined.VisibilityOff, null) },
                                 onClick = { menu = false; onHide(item.id); onFeed() }, modifier = Modifier.testTag("detail-hide"))
@@ -139,7 +148,6 @@ fun FeedDetail(
                     Icon(Icons.Outlined.Share, stringResource(R.string.detail_share))
                 }
             }
-            RelevanceControls(item)
             if (DownloadResource.from(item.sourceUrl) != null && RichContent.type(item.sourceUrl) == "document")
                 ResourceDownloadButton(item.sourceUrl)
             if(showPlayer && originalAvailable) {
@@ -164,6 +172,8 @@ fun FeedDetail(
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     RichResponse(DetailPresentation.introduction(item.summary))
                 }
+                RelevanceControls(item)
+                StarManagement(item)
                 DetailBrief(ui, item, onRetryBrief, onCancelBrief, onFollowUp, onConnect ?: onAsk)
                 item.weather?.let { weather ->
                     WeatherStrip(item) { openSource(context, item.sourceUrl) }
@@ -373,13 +383,7 @@ internal fun ConversationSources(sources: List<FeedCitation>, tagPrefix: String)
     }
     if (valid.isEmpty()) return
     val media = remember(valid) { valid.filter { RichContent.type(it.url) in setOf("image", "youtube", "audio", "video") } }
-    val context = LocalContext.current
-    val fileChecks by ResourceChecks.state.collectAsState()
-    val fileLinks = remember(valid) { valid.filter { RichContent.type(it.url) == "document" } }
-    LaunchedEffect(fileLinks.map { it.url }) {
-        fileLinks.take(8).forEach { source -> launch { ResourceChecks.check(context, source.url) } }
-    }
-    val documents = remember(fileLinks, fileChecks) { fileLinks.filter { fileChecks[it.url]?.available == true } }
+    val documents = remember(valid) { valid.filter { RichContent.type(it.url) == "document" } }
     var selected by rememberSaveable(tagPrefix) { mutableStateOf("all") }
     var expanded by rememberSaveable(tagPrefix, selected) { mutableStateOf(false) }
     val shown = when (selected) { "media" -> media; "files" -> documents; else -> valid }

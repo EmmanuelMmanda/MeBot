@@ -51,6 +51,18 @@ for name in ('index.html', 'screenshots.html', 'download.html', 'releases.html',
         assert text.count('data-screen-group=') == len(screens)
         assert 'aria-pressed="true"' in text and 'id="screen-count" role="status"' in text
 readme = (ROOT / 'README.md').read_text()
+preview = (DOCS / 'preview-083.html').read_text()
+assert 'Preview, not a published APK' in preview
+assert 'lang="sw"' in preview and 'existing release signing identity' in preview
+assert '/releases/download/v0.8.3/' not in preview
+assert 'not a full-duplex' in preview
+p = Inspect(); p.feed(preview)
+for im in p.images:
+    if im.get('src', '').startswith('screenshots/v083/'):
+        assert im.get('alt') and im.get('width') and im.get('height')
+for page in [*DOCS.glob('*.html'), *(DOCS / 'guides').glob('*.html')]:
+    if page.name != 'preview-083.html':
+        assert 'preview-083.html' in page.read_text(), f'Missing preview navigation: {page}'
 assert readme.count('<img ') >= len(screens)
 assert '/releases/latest' not in readme
 assert 'The current application version is **0.6.1**' not in readme

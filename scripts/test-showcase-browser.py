@@ -50,11 +50,16 @@ try:
                 page = context.new_page()
                 errors = []
                 page.on('pageerror', lambda e: errors.append(str(e)))
-                for name in ['index.html', 'screenshots.html', 'download.html', 'releases.html', 'tour.html']:
+                for name in ['index.html', 'screenshots.html', 'download.html', 'releases.html', 'tour.html', 'preview-083.html']:
                     load(page,name,wait_until='networkidle')
                     assert page.locator('h1').count() == 1, name
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), f'Overflow {width} {theme} {name}'
                     assert not errors, errors
+                    if name == 'preview-083.html':
+                        assert 'Preview, not a published APK' in page.locator('main').inner_text()
+                        assert page.locator('a[href*="/releases/download/v0.8.3/"]').count() == 0
+                        assert page.locator('#kiswahili').get_attribute('lang') == 'sw'
+                        assert page.locator('.preview-jumps a').count() == 6
                     for link in page.locator('[data-release-apk]').all():
                         assert link.is_visible() and link.get_attribute('href') == apk
                     for im in page.locator('.shot:visible img').all():

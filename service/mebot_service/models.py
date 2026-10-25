@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-ModuleKind = Literal["news", "opportunities", "watch", "horoscope", "technology", "security", "scholarships", "business", "science", "learning", "entertainment", "music", "events", "travel", "weather", "github", "media"]
+ModuleKind = Literal["news", "opportunities", "watch", "horoscope", "technology", "security", "scholarships", "business", "science", "learning", "entertainment", "music", "events", "travel", "weather", "github", "media", "food", "farming", "family", "sport", "home", "wellbeing"]
 ContentType = Literal["article", "video", "podcast", "repository", "course", "event", "opportunity", "weather", "entertainment"]
 Identifier = Annotated[str, Field(min_length=1, max_length=100)]
 
@@ -35,6 +35,8 @@ MODULE_PREFERENCES: dict[str, dict[str, tuple[str, ...] | int]] = {
     "media": {"focus": ("all", "explainers", "demonstrations", "interviews", "news"), "duration": ("short", "quick", "any")},
     "watch": {"format": ("any", "articles", "videos")},
 }
+for _kind in ("food", "farming", "family", "sport", "home", "wellbeing"):
+    MODULE_PREFERENCES[_kind] = {"format": ("any", "articles", "videos"), "location": 160}
 for _kind, _preferences in MODULE_PREFERENCES.items():
     if _kind != "weather":
         _preferences["language"] = ("auto", "en", "sw")

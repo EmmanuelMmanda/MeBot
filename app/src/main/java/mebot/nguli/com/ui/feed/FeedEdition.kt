@@ -51,14 +51,15 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
     onPrompt: (String?, String) -> Unit = { _, _ -> onAsk() }, onSearch: (() -> Unit)? = null,
     returnToTopRequest: Int = 0, onExploreModules: () -> Unit = onModules,
     onRefreshModule: ((String?) -> Unit)? = null,
-    onContext: (() -> Unit)? = null, onDismissNotice: ((String) -> Unit)? = null) {
+    onContext: (() -> Unit)? = null, onDismissNotice: ((String) -> Unit)? = null,
+    onLoadMore: ((String?) -> Unit)? = null) {
     val state = ui.state ?: return
     var filter by rememberSaveable { mutableStateOf("all") }
     val enabled = remember(state.modules) { state.modules.filter { it.enabled } }
     LaunchedEffect(enabled.map { it.id }) { if (filter != "all" && enabled.none { it.id == filter }) filter = "all" }
     val refreshSelected: () -> Unit = { if (onRefreshModule == null) onRefresh() else onRefreshModule(filter.takeUnless { it == "all" }) }
     val now = LocalFeedClock.current
-    val edition = remember(state.items, state.modules, state.hiddenIds, state.savedIds, state.context, state.region, state.timezone, state.viewedAtMillis, state.readingHistoryEnabled, state.relevanceSignals, state.editionSequence, now / 60_000) {
+    val edition = remember(state.items, state.modules, state.hiddenIds, state.savedIds, state.context, state.region, state.timezone, state.viewedAtMillis, state.readingHistoryEnabled, state.relevanceSignals, state.starredStories, state.editionSequence, now / 60_000) {
         FeedLogic.edition(state, now)
     }
     val items = remember(edition, filter) { edition.filter { filter == "all" || it.moduleId == filter } }
@@ -79,12 +80,30 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
         val listState = rememberLazyListState()
         val scope=rememberCoroutineScope()
         var acceptedIds by rememberSaveable { mutableStateOf(stories.map { it.id }) }
-        val atTop by remember { derivedStateOf { listState.firstVisibleItemIndex==0 && listState.firstVisibleItemScrollOffset<16 } }
+        val hasScrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
         val newIds=remember(stories,acceptedIds){stories.map{it.id}.filterNot{it in acceptedIds}}
-        LaunchedEffect(stories.map{it.id},atTop){if(atTop || acceptedIds.isEmpty())acceptedIds=stories.map{it.id}}
+        LaunchedEffect(stories.map{it.id}) { if (acceptedIds.isEmpty()) acceptedIds=stories.map{it.id} }
         // While reading, retain current card order. New results are appended until the reader opts in.
-        val presented=remember(stories,acceptedIds){val byId=stories.associateBy{it.id};acceptedIds.mapNotNull{byId[it]}+stories.filter{it.id !in acceptedIds}}
+        val presented=remember(stories,acceptedIds){FeedPaging.ordered(stories, acceptedIds)}
         val visible=remember(presented,visibleCount){presented.take(visibleCount)}
+        var autoDiscoveryUsed by rememberSaveable { mutableStateOf(false) }
+        val nearEnd by remember { derivedStateOf {
+            val info = listState.layoutInfo
+            info.totalItemsCount > 0 && (info.visibleItemsInfo.lastOrNull()?.index ?: 0) >= info.totalItemsCount - 3
+        } }
+        LaunchedEffect(nearEnd, hasScrolled, visibleCount, stories.size, ui.refreshing, state.readingPreferences.autoLoadMore) {
+            // Only advance after the reader has scrolled. Keep the same viewport while adding rows.
+            if (state.readingPreferences.autoLoadMore && nearEnd && hasScrolled && !ui.refreshing) {
+                if (visibleCount < stories.size) {
+                    listState.requestScrollToItem(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
+                    visibleCount = (visibleCount + 5).coerceAtMost(stories.size)
+                } else if (!autoDiscoveryUsed && stories.isNotEmpty() && onLoadMore != null) {
+                    // One automatic network batch per filter visit prevents a zero-result request loop.
+                    autoDiscoveryUsed = true
+                    onLoadMore(filter.takeUnless { it == "all" })
+                }
+            }
+        }
         LaunchedEffect(returnToTopRequest) {
             if (returnToTopRequest != consumedTopRequest) {
                 consumedTopRequest = returnToTopRequest
@@ -145,8 +164,8 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                         }
                     }
                 }
-                if (newIds.isNotEmpty() && !atTop) item(key="new-ready",contentType="notice") {
-                    FilledTonalButton(onClick={acceptedIds=stories.map{it.id};visibleCount=5;scope.launch{listState.scrollToItem(0)}},modifier=Modifier.fillMaxWidth().heightIn(min=48.dp).testTag("feed-new-results")) {
+                if (newIds.isNotEmpty()) item(key="new-ready",contentType="notice") {
+                    FilledTonalButton(onClick={acceptedIds=FeedPaging.acceptNew(stories,acceptedIds);visibleCount=maxOf(5,newIds.size.coerceAtMost(10));scope.launch{listState.scrollToItem(1)}},modifier=Modifier.fillMaxWidth().heightIn(min=48.dp).testTag("feed-new-results")) {
                         Text(stringResource(R.string.feed_new_items,newIds.size))
                     }
                 }
@@ -224,7 +243,10 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                                     visibleCount = (visibleCount + 5).coerceAtMost(stories.size)
                                 }, modifier = Modifier.testTag("feed-show-more")) {
                                     Text(stringResource(R.string.feed_show_more)); Spacer(Modifier.width(4.dp)); Icon(Icons.Outlined.ExpandMore, null, Modifier.size(18.dp))
-                                } else Icon(Icons.Outlined.CheckCircleOutline, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                                } else TextButton(onClick = { autoDiscoveryUsed = true; refreshSelected() }, enabled = !ui.refreshing,
+                                    modifier = Modifier.testTag("feed-find-more")) {
+                                    Text(stringResource(if (ui.refreshing) R.string.feed_loading_more_083 else R.string.feed_find_more_083))
+                                }
                             }
                         }
                     }
@@ -397,14 +419,32 @@ internal fun StoryRow(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
 @Composable
 private fun StoryActions(item: FeedItem, saved: Boolean, onSave: (String) -> Unit, onHide: ((String) -> Unit)?) {
     var menu by remember { mutableStateOf(false) }
+    val ctx = LocalRelevanceContext.current
+    val context = LocalContext.current
+    val star = ctx.state?.starredStories?.any { it.itemId == item.id } == true
+    val vote = ctx.state?.let { RelevanceFeedback.current(it, item) }
     IconButton(onClick = { onSave(item.id) }, modifier = Modifier.testTag("save-" + item.id)) {
         Icon(if (saved) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder, stringResource(if (saved) R.string.feed_unsave else R.string.feed_save),
             Modifier.size(21.dp), tint = if (saved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    if (onHide != null) Box {
-        IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreHoriz, stringResource(R.string.feed_more), Modifier.size(21.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+    Box {
+        IconButton(onClick = { menu = true }, modifier = Modifier.testTag("story-menu-${item.id}")) {
+            Icon(Icons.Outlined.MoreHoriz, stringResource(R.string.feed_more), Modifier.size(21.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(text = { Text(stringResource(R.string.feed_hide)) }, onClick = { menu = false; onHide(item.id) },
+            if (FeedLogic.safeUrl(item.sourceUrl)) {
+                DropdownMenuItem(text = { Text(stringResource(R.string.detail_share)) }, onClick = { menu = false; shareResource(context, item.title, item.sourceUrl) },
+                    leadingIcon = { Icon(Icons.Outlined.Share, null) })
+                DropdownMenuItem(text = { Text(stringResource(R.string.feed_open_source)) }, onClick = { menu = false; openSource(context, item.sourceUrl) },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) })
+            }
+            ctx.onStar?.let { toggle -> DropdownMenuItem(text = { Text(stringResource(if (star) R.string.star_following else R.string.star_follow)) },
+                onClick = { menu = false; toggle(item.id) }, leadingIcon = { Icon(Icons.Outlined.StarOutline, null) }) }
+            ctx.onVote?.let { rate ->
+                DropdownMenuItem(text = { Text(stringResource(if (vote == false) R.string.feedback_undo_083 else R.string.feedback_less_083)) },
+                    onClick = { menu = false; rate(item.id, if (vote == false) null else false) }, leadingIcon = { Icon(Icons.Outlined.NotInterested, null) })
+            }
+            if (onHide != null) DropdownMenuItem(text = { Text(stringResource(R.string.feed_hide)) }, onClick = { menu = false; onHide(item.id) },
                 leadingIcon = { Icon(Icons.Outlined.VisibilityOff, null) })
         }
     }

@@ -95,26 +95,18 @@ internal fun MeBotOnboarding(state: FeedState, language: String, onLanguage: (St
                             Text(stringResource(tourSteps[active].body), style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
                                 modifier = Modifier.widthIn(max = 420.dp))
-                            if(saveError) Text(if(usesSwahili) "Imeshindwa kuhifadhi. Jaribu tena." else "Could not save. Please try again.", color=MaterialTheme.colorScheme.error)
+                            if(saveError) Text(stringResource(R.string.interests_save_error), color=MaterialTheme.colorScheme.error)
                             if(!state.onboardingComplete && active == 1) {
-                                Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                                    mebot.nguli.com.core.ModuleCatalog.presets.map { it.kind }.chunked(2).forEach { row ->
-                                        Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(8.dp)) { row.forEach { kind ->
-                                            FilterChip(selected=kind in selectedKinds, onClick={ selectedKinds=ArrayList(if(kind in selectedKinds) selectedKinds-kind else selectedKinds+kind) },
-                                                label={Text(stringResource(moduleNameResource(kind)))}, leadingIcon={Icon(moduleIcon(kind),null,Modifier.size(18.dp))},
-                                                modifier=Modifier.weight(1f).heightIn(min=48.dp).testTag("onboarding-interest-$kind"))
-                                        };if(row.size==1)Spacer(Modifier.weight(1f)) }
-                                    }
-                                }
+                                InterestPicker083(selectedKinds, !saving) { selectedKinds = ArrayList(it) }
                             } else if(!state.onboardingComplete && active == 5) {
                                 Column(Modifier.fillMaxWidth(), verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                                    OutlinedTextField(selectedRegion,{selectedRegion=it.take(100)},singleLine=true,
-                                        label={Text(if(usesSwahili) "Mji au eneo lako (si lazima)" else "Your city or region (optional)")},modifier=Modifier.fillMaxWidth().testTag("onboarding-region"),shape=RoundedCornerShape(18.dp))
-                                    OutlinedTextField(selectedInterests,{selectedInterests=it.take(500)},minLines=2,maxLines=3,
-                                        label={Text(if(usesSwahili) "Unapenda nini zaidi? (si lazima)" else "Anything you especially enjoy? (optional)")},
-                                        placeholder={Text(if(usesSwahili) "Mfano: muziki wa Bongo, biashara, filamu za mafumbo" else "For example: piano, small business, mystery films")},
+                                    OutlinedTextField(selectedRegion,{selectedRegion=it.take(100)},singleLine=true,enabled = !saving,
+                                        label={Text(stringResource(R.string.interests_region))},modifier=Modifier.fillMaxWidth().testTag("onboarding-region"),shape=RoundedCornerShape(18.dp))
+                                    OutlinedTextField(selectedInterests,{selectedInterests=it.take(500)},minLines=2,maxLines=3,enabled = !saving,
+                                        label={Text(stringResource(R.string.interests_details))},
+                                        placeholder={Text(stringResource(R.string.interests_example))},
                                         modifier=Modifier.fillMaxWidth().testTag("onboarding-preferences"),shape=RoundedCornerShape(18.dp))
-                                    Text(if(usesSwahili) "Mada ulizochagua zitaandaa ukurasa wako. Unaweza kuzibadili wakati wowote." else "Your selected topics shape your first feed. You can change them anytime.",style=MaterialTheme.typography.bodySmall)
+                                    Text(stringResource(R.string.interests_first_feed),style=MaterialTheme.typography.bodySmall)
                                 }
                             } else TourPreview(active)
                         }
@@ -128,9 +120,9 @@ internal fun MeBotOnboarding(state: FeedState, language: String, onLanguage: (St
                 Column(Modifier.fillMaxWidth().heightIn(max = 210.dp).verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (step > 0) OutlinedButton(onClick = { step-- }, modifier = Modifier.heightIn(min = 52.dp).testTag("onboarding-back"),
+                        if (step > 0) OutlinedButton(onClick = { step-- }, enabled = !saving, modifier = Modifier.heightIn(min = 52.dp).testTag("onboarding-back"),
                             shape = RoundedCornerShape(18.dp)) { Text(stringResource(R.string.back)) }
-                        Button(onClick = { if (step == tourSteps.lastIndex) finish(onConnect) else step++ },
+                        Button(onClick = { if (step == tourSteps.lastIndex) finish(onConnect) else step++ }, enabled = !saving,
                             modifier = Modifier.weight(1f).heightIn(min = 54.dp).testTag(if (step == tourSteps.lastIndex) "onboarding-finish" else "onboarding-next"),
                             shape = RoundedCornerShape(18.dp)) {
                             Text(stringResource(if (step == tourSteps.lastIndex) R.string.tour_connect else R.string.tour_next))

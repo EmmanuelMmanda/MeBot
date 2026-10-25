@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.work.*
 import mebot.nguli.com.MainActivity
@@ -17,6 +16,7 @@ import mebot.nguli.com.R
 import mebot.nguli.com.core.FeedLogic
 import mebot.nguli.com.core.FeedState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.TimeUnit
 
 class FeedWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -42,11 +42,26 @@ class FeedWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                     val intent = Intent(app, MainActivity::class.java).setAction("mebot.nguli.com.OPEN_FEED").putExtra("item_id", item.id)
                         .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     val pending = PendingIntent.getActivity(app, 300, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                    manager.notify(300, NotificationCompat.Builder(app, "mebot_feed")
-                        .setSmallIcon(R.drawable.ic_notification).setContentTitle(app.getString(R.string.feed_notification_title))
-                        .setContentText(item.title).setStyle(NotificationCompat.BigTextStyle().bigText(item.title))
-                        .setContentIntent(pending).setAutoCancel(true).setVisibility(NotificationCompat.VISIBILITY_PRIVATE).build())
-                    app.feedRepository.update { it.copy(lastNotificationDate = date, pendingNotificationIds = emptySet()) }
+                    val preview = state.readingPreferences.notificationPreview
+                    // Public publisher imagery is optional and bounded; a slow image never blocks delivery.
+                    val image = if (preview && state.readingPreferences.notificationImages) item.media?.url?.let { url ->
+                        withTimeoutOrNull(2_000) { app.feedMedia.load(url) }
+                    } else null
+                    val latest = app.feedRepository.current()
+                    val deliveryNow = System.currentTimeMillis()
+                    val deliveryDate = FeedLogic.dateAt(deliveryNow, latest.timezone)
+                    val permissionStillGranted = Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(app, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                    val stillAllowed = permissionStillGranted && latest.notifications && !FeedLogic.quietAt(deliveryNow, latest) &&
+                        latest.lastNotificationDate != deliveryDate && item.id in latest.pendingNotificationIds &&
+                        FeedLogic.visible(latest).any { it.id == item.id } &&
+                        latest.modules.any { it.id == item.moduleId && it.enabled && it.alerts }
+                    if (stillAllowed) {
+                        manager.notify(300, FeedNotificationFactory.build(app, item, pending,
+                            showPreview = latest.readingPreferences.notificationPreview,
+                            image = image.takeIf { latest.readingPreferences.notificationImages }))
+                        app.feedRepository.update { current -> current.copy(lastNotificationDate = deliveryDate,
+                            pendingNotificationIds = current.pendingNotificationIds - state.pendingNotificationIds) }
+                    }
                 }
             }
             Result.success()

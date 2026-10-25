@@ -1,3 +1,7 @@
+<!-- preview-083:start -->
+> **0.8.3 preview:** Starred follow-ups, searchable collections, rich conversation resources, broader interests and an offline price comparison tool. [Candidate guide](docs/RELEASE-0.8.3.md). 817 automated tests passed; physical-device verification and original-identity signing remain pending; the official downloadable release remains **0.8.2**.
+<!-- preview-083:end -->
+
 <div align="center">
 <img src="docs/assets/mebot.svg" width="64" height="64" alt="MeBot robot logo">
 <h1>MeBot Daily</h1><p>Your topics, source-linked answers and optional everyday tools.</p>

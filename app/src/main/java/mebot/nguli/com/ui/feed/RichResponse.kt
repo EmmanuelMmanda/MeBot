@@ -1,82 +1,88 @@
 package mebot.nguli.com.ui.feed
 
-import android.annotation.SuppressLint
-import android.net.Uri
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import android.widget.MediaController
-import android.widget.VideoView
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.*
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
+import mebot.nguli.com.R
 import mebot.nguli.com.core.*
-import java.net.URI
 
-private val inlineMarkup = Regex("\\[([^]\\n]+)]\\((https?://[^\\s)]+)\\)|\\*\\*([^*]+)\\*\\*|`([^`]+)`")
+private val inlineMarkup = Regex("""\[([^]\n]+)]\((https?://(?:[^\s()]|\([^\s()]*\))+)\)|\*\*([^*]+)\*\*|`([^`]+)`|https?://[^\s<>"\]]+""")
 
+/** Present text immediately. Resource cards allocate media only after a deliberate tap. */
 @Composable
 internal fun RichResponse(text: String, modifier: Modifier = Modifier, citations: List<FeedCitation> = emptyList()) {
     val context = LocalContext.current
     val blocks = remember(text) { text.take(24000).split('\n').take(240) }
+    val resources = remember(text) { RichContent.links(text) }
+    val imageLabel = stringResource(R.string.rich_image)
     Column(modifier.semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(7.dp)) {
         var code = false
         blocks.forEach { raw ->
             if (raw.trim().startsWith("```")) code = !code
             else if (raw.isNotBlank()) {
-                val heading = raw.startsWith("#")
-                val line = raw.replace(Regex("^#{1,6}\\s+"), "").replace(Regex("^[-*]\\s+"), "• ")
-                val image = Regex("^!\\[([^]]*)]\\((https://[^\\s)]+)\\)$").matchEntire(line.trim())
-                if (image != null && citations.any { FeedLogic.canonicalUrl(it.url) == FeedLogic.canonicalUrl(image.groupValues[2]) }) {
-                    val url = image.groupValues[2]
-                    val item = FeedItem(FeedLogic.itemId(url), "preview", image.groupValues[1], "", sourceUrl=url, media=FeedMedia(url,url))
-                    PublisherImage(item, Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(16.dp)))
-                } else if (image != null) {
-                    val url = image.groupValues[2]
-                    if (FeedLogic.safeUrl(url)) TextButton(onClick = { openSource(context, url) }) {
-                        Text(image.groupValues[1].ifBlank { "Image" })
-                    }
+                val heading = !code && raw.startsWith("#")
+                val line = if (code) raw else raw.replace(Regex("^#{1,6}\\s+"), "").replace(Regex("^[-*]\\s+"), "• ")
+                val image = Regex("""^!\[([^]]*)]\((https://[^\s)]+)\)$""").matchEntire(line.trim())
+                if (image != null && !code) {
+                    Text(image.groupValues[1].ifBlank { imageLabel }, style = MaterialTheme.typography.bodyMedium)
                 } else {
                     val linkColor = MaterialTheme.colorScheme.primary
-                    val rendered = remember(line, linkColor) { buildAnnotatedString {
-                        var cursor = 0
-                        inlineMarkup.findAll(line).forEach { m ->
-                            append(line.substring(cursor, m.range.first))
-                            when {
-                                m.groupValues[2].isNotBlank() -> {
-                                    val url = m.groupValues[2]
-                                    if (FeedLogic.safeUrl(url)) { pushStringAnnotation("url", url); withStyle(SpanStyle(color=linkColor)) { append(m.groupValues[1]) }; pop() }
-                                    else append(m.groupValues[1])
+                    val rendered = remember(line, linkColor, code) { buildAnnotatedString {
+                        if (code) append(line) else {
+                            var cursor = 0
+                            inlineMarkup.findAll(line).forEach { match ->
+                                append(line.substring(cursor, match.range.first))
+                                when {
+                                    match.groupValues[2].isNotBlank() -> {
+                                        val url = match.groupValues[2].replace("&amp;", "&")
+                                        if (FeedLogic.safeUrl(url)) {
+                                            pushStringAnnotation("url", url)
+                                            withStyle(SpanStyle(color = linkColor)) { append(match.groupValues[1]) }
+                                            pop()
+                                        } else append(match.groupValues[1])
+                                    }
+                                    match.groupValues[3].isNotBlank() -> withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(match.groupValues[3]) }
+                                    match.groupValues[4].isNotBlank() -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(match.groupValues[4]) }
+                                    else -> {
+                                        val url = RichContent.links(match.value).firstOrNull()?.url
+                                        if (url != null) {
+                                            pushStringAnnotation("url", url)
+                                            withStyle(SpanStyle(color = linkColor)) { append(url) }
+                                            pop()
+                                            append(match.value.removePrefix(url))
+                                        } else append(match.value)
+                                    }
                                 }
-                                m.groupValues[3].isNotBlank() -> withStyle(SpanStyle(fontWeight=FontWeight.SemiBold)) { append(m.groupValues[3]) }
-                                else -> withStyle(SpanStyle(fontFamily=FontFamily.Monospace)) { append(m.groupValues[4]) }
+                                cursor = match.range.last + 1
                             }
-                            cursor = m.range.last + 1
+                            append(line.substring(cursor))
                         }
-                        append(line.substring(cursor))
                     } }
                     @Suppress("DEPRECATION")
-                    ClickableText(rendered, style=(if(heading) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge)
-                        .copy(color=MaterialTheme.colorScheme.onSurface, fontFamily=if(code) FontFamily.Monospace else MaterialTheme.typography.bodyLarge.fontFamily),
-                        onClick={ offset -> rendered.getStringAnnotations("url", offset, offset).firstOrNull()?.let { openSource(context,it.item) } })
+                    ClickableText(rendered,
+                        style = (if (heading) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge)
+                            .copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = if (code) FontFamily.Monospace else MaterialTheme.typography.bodyLarge.fontFamily),
+                        onClick = { offset -> rendered.getStringAnnotations("url", offset, offset).firstOrNull()?.let { openInAppSource(context, it.item) } })
                 }
+            }
+        }
+        if (resources.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Text(stringResource(R.string.rich_resources), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            resources.forEach { linked ->
+                // Prefer the source-provided title, but do not describe an unchecked link as verified.
+                val citation = citations.firstOrNull { FeedLogic.canonicalUrl(it.url) == FeedLogic.canonicalUrl(linked.url) }
+                RichSourcePreview(if (linked.title.isBlank() && citation != null) citation else linked)
             }
         }
     }
 }
-

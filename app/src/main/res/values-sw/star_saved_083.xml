@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="star_follow">Weka nyota · fuatilia</string>
+    <string name="star_following">Imewekewa nyota</string>
+    <string name="star_hint">Fuatilia habari zaidi kuhusu hili.</string>
+    <string name="star_active_hint">Dhibiti ufuatiliaji kwenye Ulivyohifadhi.</string>
+    <string name="star_paused">Ufuatiliaji umesitishwa</string>
+    <string name="star_check_refresh">Angalia wakati wa kuleta habari mpya</string>
+    <string name="star_every_hours">Angalau saa %1$d kati ya ukaguzi</string>
+    <string name="star_budget_hint">Hutumia AI uliyochagua na kikomo chako wakati wa kuleta habari. Huenda kusiwe na habari mpya.</string>
+    <string name="star_last_checked">Iliangaliwa: %1$s</string>
+    <string name="library_title">Maktaba yako</string>
+    <string name="library_body">Panga ulivyohifadhi na ufuatilie habari zinazokuvutia.</string>
+    <string name="library_search">Tafuta kichwa, chanzo au maelezo</string>
+    <string name="library_all">Ulivyohifadhi</string>
+    <string name="library_starred">Unavyofuatilia</string>
+    <string name="library_all_types">Mada zote</string>
+    <string name="library_all_collections">Makundi yote</string>
+    <string name="library_unfiled">Bila kundi</string>
+    <string name="library_collection">Kundi</string>
+    <string name="library_collection_hint">Mfano: Kazi, Nisome baadaye</string>
+    <string name="library_collection_clear">Ondoa kundi</string>
+    <string name="library_collection_apply">Hifadhi kundi</string>
+    <string name="library_collection_error">Tumia herufi zisizozidi 40; makundi hadi 30.</string>
+    <string name="library_empty_filter">Hakuna kinacholingana na chaguo hizi.</string>
+    <string name="library_recent">Vipya kwanza</string>
+    <string name="library_oldest">Vya zamani kwanza</string>
+    <string name="library_sort">Mpangilio</string>
+    <string name="library_reset">Ondoa vichujio</string>
+    <string name="library_count">Vipengele %1$d</string>
+    <string name="feed_find_more_083">Tafuta habari zaidi</string>
+    <string name="feed_loading_more_083">Inatafuta habari zaidi…</string>
+    <string name="feed_no_more_083">Umeziona zote. Leta habari mpya ukitaka kuangalia tena.</string>
+    <string name="feedback_less_083">Punguza habari kama hizi</string>
+    <string name="feedback_undo_083">Ondoa maoni yangu</string>
+</resources>
