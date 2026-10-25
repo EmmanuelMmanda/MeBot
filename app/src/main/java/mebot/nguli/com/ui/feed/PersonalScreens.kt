@@ -63,15 +63,19 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
     var region by rememberSaveable(state.region) { mutableStateOf(state.region) }
     var timezone by rememberSaveable(state.timezone) { mutableStateOf(state.timezone) }
     var entriesJson by rememberSaveable(state.context) {
-        mutableStateOf(FeedJson.encodeToString(state.context.ifEmpty { listOf(ContextEntry(text = "")) }))
+        mutableStateOf(FeedJson.encodeToString(PersonalProfile085.draft(state.context, state.modules.filter { it.enabled && it.kind != "weather" }.map { it.kind }.toSet())))
     }
     val entries = remember(entriesJson) { FeedJson.decodeFromString<List<ContextEntry>>(entriesJson) }
+    var showMore by rememberSaveable { mutableStateOf(false) }
+    var showLegacy by rememberSaveable { mutableStateOf(false) }
+    val primaryId = PersonalProfile085.primary(entries)?.id ?: PersonalProfile085.PROFILE_ID
     var showPaste by rememberSaveable { mutableStateOf(false) }
     var pastedContext by rememberSaveable { mutableStateOf("") }
     var localError by rememberSaveable { mutableStateOf(false) }
     var pending by rememberSaveable { mutableStateOf(false) }
     var desiredContextJson by rememberSaveable { mutableStateOf<String?>(null) }
     var scopeEntryId by rememberSaveable { mutableStateOf<String?>(null) }
+    val timezoneInvalid = timezone.isNotBlank() && runCatching { ZoneId.of(timezone.trim()) }.isFailure
     val canEdit = !ui.contextSaving && !ui.importWorking
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.prepareContextImport(uri) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportContext(uri) }
@@ -93,14 +97,44 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
         ScreenTitle(stringResource(R.string.preferences_title_083), stringResource(R.string.preferences_body_083))
         ImportFeedback(ui)
         OutlinedTextField(name, { name = it.take(80) }, label = { Text(stringResource(R.string.feed_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("context-name"), shape = RoundedCornerShape(16.dp), enabled = canEdit)
-        PreferencePrompts083(enabled = canEdit && entries.size < 80) { category ->
-            val empty = entries.firstOrNull { it.text.isBlank() }
-            entriesJson = FeedJson.encodeToString(if (empty != null) entries.map { if (it.id == empty.id) it.copy(category = category) else it }
-                else entries + ContextEntry(text = "", category = category, scopes = state.modules.filter { it.enabled }.map { it.kind }.toSet()))
-            localError = false
+        val primary = entries.find { it.id == primaryId }
+        val legacy = entries.filterNot { it.id == primaryId }
+        if (primary != null) {
+            PersonalProfileEditor085(primary.text, canEdit, { text ->
+                entriesJson = FeedJson.encodeToString(entries.map { if (it.id == primaryId) it.copy(text = text) else it })
+                localError = false
+            })
+            val scopeNames = primary.scopes.sorted().map { stringResource(moduleNameResource(it)) }.joinToString(", ")
+            Text(if (scopeNames.isEmpty()) stringResource(R.string.feed_context_unshared) else stringResource(R.string.feed_context_used_by, scopeNames),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = { scopeEntryId = primaryId }, enabled = canEdit, modifier = Modifier.testTag("context-scopes-$primaryId")) {
+                Icon(Icons.Outlined.Tune, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.edition_context_choose))
+            }
         }
-
-        entries.forEachIndexed { index, entry ->
+        if (localError) Text(stringResource(R.string.feed_context_invalid), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+        if (ui.importPreview == null) ui.error?.let { FeedStatus(it) }
+        Button(onClick = {
+            val now = System.currentTimeMillis()
+            val updated = entries.filter { it.text.isNotBlank() }.map { entry ->
+                val text = entry.text.trim()
+                if (state.context.find { it.id == entry.id } == entry) entry else entry.copy(text = text, confirmed = true, updatedAtMillis = now)
+            }
+            localError = entries.find { it.id == primaryId }?.let { !PersonalProfile085.valid(it.text) } == true || updated.size > 80 || updated.any { it.text.length > 1000 } || timezoneInvalid
+            if (timezoneInvalid) showMore = true
+            if (!localError) {
+                desiredContextJson = FeedJson.encodeToString(updated); pending = true
+                vm.clearMessage()
+                vm.saveContext(name.trim(), region.trim(), timezone.trim(), updated)
+            }
+        }, enabled = canEdit && entries.find { it.id == primaryId }?.let { PersonalProfile085.valid(it.text) } != false, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("context-save"), shape = RoundedCornerShape(16.dp)) { Text(stringResource(R.string.profile_save_085)) }
+        if (legacy.isNotEmpty()) {
+            TextButton(onClick = { showLegacy = !showLegacy }, modifier = Modifier.testTag("context-legacy-toggle")) {
+                Text(stringResource(R.string.profile_legacy_085, legacy.size))
+                Icon(if (showLegacy) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
+            }
+            Text(stringResource(R.string.profile_legacy_body_085), style = MaterialTheme.typography.bodySmall)
+        }
+        if (showLegacy) legacy.forEach { entry ->
             key(entry.id) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(entry.text, { text ->
@@ -110,7 +144,7 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
                         }
                     }, label = { Text(stringResource(preferencePromptTitle083(entry.category))) },
                         placeholder = { Text(stringResource(preferencePromptHint083(entry.category))) }, minLines = 2, maxLines = 6,
-                        modifier = Modifier.fillMaxWidth().testTag(if (index == 0) "context-edit" else "context-edit-${entry.id}"),
+                        modifier = Modifier.fillMaxWidth().testTag("context-edit-${entry.id}"),
                         shape = RoundedCornerShape(18.dp), enabled = canEdit)
                     Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         val scopeNames = entry.scopes.sorted().map { stringResource(moduleNameResource(it)) }.joinToString(", ")
@@ -129,13 +163,14 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
                 }
             }
         }
-        OutlinedButton(onClick = { entriesJson = FeedJson.encodeToString(entries + ContextEntry(text = "")); localError = false }, enabled = canEdit && entries.size < 80,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("context-add"), shape = RoundedCornerShape(16.dp)) {
-            Icon(Icons.Outlined.Add, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.feed_context_add))
+        TextButton(onClick = { showMore = !showMore }, modifier = Modifier.testTag("context-more")) {
+            Text(stringResource(R.string.preferences_advanced_083))
+            Icon(if (showMore) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
         }
+        if (showMore) {
         Text(stringResource(R.string.feed_context_scopes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(region, { region = it.take(100) }, label = { Text(stringResource(R.string.feed_region)) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("context-region"), shape = RoundedCornerShape(16.dp), enabled = canEdit)
-        OutlinedTextField(timezone, { timezone = it.take(80); localError = false }, label = { Text(stringResource(R.string.feed_timezone)) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("context-timezone"), shape = RoundedCornerShape(16.dp), enabled = canEdit)
+        OutlinedTextField(timezone, { timezone = it.take(80); localError = false }, label = { Text(stringResource(R.string.feed_timezone)) }, isError = timezoneInvalid, supportingText = { if (timezoneInvalid) Text(stringResource(R.string.profile_timezone_invalid_085)) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("context-timezone"), shape = RoundedCornerShape(16.dp), enabled = canEdit)
         HorizontalDivider()
         Text(stringResource(R.string.preferences_import_083), style = MaterialTheme.typography.titleMedium)
         ContextImportActions(enabled = canEdit,
@@ -145,21 +180,8 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
         OutlinedButton(onClick = { exportLauncher.launch("mebot-context-${LocalDate.now()}.json") }, enabled = canEdit,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("context-export")) { Text(stringResource(R.string.feed_context_export)) }
         Text(stringResource(R.string.imports_context_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (localError) Text(stringResource(R.string.feed_context_invalid), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-        if (ui.importPreview == null) ui.error?.let { FeedStatus(it) }
-        Button(onClick = {
-            val now = System.currentTimeMillis()
-            val updated = entries.filter { it.text.isNotBlank() }.map { entry ->
-                val text = entry.text.trim()
-                entry.copy(text = text, confirmed = true, updatedAtMillis = if (state.context.find { it.id == entry.id }?.text != text) now else entry.updatedAtMillis)
-            }
-            localError = updated.size > 80 || updated.any { it.text.length > 1000 } || (timezone.isNotBlank() && runCatching { ZoneId.of(timezone.trim()) }.isFailure)
-            if (!localError) {
-                desiredContextJson = FeedJson.encodeToString(updated); pending = true
-                vm.clearMessage()
-                vm.saveContext(name.trim(), region.trim(), timezone.trim(), updated)
-            }
-        }, enabled = canEdit, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("context-save"), shape = RoundedCornerShape(16.dp)) { Text(stringResource(R.string.feed_context_save)) }
+
+        }
     }
     val scopeEntry = entries.find { it.id == scopeEntryId }
     if (scopeEntry != null) AlertDialog(onDismissRequest = { scopeEntryId = null },

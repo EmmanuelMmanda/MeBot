@@ -69,12 +69,17 @@ fun SavedFeed(state: FeedState, onItem: (String) -> Unit, onSave: (String) -> Un
     val listState = rememberLazyListState()
     LaunchedEffect(query, tab, module, collection, oldest) { listState.scrollToItem(0) }
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("saved-library"),
-        contentPadding = PaddingValues(horizontal = MeBotTokens.ScreenPadding, vertical = 20.dp),
+        contentPadding = PaddingValues(horizontal = MeBotTokens.ScreenPadding, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item(key = "library-header") {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                ScreenTitle(stringResource(R.string.library_title), stringResource(R.string.library_body))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.library_title), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { editCollectionId = null; oldest = !oldest }, modifier = Modifier.size(48.dp).testTag("library-sort")) {
+                        Icon(Icons.Outlined.Sort, stringResource(if (oldest) R.string.library_oldest else R.string.library_recent))
+                    }
+                }
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(tab == "saved", { editCollectionId = null; tab = "saved" }, label = { Text(stringResource(R.string.library_all)) },
                         leadingIcon = { Icon(Icons.Outlined.BookmarkBorder, null, Modifier.size(18.dp)) }, modifier = Modifier.testTag("library-saved"))
                     FilterChip(tab == "starred", { editCollectionId = null; tab = "starred" }, label = { Text(stringResource(R.string.library_starred)) },
@@ -83,7 +88,7 @@ fun SavedFeed(state: FeedState, onItem: (String) -> Unit, onSave: (String) -> Un
                 OutlinedTextField(query, { editCollectionId = null; query = it.take(200) }, singleLine = true,
                     label = { Text(stringResource(R.string.library_search)) }, leadingIcon = { Icon(Icons.Outlined.Search, null) },
                     modifier = Modifier.fillMaxWidth().testTag("library-search"), shape = RoundedCornerShape(18.dp))
-                HorizontalRail(listOf("all" to stringResource(R.string.library_all_types)) + availableModules.map { it.id to moduleName(it) },
+                if (availableModules.size > 1) HorizontalRail(listOf("all" to stringResource(R.string.library_all_types)) + availableModules.map { it.id to moduleName(it) },
                     itemKey = { it.first }, selectedKey = module) { (id, label) ->
                     FilterChip(module == id, { editCollectionId = null; module = id }, label = { Text(label) })
                 }
@@ -92,13 +97,9 @@ fun SavedFeed(state: FeedState, onItem: (String) -> Unit, onSave: (String) -> Un
                     itemKey = { it.first }, selectedKey = collection) { (id, label) ->
                     FilterChip(collection == id, { editCollectionId = null; collection = id }, label = { Text(label) }, modifier = Modifier.testTag("library-filter-collection-$id"))
                 }
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.library_count, filtered.size), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
-                    TextButton(onClick = { editCollectionId = null; oldest = !oldest }, modifier = Modifier.testTag("library-sort")) {
-                        Icon(Icons.Outlined.Sort, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
-                        Text(stringResource(if (oldest) R.string.library_oldest else R.string.library_recent))
-                    }
-                }
+                Text(stringResource(R.string.library_count, filtered.size), style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+
             }
         }
         if (available.isEmpty()) item(key = "empty") {
@@ -112,9 +113,12 @@ fun SavedFeed(state: FeedState, onItem: (String) -> Unit, onSave: (String) -> Un
             }
         }
         items(filtered, key = { it.id }) { item ->
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 StoryRow(item, item.id in state.savedIds, onItem, onSave, null)
-                if (tab == "starred") StarManagement(item)
+                if (tab == "starred") Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    HorizontalDivider(Modifier.padding(bottom = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    StarManagement(item)
+                }
                 if (item.id in state.savedIds && callbacks.onCollection != null) TextButton(onClick = {
                     focusManager.clearFocus()
                     editCollectionId = item.id; collectionName = state.savedCollections[item.id].orEmpty()

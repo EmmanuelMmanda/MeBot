@@ -1,10 +1,6 @@
-<!-- preview-084:start -->
-> **0.8.4 candidate:** Simpler story actions, fullscreen media and a clearer tour; 829 automated tests passed. [Changes and release limits](docs/RELEASE-0.8.4.md). The official download remains **0.8.2**.
-<!-- preview-084:end -->
-
-<!-- preview-083:start -->
-> **0.8.3 preview:** Starred follow-ups, searchable collections, rich conversation resources, broader interests and an offline price comparison tool. [Candidate guide](docs/RELEASE-0.8.3.md). 817 automated tests passed; physical-device verification and original-identity signing remain pending; the official downloadable release remains **0.8.2**.
-<!-- preview-083:end -->
+<!-- preview-085:start -->
+> **0.8.5 candidate:** Custom interests, a simpler About you screen and clearer navigation; 841 local automated tests passed. [Current candidate guide](docs/RELEASE-0.8.5.md). The official download remains **0.8.2**. Earlier candidate release notes are preserved as history.
+<!-- preview-085:end -->
 
 # Start here — MeBot 0.8.2
 

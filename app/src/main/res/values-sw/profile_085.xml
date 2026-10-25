@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="profile_label_085">Iambie MeBot kukuhusu</string>
+    <string name="profile_guide_085">Unafanya kazi gani, unapenda nini, na ungependa kufuatilia nini? Andika tu unachotaka mada ulizochagua zitumie.</string>
+    <string name="profile_example_help_085">Ona mfano</string>
+    <string name="profile_example_title_085">Huu ni mfano, si taarifa zako</string>
+    <string name="profile_example_085">Nina duka dogo. Napenda kupika na mpira wa miguu. Nataka kujifunza kupanga bidhaa na kufuatilia matukio ya karibu. Napenda maelezo mafupi yenye mifano ya vitendo.</string>
+    <string name="profile_insert_example_085">Tumia mfano huu</string>
+    <string name="profile_replace_title_085">Ubadilishe ulichoandika?</string>
+    <string name="profile_replace_body_085">Mfano utachukua nafasi ya ulichoandika. Hakuna kitakachohifadhiwa mpaka uchague kuhifadhi.</string>
+    <string name="profile_replace_085">Badilisha maandishi</string>
+    <string name="profile_cancel_085">Ghairi</string>
+    <string name="profile_count_085">Maneno %1$d / 150 · herufi %2$d / 1,000</string>
+    <string name="profile_limit_085">Tumia maneno yasiyozidi 150 na herufi zisizozidi 1,000. Maandishi yako hayajakatwa.</string>
+    <string name="profile_legacy_085">Taarifa zilizohifadhiwa (%1$d)</string>
+    <string name="profile_legacy_body_085">Taarifa zako za awali zimebaki tofauti, pamoja na ruhusa zake za mada. Fungua kuzikagua au kuzibadili.</string>
+    <string name="profile_custom_interest_085">Mambo mengine unayopenda (si lazima)</string>
+    <string name="profile_custom_hint_085">Andika unachopenda kwa maneno yako. Mada unazochagua tu ndizo zinaweza kutumia taarifa hizi.</string>
+    <string name="profile_timezone_invalid_085">Tumia eneo la saa kama Africa/Dar_es_Salaam au UTC.</string>
+    <string name="profile_save_085">Hifadhi taarifa</string>
+</resources>

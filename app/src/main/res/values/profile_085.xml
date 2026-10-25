@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="profile_label_085">Tell MeBot about yourself</string>
+    <string name="profile_guide_085">What work do you do, what do you enjoy, and what would you like to follow? Share only what you want these topics to use.</string>
+    <string name="profile_example_help_085">See an example</string>
+    <string name="profile_example_title_085">An example, not your saved details</string>
+    <string name="profile_example_085">I run a small shop. I enjoy cooking and football, and I want to learn about stock management and local events. I prefer short explanations with practical examples.</string>
+    <string name="profile_insert_example_085">Use this example</string>
+    <string name="profile_replace_title_085">Replace your draft?</string>
+    <string name="profile_replace_body_085">This replaces the text you have typed with the example. Nothing is saved until you choose Save.</string>
+    <string name="profile_replace_085">Replace draft</string>
+    <string name="profile_cancel_085">Cancel</string>
+    <string name="profile_count_085">%1$d / 150 words · %2$d / 1,000 characters</string>
+    <string name="profile_limit_085">Keep it within 150 words and 1,000 characters. Your draft has not been cut.</string>
+    <string name="profile_legacy_085">Saved details (%1$d)</string>
+    <string name="profile_legacy_body_085">Your earlier details are kept separately with their original topic access. Expand to review or edit them.</string>
+    <string name="profile_custom_interest_085">Your own interests (optional)</string>
+    <string name="profile_custom_hint_085">Add interests in your own words. Only the topics you select can use them.</string>
+    <string name="profile_timezone_invalid_085">Use a timezone such as Africa/Dar_es_Salaam or UTC.</string>
+    <string name="profile_save_085">Save details</string>
+</resources>

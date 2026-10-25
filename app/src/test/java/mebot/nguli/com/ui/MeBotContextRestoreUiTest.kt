@@ -7,6 +7,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
@@ -15,6 +16,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import mebot.nguli.com.R
 import mebot.nguli.com.core.ContextEntry
+import mebot.nguli.com.core.PersonalProfile085
 import mebot.nguli.com.core.FeedModule
 import mebot.nguli.com.core.FeedState
 import mebot.nguli.com.feed.FeedTestApplication
@@ -114,10 +116,98 @@ class MeBotContextRestoreUiTest {
         compose.waitUntil(10_000) { closed == 1 && !replacement.ui.value.contextSaving }
         val saved = runBlocking { app.feedRepository.current() }
         assertEquals("Draft name", saved.name)
-        assertEquals("Keep this unsaved learning preference", saved.context.single().text)
-        assertEquals(setOf("learning"), saved.context.single().scopes)
-        assertEquals(entry.id, saved.context.single().id)
+        val profile = saved.context.single { it.id == PersonalProfile085.PROFILE_ID }
+        assertEquals("Keep this unsaved learning preference", profile.text)
+        assertEquals(setOf("learning"), profile.scopes)
+        assertEquals(entry, saved.context.single { it.id == entry.id })
         assertEquals(1, closed)
+    }
+
+    @Test fun editingSingleProfilePreservesScopeAndUnconfirmedLegacyMetadata() {
+        val primary = entry.copy(id=PersonalProfile085.PROFILE_ID,scopes=setOf("learning"))
+        val legacy = entry.copy(id="unconfirmed",confirmed=false,origin="imported")
+        runBlocking { app.feedRepository.update { it.copy(context=listOf(primary,legacy)) } }
+        compose.waitUntil(10_000) { selected.value!!.ui.value.state?.context == listOf(primary,legacy) }
+        restoration.setContent {
+            val vm=selected.value!!; val ui by vm.ui.collectAsState()
+            MeBotTheme { Surface(Modifier.fillMaxSize()) { ContextScreen(ui,vm,{closed++}) } }
+        }
+        compose.onNodeWithTag("context-edit").performTextReplacement("Revised learning interest")
+        compose.onNodeWithTag("context-save").performScrollTo().performClick()
+        compose.waitUntil(10_000) { closed==1 }
+        val saved=runBlocking { app.feedRepository.current() }
+        assertEquals(setOf("learning"),saved.context.single { it.id==primary.id }.scopes)
+        assertEquals(legacy,saved.context.single { it.id==legacy.id })
+    }
+
+    @Test fun hiddenInvalidTimezoneIsRevealedAndCorrectionSavesTheSameDraft() {
+        restoration.setContent {
+            val vm=selected.value!!; val ui by vm.ui.collectAsState()
+            MeBotTheme { Surface(Modifier.fillMaxSize()) { ContextScreen(ui,vm,{closed++}) } }
+        }
+        compose.onNodeWithTag("context-edit").performTextReplacement("Keep my work interests")
+        compose.onNodeWithTag("context-more").performScrollTo().performClick()
+        compose.onNodeWithTag("context-timezone").performScrollTo().performTextReplacement("Not/A_Timezone")
+        compose.onNodeWithTag("context-more").performScrollTo().performClick()
+        compose.onNodeWithTag("context-timezone").assertDoesNotExist()
+        compose.onNodeWithTag("context-save").performScrollTo().performClick()
+        compose.onNodeWithTag("context-timezone").performScrollTo().assertTextContains("Not/A_Timezone")
+        assertEquals(0,closed)
+        compose.onNodeWithTag("context-edit").assertTextContains("Keep my work interests")
+        compose.onNodeWithTag("context-timezone").performTextReplacement("UTC")
+        compose.onNodeWithTag("context-save").performScrollTo().performClick()
+        compose.waitUntil(10_000) { closed==1 }
+        val saved=runBlocking { app.feedRepository.current() }
+        assertEquals("UTC",saved.timezone)
+        assertEquals("Keep my work interests",saved.context.single { it.id==PersonalProfile085.PROFILE_ID }.text)
+    }
+
+    @Test fun leavingAndReenteringProfileKeepsUnsavedDraftWithoutWritingIt() {
+        val visible = mutableStateOf(true)
+        restoration.setContent {
+            val holder = rememberSaveableStateHolder()
+            if (visible.value) holder.SaveableStateProvider("context") {
+                val vm = selected.value!!
+                val ui by vm.ui.collectAsState()
+                MeBotTheme { Surface(Modifier.fillMaxSize()) { ContextScreen(ui, vm, onDone = {}) } }
+            }
+        }
+        compose.onNodeWithTag("context-edit").performScrollTo().performTextReplacement("My unsaved personal draft")
+        compose.runOnIdle { visible.value = false }
+        compose.onNodeWithTag("context-edit").assertDoesNotExist()
+        assertEquals(listOf(entry), runBlocking { app.feedRepository.current().context })
+        restoration.emulateSavedInstanceStateRestore()
+        compose.runOnIdle { visible.value = true }
+        compose.onNodeWithTag("context-edit").assertTextContains("My unsaved personal draft")
+        assertEquals(listOf(entry), runBlocking { app.feedRepository.current().context })
+    }
+
+    @Test fun noExplicitTopicsDoesNotShareCustomInterestsWithFallbackNews() {
+        var completed: Boolean? = null
+        selected.value!!.configureOnboarding(emptySet(), "", "My private custom interest") { completed = it }
+        compose.waitUntil(10_000) { completed != null }
+        assertEquals(true, completed)
+        val saved = runBlocking { app.feedRepository.current() }
+        assertTrue(saved.context.single { it.id == "onboarding-interests" }.scopes.isEmpty())
+        assertEquals(entry, saved.context.single { it.id == entry.id })
+    }
+
+    @Test fun customOnboardingInterestsCommitWithSelectedScopesAndKeepLegacyNotes() {
+        var completed: Boolean? = null
+        selected.value!!.configureOnboarding(setOf("learning"), "Example region", "Napenda kujifunza kilimo") { completed = it }
+        compose.waitUntil(10_000) { completed != null }
+        assertEquals(true, completed)
+        val saved = runBlocking { app.feedRepository.current() }
+        assertEquals(entry, saved.context.single { it.id == entry.id })
+        val interest = saved.context.single { it.id == "onboarding-interests" }
+        assertEquals("Napenda kujifunza kilimo", interest.text)
+        assertEquals(setOf("learning"), interest.scopes)
+        assertEquals("Example region", saved.region)
+        completed = null
+        selected.value!!.configureOnboarding(setOf("news"), "Other region", "na ".repeat(151)) { completed = it }
+        compose.waitUntil(10_000) { completed != null }
+        assertEquals(false, completed)
+        assertEquals(saved, runBlocking { app.feedRepository.current() })
     }
 
     @Test fun restoredUncommittedModuleSaveRetainsTopicPreferencesAndScopeUntilRetryCommits() {

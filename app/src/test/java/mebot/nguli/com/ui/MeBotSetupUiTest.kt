@@ -98,6 +98,7 @@ class MeBotSetupUiTest {
                 ContextScreen(ui, vm, onDone = {})
             } }
         }
+        compose.onNodeWithTag("context-more").performScrollTo().performClick()
         compose.onNodeWithTag("context-import").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(compose.activity.getString(R.string.feed_advanced)).assertDoesNotExist()
         screenshot("60-mebot-context-v061")

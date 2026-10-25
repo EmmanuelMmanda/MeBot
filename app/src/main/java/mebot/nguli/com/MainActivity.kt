@@ -224,6 +224,8 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
         moduleDraft = Json.encodeToString(selected); moduleIsNew = id == null
         feedVm.clearMessage(); screenStates.removeState("module-edit"); page = "module-edit"
     }
+    // Restore an obsolete utility destination safely after the 0.8.5 upgrade.
+    LaunchedEffect(page) { if (page == "compare_prices") page = "modules" }
     LaunchedEffect(page, itemId) { if (page != "item") feedVm.cancelDetail() }
     fun openConnection() { connectionReturn = page; feedVm.clearMessage(); screenStates.removeState("connect"); page = "connect" }
     fun openModuleCatalog(filter: String) {
@@ -236,7 +238,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
         page = when (page) {
             "checkpoint" -> checkpointReturn
             "alarm-edit" -> "alarms"
-            "alarms", "focus", "history", "daily", "module-edit", "compare_prices" -> "modules"
+            "alarms", "focus", "history", "daily", "module-edit" -> "modules"
             "item" -> detailReturn
             "ask" -> if (itemId != null) "item" else "feed"
             "connect" -> if (onboarded) connectionReturn else "feed"
@@ -342,7 +344,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                             onSavePersonalized = { module, notes -> feedVm.clearMessage(); feedVm.saveModule(module, notes) }, onOpenItem = ::openItem) }
                         "saved" -> SavedFeed(feed, ::openItem, feedVm::toggleSaved, { page = "feed" })
                         "you" -> YouScreen(feedUi,
-                            { contextReturn = "you"; feedVm.clearMessage(); screenStates.removeState("context"); page = "context" }, ::openConnection,
+                            { contextReturn = "you"; feedVm.clearMessage(); page = "context" }, ::openConnection,
                             { feedVm.clearMessage(); screenStates.removeState("delivery"); page = "delivery" }, { page = "settings" }, { page = "data" }, onSoftwareUpdates={page="software-updates"})
                         "software-updates" -> SoftwareUpdatesScreen((LocalContext.current.applicationContext as MeBotApplication).softwareUpdates)
                         "connect" -> ConnectionScreen(feedUi, feedVm::connect, feedVm::disconnect,
@@ -359,7 +361,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                         "data" -> FeedDataScreen(feedUi, feedVm) { page = "settings" }
                         "settings" -> SettingsScreen(state, vm, onErase = { feedVm.reset(); vm.erase(); page = "feed" }, onHelp = { page = "faq" })
                         "faq" -> FaqScreen(
-                            onContext = { contextReturn = "faq"; feedVm.clearMessage(); screenStates.removeState("context"); page = "context" },
+                            onContext = { contextReturn = "faq"; feedVm.clearMessage(); page = "context" },
                             onConnect = ::openConnection,
                             onTour = { showQuickGuide = true },
                         )
@@ -375,7 +377,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                             onFollowUp = { prompt -> itemId?.let { feedVm.followUpDetail(it, prompt) } }, onConnect = ::openConnection)
                         "ai" -> AiWorkspace(feedUi, feedVm::newConversation, feedVm::selectConversation, feedVm::deleteConversation,
                             feedVm::sendConversation, feedVm::clearAnswer, ::openConnection,
-                            { contextReturn = "ai"; feedVm.clearMessage(); screenStates.removeState("context"); page = "context" },
+                            { contextReturn = "ai"; feedVm.clearMessage(); page = "context" },
                             feedVm::importTextAttachment, feedVm::removeAttachment, onSelectModel = feedVm::switchModel, onDismissNotice = feedVm::dismissSetupNotice, onSpeechPreferences = feedVm::updateSpeechPreferences)
                         "search" -> SearchScreen(feedUi, feedVm::search, ::openItem, feedVm::toggleSaved, ::openConnection, feedVm::cancelSearch)
                         "ask" -> AskScreen(feedUi, itemId, { question -> feedVm.ask(itemId, question) }, ::openConnection)
@@ -383,7 +385,6 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                             val initial = remember(page) { DailyLogic.draftForDate(state, visitDate) }
                             DailyScreen(initial, vm::saveDraft) { vm.finishVisit(it) { page = "modules" } }
                         }
-                        "compare_prices" -> UnitPriceScreen()
                         "history" -> HistoryScreen(state)
                         "focus" -> FocusScreen(state, vm, suggestedTitle, suggestedMinutes)
                         "alarms" -> AlarmsScreen(state, vm, ::openAlarm, { checkpointReturn = "alarms"; page = "checkpoint" })

@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import mebot.nguli.com.R
 import mebot.nguli.com.core.FeedState
+import mebot.nguli.com.core.PersonalProfile085
 import mebot.nguli.com.ui.MeBotMark
 import mebot.nguli.com.ui.MeBotPalette
 
@@ -50,11 +51,11 @@ internal fun MeBotOnboarding(state: FeedState, language: String, onLanguage: (St
     var step by rememberSaveable { mutableIntStateOf(0) }
     var selectedKinds by rememberSaveable { mutableStateOf(ArrayList(state.modules.filter { it.enabled }.map { it.kind })) }
     var selectedRegion by rememberSaveable { mutableStateOf(state.region) }
-    var selectedInterests by rememberSaveable { mutableStateOf("") }
+    var selectedInterests by rememberSaveable { mutableStateOf(state.context.find { it.id == "onboarding-interests" }?.text.orEmpty()) }
     var saving by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf(false) }
     fun finish(next: () -> Unit) {
-        if(saving) return
+        if(saving || !PersonalProfile085.valid(selectedInterests)) return
         if(state.onboardingComplete) { next(); return }
         saving = true; saveError=false
         onPreferences(selectedKinds.toSet(), selectedRegion, selectedInterests) { success -> saving=false;if(success)next() else saveError=true }
@@ -97,15 +98,12 @@ internal fun MeBotOnboarding(state: FeedState, language: String, onLanguage: (St
                                 modifier = Modifier.widthIn(max = 420.dp))
                             if(saveError) Text(stringResource(R.string.interests_save_error), color=MaterialTheme.colorScheme.error)
                             if(!state.onboardingComplete && active == 1) {
+                                PersonalProfileEditor085(selectedInterests, !saving, { selectedInterests = it }, "onboarding-preferences", onboarding = true)
                                 InterestPicker083(selectedKinds, !saving) { selectedKinds = ArrayList(it) }
                             } else if(!state.onboardingComplete && active == 5) {
                                 Column(Modifier.fillMaxWidth(), verticalArrangement=Arrangement.spacedBy(12.dp)) {
                                     OutlinedTextField(selectedRegion,{selectedRegion=it.take(100)},singleLine=true,enabled = !saving,
                                         label={Text(stringResource(R.string.interests_region))},modifier=Modifier.fillMaxWidth().testTag("onboarding-region"),shape=RoundedCornerShape(18.dp))
-                                    OutlinedTextField(selectedInterests,{selectedInterests=it.take(500)},minLines=2,maxLines=3,enabled = !saving,
-                                        label={Text(stringResource(R.string.interests_details))},
-                                        placeholder={Text(stringResource(R.string.interests_example))},
-                                        modifier=Modifier.fillMaxWidth().testTag("onboarding-preferences"),shape=RoundedCornerShape(18.dp))
                                     Text(stringResource(R.string.interests_first_feed),style=MaterialTheme.typography.bodySmall)
                                 }
                             } else TourPreview(active)
@@ -122,14 +120,14 @@ internal fun MeBotOnboarding(state: FeedState, language: String, onLanguage: (St
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (step > 0) OutlinedButton(onClick = { step-- }, enabled = !saving, modifier = Modifier.heightIn(min = 52.dp).testTag("onboarding-back"),
                             shape = RoundedCornerShape(18.dp)) { Text(stringResource(R.string.back)) }
-                        Button(onClick = { if (step == tourSteps.lastIndex) finish(onConnect) else step++ }, enabled = !saving,
+                        Button(onClick = { if (step == tourSteps.lastIndex) finish(onConnect) else step++ }, enabled = !saving && PersonalProfile085.valid(selectedInterests),
                             modifier = Modifier.weight(1f).heightIn(min = 54.dp).testTag(if (step == tourSteps.lastIndex) "onboarding-finish" else "onboarding-next"),
                             shape = RoundedCornerShape(18.dp)) {
                             Text(stringResource(if (saving) R.string.delivery_saving else if (step == tourSteps.lastIndex) R.string.tour_connect else R.string.tour_next))
                             Spacer(Modifier.width(9.dp)); Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.size(18.dp))
                         }
                     }
-                    TextButton(onClick = { finish(onStart) }, enabled = !saving, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("onboarding-start")) {
+                    TextButton(onClick = { finish(onStart) }, enabled = !saving && PersonalProfile085.valid(selectedInterests), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("onboarding-start")) {
                         Text(stringResource(if (step == tourSteps.lastIndex) R.string.tour_open else R.string.tour_skip))
                     }
                 }

@@ -195,6 +195,7 @@ class MeBotUsabilityJourneyTest {
         compose.onNodeWithTag("faq-open-context").performScrollTo().performClick()
         waitForTag("context-name")
         // Import and prompt creation are first-class actions, without an advanced-settings step.
+        compose.onNodeWithTag("context-more").performScrollTo().performClick()
         compose.onNodeWithTag("context-import").performScrollTo().assertIsDisplayed().assertIsEnabled()
         compose.onNodeWithTag("context-paste").assertExists()
         compose.onNodeWithTag("context-starter-prompt").performScrollTo().assertIsDisplayed()

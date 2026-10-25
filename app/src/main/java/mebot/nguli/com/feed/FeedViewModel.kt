@@ -289,11 +289,10 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     fun configureOnboarding(kinds: Set<String>, region: String, interests: String, onDone: (Boolean) -> Unit) = work {
         var succeeded = false
         try {
-            require(kinds.all { it in ModuleCatalog.kinds } && region.length <= 100 && interests.length <= 500)
+            require(kinds.all { it in ModuleCatalog.kinds } && region.length <= 100 && PersonalProfile085.valid(interests))
             repository.update { s ->
                 val choices = kinds.ifEmpty { setOf("news") }
-                val notes = s.context.filterNot { it.id == "onboarding-interests" } + if(interests.isBlank()) emptyList() else listOf(
-                    ContextEntry(id="onboarding-interests", text=interests.trim(), category="interest", scopes=choices, origin="onboarding"))
+                val notes = PersonalProfile085.onboarding(s.context, interests, kinds - "weather")
                 s.copy(interestsConfigured=true, region=region.trim(), timezone=s.timezone.ifBlank { java.time.ZoneId.systemDefault().id },
                     modules=s.modules.map { it.copy(enabled=it.kind in choices) }, context=notes, lastRefreshMillis=0)
             }
