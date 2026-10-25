@@ -33,6 +33,7 @@ object ModulePreferences {
             "travel" -> listOf(choice("focus", "all", "weekend", "outdoors", "culture"), choice("cost", "any", "low_cost"), location)
             "horoscope" -> listOf(choice("focus", "general", "work", "relationships", "reflection"), choice("tone", "calm", "playful"))
             "media" -> listOf(choice("focus", "all", "explainers", "demonstrations", "interviews", "news"), choice("duration", "short", "quick", "any"))
+            "food", "farming", "family", "sport", "home", "wellbeing" -> listOf(choice("format", "any", "articles", "videos"), location)
             "watch" -> listOf(choice("format", "any", "articles", "videos"))
             else -> emptyList()
         }

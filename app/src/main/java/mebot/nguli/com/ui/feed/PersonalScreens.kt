@@ -42,7 +42,7 @@ fun YouScreen(ui: FeedUiState, onContext: () -> Unit, onConnect: () -> Unit, onD
                 }
             }
         }
-        FeedSettingsRow(Icons.Outlined.PersonOutline, stringResource(R.string.feed_context), stringResource(R.string.feed_context_summary), onContext)
+        FeedSettingsRow(Icons.Outlined.PersonOutline, stringResource(R.string.preferences_title_083), stringResource(R.string.preferences_body_083), onContext)
         FeedSettingsRow(Icons.Outlined.ChatBubbleOutline, stringResource(R.string.feed_connection),
             if (ui.connected && state.connection.mode == "chatgpt") stringResource(R.string.chatgpt_using_plan)
             else if (ui.connected) "${stringResource(R.string.feed_connected)} · ${state.connection.model}" else stringResource(R.string.feed_not_connected), onConnect)
@@ -90,23 +90,26 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
         if (showPaste && ui.importPreview != null) { showPaste = false; pastedContext = "" }
     }
     ScreenContainer {
-        ScreenTitle(stringResource(R.string.feed_context), stringResource(R.string.feed_context_body))
+        ScreenTitle(stringResource(R.string.preferences_title_083), stringResource(R.string.preferences_body_083))
         ImportFeedback(ui)
-        ContextImportActions(enabled = canEdit,
-            onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
-            onPaste = { vm.clearMessage(); showPaste = true })
-        ContextPromptActions(enabled = canEdit)
         OutlinedTextField(name, { name = it.take(80) }, label = { Text(stringResource(R.string.feed_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("context-name"), shape = RoundedCornerShape(16.dp), enabled = canEdit)
-        SectionLabel(stringResource(R.string.feed_context_entries))
+        PreferencePrompts083(enabled = canEdit && entries.size < 80) { category ->
+            val empty = entries.firstOrNull { it.text.isBlank() }
+            entriesJson = FeedJson.encodeToString(if (empty != null) entries.map { if (it.id == empty.id) it.copy(category = category) else it }
+                else entries + ContextEntry(text = "", category = category, scopes = state.modules.filter { it.enabled }.map { it.kind }.toSet()))
+            localError = false
+        }
+
         entries.forEachIndexed { index, entry ->
             key(entry.id) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(entry.text, { text ->
                         if (text.length <= 1000) {
                             entriesJson = FeedJson.encodeToString(entries.map { if (it.id == entry.id) it.copy(text = text) else it })
                             localError = false
                         }
-                    }, label = { Text(stringResource(R.string.feed_context_entry, index + 1)) }, minLines = 2, maxLines = 6,
+                    }, label = { Text(stringResource(preferencePromptTitle083(entry.category))) },
+                        placeholder = { Text(stringResource(preferencePromptHint083(entry.category))) }, minLines = 2, maxLines = 6,
                         modifier = Modifier.fillMaxWidth().testTag(if (index == 0) "context-edit" else "context-edit-${entry.id}"),
                         shape = RoundedCornerShape(18.dp), enabled = canEdit)
                     Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -133,6 +136,12 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
         Text(stringResource(R.string.feed_context_scopes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(region, { region = it.take(100) }, label = { Text(stringResource(R.string.feed_region)) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("context-region"), shape = RoundedCornerShape(16.dp), enabled = canEdit)
         OutlinedTextField(timezone, { timezone = it.take(80); localError = false }, label = { Text(stringResource(R.string.feed_timezone)) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("context-timezone"), shape = RoundedCornerShape(16.dp), enabled = canEdit)
+        HorizontalDivider()
+        Text(stringResource(R.string.preferences_import_083), style = MaterialTheme.typography.titleMedium)
+        ContextImportActions(enabled = canEdit,
+            onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+            onPaste = { vm.clearMessage(); showPaste = true })
+        ContextPromptActions(enabled = canEdit)
         OutlinedButton(onClick = { exportLauncher.launch("mebot-context-${LocalDate.now()}.json") }, enabled = canEdit,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("context-export")) { Text(stringResource(R.string.feed_context_export)) }
         Text(stringResource(R.string.imports_context_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

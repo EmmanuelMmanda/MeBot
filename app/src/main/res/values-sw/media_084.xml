@@ -1,0 +1,10 @@
+<resources>
+    <string name="media_fullscreen">Skrini nzima</string>
+    <string name="media_close_fullscreen">Funga skrini nzima</string>
+    <string name="media_provider_quality">Ubora, manukuu na kasi hudhibitiwa na YouTube. Tumia mipangilio ya kichezaji inapopatikana.</string>
+    <string name="media_original_quality">Ubora wa chanzo asili. Faili hii haina viwango vya ubora vya kuchagua. Vidhibiti hutegemea kifaa na aina ya faili.</string>
+    <string name="media_image_zoom">Bana kukuza · buruta kusogeza. Maelezo ya picha yanategemea chanzo.</string>
+    <string name="media_reset">Weka upya</string>
+    <string name="media_loading">Inapakia picha…</string>
+    <string name="media_youtube_controls">Tumia vidhibiti vya YouTube kwa skrini nzima na mipangilio inapopatikana.</string>
+</resources>

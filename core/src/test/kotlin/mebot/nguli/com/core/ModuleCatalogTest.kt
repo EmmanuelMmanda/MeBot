@@ -34,8 +34,8 @@ class ModuleCatalogTest {
     }
 
     @Test fun catalogueHasUsablePoliciesWithoutBroadeningContextPermissions() {
-        assertEquals(16, ModuleCatalog.presets.size)
-        assertEquals(17, ModuleCatalog.kinds.size)
+        assertEquals(22, ModuleCatalog.presets.size)
+        assertEquals(23, ModuleCatalog.kinds.size)
         assertEquals(listOf("news"), ModuleCatalog.defaults.filter { it.enabled }.map { it.id })
         assertEquals(ModuleCatalog.presets.size, ModuleCatalog.presets.map { it.kind }.distinct().size)
         ModuleCatalog.presets.forEach { preset ->

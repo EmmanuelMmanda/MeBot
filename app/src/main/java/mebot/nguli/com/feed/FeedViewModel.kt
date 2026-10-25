@@ -97,6 +97,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     private var askGeneration = 0L
     private var connectGeneration = 0L
     private var lastAutomaticAttemptMillis = 0L
+    private var lastLoadMoreAttemptMillis = 0L
 
     init {
         viewModelScope.launch { engine.progress.collect { p -> _ui.update { it.copy(refreshProgress=p) } } }
@@ -163,6 +164,13 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
             lastAutomaticAttemptMillis = now
             refreshInternal(manual = false)
         }
+    }
+    fun loadMore(moduleId: String?) {
+        val now = System.currentTimeMillis()
+        if (lastLoadMoreAttemptMillis > 0 && now - lastLoadMoreAttemptMillis in 0 until 60_000L) return
+        if (refreshJob?.isActive == true || connectJob?.isActive == true) return
+        lastLoadMoreAttemptMillis = now
+        refreshInternal(manual = false, moduleId = moduleId)
     }
     fun refresh() = refreshInternal(manual = true)
     fun refreshModule(moduleId: String?) = refreshInternal(manual = true, moduleId = moduleId)
@@ -328,10 +336,19 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleSaved(id: String) = work {
         repository.update { s ->
             require(s.items.any { it.id == id })
-            s.copy(savedIds = if (id in s.savedIds) s.savedIds - id else s.savedIds + id)
+            s.copy(savedIds = if (id in s.savedIds) s.savedIds - id else s.savedIds + id,
+                savedCollections = if (id in s.savedIds) s.savedCollections - id else s.savedCollections)
         }
     }
-    fun hideItem(id: String) = work { repository.update { it.copy(hiddenIds = (it.hiddenIds + id).toList().takeLast(1000).toSet()) } }
+    fun updateSpeechPreferences(rate: Float, voice: String) = work { repository.update { it.copy(speechRate = rate, speechVoice = voice) } }
+    fun toggleStar(id: String) = work { repository.update { StarredStories.toggle(it, id, System.currentTimeMillis()) } }
+    fun configureStar(id: String, paused: Boolean, hours: Int) = work { repository.update { StarredStories.configure(it, id, paused, hours) } }
+    fun setSavedCollection(id: String, name: String) = work { repository.update { StarredStories.collection(it, id, name) } }
+    fun saveReadingPreferences(update: (ReadingPreferences) -> ReadingPreferences) = work {
+        repository.update { it.copy(readingPreferences = update(it.readingPreferences)) }
+    }
+    fun hideItem(id: String) = work { repository.update { it.copy(hiddenIds = (it.hiddenIds + id).toList().takeLast(1000).toSet(),
+        starredStories = it.starredStories.map { star -> if (star.itemId == id) star.copy(paused = true) else star }) } }
     fun rateRelevance(id: String, relevant: Boolean?) = work {
         repository.update { RelevanceFeedback.record(it, id, relevant, System.currentTimeMillis()) }
     }
@@ -485,6 +502,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
                 if (thread.turns.size > ConversationLogic.maxTurns - (if (duplicateRetry) 1 else 2)) throw FeedFailure("conversation_full")
                 thread.copy(title = thread.title.ifBlank { clean.take(160) },
                     turns = if (duplicateRetry) thread.turns else thread.turns + AiTurn(role = "user", text = clean),
+                    attachments = thread.attachments.map { if (it.usedAtMillis > 0) it else it.copy(usedAtMillis = maxOf(System.currentTimeMillis(), thread.createdAtMillis)) },
                     updatedAtMillis = maxOf(System.currentTimeMillis(), thread.createdAtMillis))
             }
         }) }

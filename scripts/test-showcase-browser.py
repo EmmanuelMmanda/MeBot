@@ -50,11 +50,21 @@ try:
                 page = context.new_page()
                 errors = []
                 page.on('pageerror', lambda e: errors.append(str(e)))
-                for name in ['index.html', 'screenshots.html', 'download.html', 'releases.html', 'tour.html']:
+                for name in ['index.html', 'screenshots.html', 'download.html', 'releases.html', 'tour.html', 'preview-083.html', 'preview-084.html']:
                     load(page,name,wait_until='networkidle')
                     assert page.locator('h1').count() == 1, name
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), f'Overflow {width} {theme} {name}'
                     assert not errors, errors
+                    if name == 'preview-083.html':
+                        assert 'Preview, not a published APK' in page.locator('main').inner_text()
+                        assert page.locator('a[href*="/releases/download/v0.8.3/"]').count() == 0
+                        assert page.locator('#kiswahili').get_attribute('lang') == 'sw'
+                        assert page.locator('.preview-jumps a').count() == 6
+                    if name == 'preview-084.html':
+                        assert 'Preview, not a published APK' in page.locator('main').inner_text()
+                        assert page.locator('a[href*="/releases/download/v0.8.4/"]').count() == 0
+                        assert page.locator('main [lang="sw"]').count() == 1
+                        assert page.locator('a[href="preview-083.html"]').count() >= 1
                     for link in page.locator('[data-release-apk]').all():
                         assert link.is_visible() and link.get_attribute('href') == apk
                     for im in page.locator('.shot:visible img').all():
@@ -109,6 +119,12 @@ try:
         page.locator('[data-tour-prev]').click(); assert page.locator('#tour-panel-0').is_visible()
         page.screenshot(path=str(OUT/'tour-390.png'),full_page=True)
         checks += ['Illustrated guide: all six steps, next/back, keyboard Home and reduced motion']
+        load(page,'preview-084.html',wait_until='networkidle')
+        page.keyboard.press('Tab')
+        assert page.locator('.skip-link').evaluate('el => el === document.activeElement')
+        page.keyboard.press('Enter')
+        assert page.locator('#main').evaluate('el => el === document.activeElement')
+        checks += ['0.8.4 preview: keyboard skip link reaches main content']
         context.close(); browser.close()
 finally:
     server.shutdown()

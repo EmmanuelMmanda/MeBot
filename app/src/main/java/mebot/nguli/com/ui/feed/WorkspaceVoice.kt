@@ -18,13 +18,14 @@ import java.util.Locale
 internal data class WorkspaceSpeech(
     val available: Boolean,
     val readingId: String?,
+    val voices: List<Pair<String, String>> = emptyList(),
     val read: (String, String) -> Unit,
     val stop: () -> Unit,
 )
 
 /** Phone speech services are independent of model capabilities and never start automatically. */
 @Composable
-internal fun rememberWorkspaceSpeech(): WorkspaceSpeech {
+internal fun rememberWorkspaceSpeech(rate: Float = 1f, voiceName: String = ""): WorkspaceSpeech {
     val context = LocalContext.current
     val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
     val owner = LocalLifecycleOwner.current
@@ -32,6 +33,9 @@ internal fun rememberWorkspaceSpeech(): WorkspaceSpeech {
     var available by remember { mutableStateOf(false) }
     var readingId by remember { mutableStateOf<String?>(null) }
     var lastUtterance by remember { mutableStateOf<String?>(null) }
+    var voices by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    val selectedRate by rememberUpdatedState(rate.coerceIn(0.6f, 1.5f))
+    val selectedVoice by rememberUpdatedState(voiceName)
     val handler = remember { Handler(Looper.getMainLooper()) }
     DisposableEffect(context, locale) {
         var disposed = false
@@ -44,6 +48,11 @@ internal fun rememberWorkspaceSpeech(): WorkspaceSpeech {
                 handler.post {
                     if (!disposed && status == TextToSpeech.SUCCESS) {
                         available = runCatching { created?.setLanguage(locale)?.let { it >= TextToSpeech.LANG_AVAILABLE } == true }.getOrDefault(false)
+                        voices = runCatching { created?.voices.orEmpty().filter { it.locale.language == locale.language }
+                            .sortedWith(compareBy({ it.isNetworkConnectionRequired }, { it.name })).take(24)
+                            .map { it.name to "${it.locale.displayName} · ${it.name}" } }.getOrDefault(emptyList())
+                        created?.setSpeechRate(selectedRate)
+                        created?.voices?.firstOrNull { it.name == selectedVoice && it.locale.language == locale.language }?.let { created?.voice = it }
                     }
                 }
             } }.getOrNull()
@@ -77,7 +86,14 @@ internal fun rememberWorkspaceSpeech(): WorkspaceSpeech {
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
-    return WorkspaceSpeech(available, readingId, read = { id, text ->
+    LaunchedEffect(engine, available, rate, voiceName) {
+        engine?.let { active ->
+            active.setSpeechRate(rate.coerceIn(0.6f, 1.5f))
+            if (voiceName.isBlank()) active.setLanguage(locale)
+            else active.voices?.firstOrNull { it.name == voiceName && it.locale.language == locale.language }?.let { active.voice = it }
+        }
+    }
+    return WorkspaceSpeech(available, readingId, voices, read = { id, text ->
         val active = engine
         if (available && active != null && text.isNotBlank()) {
             val parts = text.chunked((TextToSpeech.getMaxSpeechInputLength() - 1).coerceAtLeast(500))

@@ -61,10 +61,13 @@ fun FeedDetail(
     val state = ui.state
     val item = state?.items?.find { it.id == id }
     val context = LocalContext.current
+    val relevanceContext = LocalRelevanceContext.current
     val now = LocalFeedClock.current
     var section by rememberSaveable(id) { mutableStateOf("overview") }
     var menu by rememberSaveable(id) { mutableStateOf(false) }
     var storyNotesOpen by rememberSaveable(id) { mutableStateOf(false) }
+    var fullscreenImage by rememberSaveable(id) { mutableStateOf(false) }
+    if (fullscreenImage) item?.media?.let { media -> FullscreenMediaPreview(media.url, item.title, onClose = { fullscreenImage = false }, image = true) }
     val previewKey = "detail-$id"
     val activePreview by MediaPreviewSession.state.collectAsState()
     val showPlayer = activePreview == previewKey
@@ -99,6 +102,14 @@ fun FeedDetail(
                             Icon(Icons.Outlined.MoreHoriz, stringResource(R.string.detail_more_actions))
                         }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            if (originalAvailable) DropdownMenuItem(text = { Text(stringResource(R.string.detail_share)) },
+                                leadingIcon = { Icon(Icons.Outlined.Share, null) },
+                                onClick = { menu = false; shareResource(context, item.title, item.sourceUrl) })
+                            DropdownMenuItem(text = { Text(stringResource(if (item.id in state.savedIds) R.string.feed_unsave else R.string.feed_save)) },
+                                leadingIcon = { Icon(Icons.Outlined.BookmarkBorder, null) }, onClick = { menu = false; onSave(item.id) })
+                            relevanceContext.onVote?.let { rate -> DropdownMenuItem(text = { Text(stringResource(R.string.feedback_less_083)) },
+                                leadingIcon = { Icon(Icons.Outlined.NotInterested, null) }, onClick = { menu = false; rate(item.id, false) }) }
+
                             DropdownMenuItem(text = { Text(stringResource(R.string.detail_hide)) },
                                 leadingIcon = { Icon(Icons.Outlined.VisibilityOff, null) },
                                 onClick = { menu = false; onHide(item.id); onFeed() }, modifier = Modifier.testTag("detail-hide"))
@@ -113,6 +124,10 @@ fun FeedDetail(
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Box(Modifier.fillMaxWidth().height(184.dp).clip(RoundedCornerShape(24.dp))) {
                         PublisherImage(item, Modifier.fillMaxSize(), large = true)
+                        IconButton(onClick = { fullscreenImage = true }, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).size(48.dp).testTag("detail-image-fullscreen"),
+                            colors = IconButtonDefaults.filledIconButtonColors()) {
+                            Icon(Icons.Outlined.Fullscreen, stringResource(R.string.media_fullscreen))
+                        }
                         if (item.contentType == "video" && originalAvailable) FilledIconButton(
                             onClick = { openResource(item.sourceUrl) }, modifier = Modifier.align(Alignment.Center).size(56.dp).testTag("detail-play"),
                             shape = CircleShape,
@@ -130,6 +145,7 @@ fun FeedDetail(
                     Text(stringResource(resourceAction(item.contentType)), modifier = Modifier.weight(1f, fill = false))
                     Spacer(Modifier.width(8.dp)); Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(18.dp))
                 } else Spacer(Modifier.weight(1f))
+                RelevanceControls(item)
                 val saved = item.id in state.savedIds
                 FilledTonalIconButton(onClick = { onSave(item.id) }, modifier = Modifier.size(48.dp).testTag("detail-save")) {
                     Icon(if (saved) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
@@ -139,7 +155,6 @@ fun FeedDetail(
                     Icon(Icons.Outlined.Share, stringResource(R.string.detail_share))
                 }
             }
-            RelevanceControls(item)
             if (DownloadResource.from(item.sourceUrl) != null && RichContent.type(item.sourceUrl) == "document")
                 ResourceDownloadButton(item.sourceUrl)
             if(showPlayer && originalAvailable) {
@@ -373,13 +388,7 @@ internal fun ConversationSources(sources: List<FeedCitation>, tagPrefix: String)
     }
     if (valid.isEmpty()) return
     val media = remember(valid) { valid.filter { RichContent.type(it.url) in setOf("image", "youtube", "audio", "video") } }
-    val context = LocalContext.current
-    val fileChecks by ResourceChecks.state.collectAsState()
-    val fileLinks = remember(valid) { valid.filter { RichContent.type(it.url) == "document" } }
-    LaunchedEffect(fileLinks.map { it.url }) {
-        fileLinks.take(8).forEach { source -> launch { ResourceChecks.check(context, source.url) } }
-    }
-    val documents = remember(fileLinks, fileChecks) { fileLinks.filter { fileChecks[it.url]?.available == true } }
+    val documents = remember(valid) { valid.filter { RichContent.type(it.url) == "document" } }
     var selected by rememberSaveable(tagPrefix) { mutableStateOf("all") }
     var expanded by rememberSaveable(tagPrefix, selected) { mutableStateOf(false) }
     val shown = when (selected) { "media" -> media; "files" -> documents; else -> valid }

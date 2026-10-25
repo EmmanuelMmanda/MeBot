@@ -147,7 +147,32 @@ class MeBotDeliveryPreferencesUiTest {
         screenshot("mebot-0.8.2-background-sw")
         compose.onNodeWithTag("delivery-quiet-start").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("delivery-quiet-end").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("reading-auto-more").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("reading-notification-preview").performScrollTo().assertIsDisplayed()
+        screenshot("mebot-0.8.3-reading-sw")
         compose.onNodeWithTag("delivery-save").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun presentationChangesAreAtomicPersistedAndDoNotGrantBackgroundPermission() {
+        show()
+        compose.onNodeWithTag("reading-auto-more").performScrollTo().assertIsOn()
+        compose.onNodeWithTag("reading-notification-preview").performScrollTo()
+        screenshot("mebot-0.8.3-reading")
+        compose.runOnIdle {
+            selected.value!!.saveReadingPreferences { it.copy(autoLoadMore = false) }
+            selected.value!!.saveReadingPreferences { it.copy(notificationPreview = false) }
+        }
+        compose.waitUntil(10_000) {
+            selected.value!!.ui.value.state?.readingPreferences?.let { !it.autoLoadMore && !it.notificationPreview } == true
+        }
+        assertFalse(current().readingPreferences.autoLoadMore)
+        assertFalse(current().readingPreferences.notificationPreview)
+        assertFalse(current().notifications)
+        assertFalse(current().backgroundEnabled)
+        assertEquals(28, current().dailyRequestLimit)
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithTag("reading-auto-more").performScrollTo().assertIsOff()
+        compose.onNodeWithTag("reading-notification-preview").performScrollTo().assertIsOff()
     }
 
     private fun show(largeText: Boolean = false) {

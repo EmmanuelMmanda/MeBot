@@ -12,6 +12,16 @@ class ConversationBriefLogicTest {
     private val note = ContextEntry(id = "approved", text = "An approved technical priority", scopes = setOf(module.kind), updatedAtMillis = 1)
     private val state = FeedState(modules = listOf(module), items = listOf(item), context = listOf(note), timezone = "UTC")
 
+    @Test fun attachmentUsageSurvivesRoundTripAndRejectsInvalidTimestamp() {
+        val legacy = Json.decodeFromString<AiAttachment>("""{"id":"file","name":"notes.txt","text":"Useful note"}""")
+        assertEquals(0L, legacy.usedAtMillis)
+        val used = legacy.copy(usedAtMillis = 100)
+        val json = Json.encodeToString(AiAttachment.serializer(), used)
+        assertEquals(used, Json.decodeFromString<AiAttachment>(json))
+        val thread = AiConversation(attachments=listOf(used.copy(usedAtMillis=-1)))
+        assertThrows(IllegalArgumentException::class.java) { ConversationLogic.validate(listOf(thread)) }
+    }
+
     @Test fun cachedExplanationSurvivesReadingRankAndPublisherPreviewChanges() {
         val fingerprint = BriefCache.fingerprint(state, item, "en")
         val refreshed = item.copy(fetchedAtMillis = 200, relevance = 91, why = "Updated ranking explanation",

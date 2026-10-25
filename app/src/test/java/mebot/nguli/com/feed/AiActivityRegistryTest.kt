@@ -72,4 +72,16 @@ class AiActivityRegistryTest {
         }
         assertTrue(AiActivityRegistry.state.value.isEmpty())
     }
+    @Test fun progressCountsOnlyActualPublicTextDeltas() = runBlocking {
+        AiActivityRegistry.run("progress", "news", "answer") {
+            AiActivityRegistry.observe("response.reasoning_text.delta", buildJsonObject { put("delta", "private") })
+            assertEquals(0, AiActivityRegistry.state.value.values.single().receivedCharacters)
+            AiActivityRegistry.observe("response.output_text.delta", buildJsonObject { put("delta", "hello") })
+            AiActivityRegistry.observe("response.output_text.delta", buildJsonObject { put("delta", " world") })
+            assertEquals(11, AiActivityRegistry.state.value.values.single().receivedCharacters)
+            AiActivityRegistry.report("ready", count = 2)
+            assertEquals(2, AiActivityRegistry.state.value.values.single().steps.last().count)
+        }
+        assertTrue(AiActivityRegistry.state.value.isEmpty())
+    }
 }

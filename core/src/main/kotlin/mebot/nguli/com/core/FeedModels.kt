@@ -18,6 +18,11 @@ data class FeedState(
     val items: List<FeedItem> = emptyList(),
     val savedIds: Set<String> = emptySet(),
     val hiddenIds: Set<String> = emptySet(),
+    val starredStories: List<StarredStory> = emptyList(),
+    val savedCollections: Map<String, String> = emptyMap(),
+    val readingPreferences: ReadingPreferences = ReadingPreferences(),
+    val speechRate: Float = 1f,
+    val speechVoice: String = "",
     val connection: AiConnection = AiConnection(),
     val lastRefreshMillis: Long = 0,
     val lastAiRefreshMillis: Long = 0,
@@ -191,7 +196,7 @@ object ModuleCatalog {
             "Find a specific destination, attraction or travel update with an official resource link. Date price and schedule information; leave unknown costs unstated. Use official authorities for entry requirements. Never imply a reservation was made."),
         ModulePreset("horoscope", "life", "A short daily horoscope for the chosen zodiac sign.",
             "Write one brief optional entertainment reading for the selected sign. Avoid factual predictions, alarming claims or health, financial and relationship instructions. Do not imply a scientific basis.", "entertainment"),
-    )
+    ) + EverydayModules083.presets
     val kinds = presets.map { it.kind }.toSet() + "watch"
 
     val defaults: List<FeedModule> = presets.map { preset ->

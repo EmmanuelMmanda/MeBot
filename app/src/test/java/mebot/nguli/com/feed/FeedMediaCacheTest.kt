@@ -91,6 +91,29 @@ class FeedMediaCacheTest {
         assertEquals(2, calls.get())
     }
 
+    @Test fun explicitRetryRecoversOneUrlWithoutClearingOtherFailureCooldowns() = runBlocking {
+        val second = "https://publisher.example/media/second.png"
+        val calls = mutableMapOf<String, Int>()
+        var online = false
+        val repository = FeedMediaRepository(context, fetcher = { requested ->
+            calls[requested] = (calls[requested] ?: 0) + 1
+            if (online) image else null
+        }, clock = { now })
+        assertNull(repository.load(url))
+        assertNull(repository.load(second))
+        online = true
+        // Automatic loads retain the failure throttle even after connectivity returns.
+        assertNull(repository.load(url))
+        assertEquals(1, calls[url])
+        assertNotNull(repository.load(url, retryFailed = true))
+        assertEquals(2, calls[url])
+        assertNull(repository.load(second))
+        assertEquals(1, calls[second])
+        now += 300_001
+        assertNotNull(repository.load(second))
+        assertEquals(2, calls[second])
+    }
+
     @Test fun cancelledLeaderAndWaiterDoNotPoisonTheImageForTheRemainingCaller() = runBlocking {
         val calls = AtomicInteger()
         val entered = CompletableDeferred<Unit>()

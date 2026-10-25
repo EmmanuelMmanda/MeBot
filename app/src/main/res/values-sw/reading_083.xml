@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="reading_presentation_title">Usomaji na maendeleo</string>
+    <string name="reading_presentation_body">Chagua jinsi taarifa zinavyoonekana na maendeleo unayotaka kuona. Hii haibadili kikomo chako cha AI.</string>
+    <string name="reading_auto_more">Ongeza taarifa ninaposogeza ukurasa</string>
+    <string name="reading_activity_details">Onyesha hatua za kazi inayoendelea</string>
+    <string name="reading_notification_images">Weka picha kwenye arifa</string>
+    <string name="reading_notification_preview">Onyesha vichwa vya taarifa kwenye arifa</string>
+    <string name="reading_notification_privacy">Arifa ni chaguo lako. Hazitumiwi wakati wa mapumziko na hutumwa mara moja tu kwa siku. Ficha vichwa ukitaka faragha zaidi.</string>
+    <string name="activity_received_chars">Herufi %1$d zimepokelewa</string>
+    <string name="activity_progress_private">Hali ya sasa. Gusa kuona hatua na vyanzo vilivyotumika.</string>
+    <string name="notification_ready_private">Taarifa mpya ziko tayari kusomwa.</string>
+    <string name="notification_open">Soma</string>
+</resources>

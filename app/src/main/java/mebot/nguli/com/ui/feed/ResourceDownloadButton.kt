@@ -35,7 +35,7 @@ internal fun ResourceDownloadButton(url: String) {
     val scope = rememberCoroutineScope()
     val checks by ResourceChecks.state.collectAsState()
     val checked = checks[url]
-    LaunchedEffect(url) { ResourceChecks.check(context, url) }
+    // Verification starts on the download tap, never while streaming response cards.
     var pendingPath by rememberSaveable(url) { mutableStateOf<String?>(null) }
     var working by remember { mutableStateOf(false) }
     var failed by remember(url) { mutableStateOf(false) }
