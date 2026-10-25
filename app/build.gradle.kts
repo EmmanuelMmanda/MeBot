@@ -45,6 +45,15 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
+    // Compact, separately installed preview: release runtime dependencies, test identity only.
+    buildTypes.create("preview") {
+        initWith(buildTypes.getByName("release"))
+        applicationIdSuffix = ".debug"
+        versionNameSuffix = "-preview"
+        isDebuggable = false
+        signingConfig = signingConfigs.getByName("debug")
+        matchingFallbacks += "release"
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     buildFeatures { compose = true; buildConfig = true }
     // Both bundled locales remain available for offline, in-app language changes.
