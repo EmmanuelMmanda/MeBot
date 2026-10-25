@@ -1,0 +1,66 @@
+name: Prepare MeBot 0.8.2 verification inputs
+on:
+  push:
+    branches: [release/android-0.8.2]
+    paths: ['.github/workflows/support-082.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inputs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Download checksum-verified Android 34 test runtime
+        run: |
+          mkdir -p inputs/m2/org/robolectric/android-all-instrumented/14-robolectric-10818077-i7
+          cd inputs/m2/org/robolectric/android-all-instrumented/14-robolectric-10818077-i7
+          BASE=https://repo.maven.apache.org/maven2/org/robolectric/android-all-instrumented/14-robolectric-10818077-i7/android-all-instrumented-14-robolectric-10818077-i7
+          for suffix in jar pom jar.sha512 pom.sha512; do curl --fail --location --retry 3 "$BASE.$suffix" -o "android-all-instrumented-14-robolectric-10818077-i7.$suffix"; done
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          for ext in ['jar','pom']:
+              p=Path('android-all-instrumented-14-robolectric-10818077-i7.'+ext)
+              assert hashlib.sha512(p.read_bytes()).hexdigest()==Path(str(p)+'.sha512').read_text().strip()
+          PY
+      - name: Capture dated public content without accounts or paid inference
+        run: |
+          mkdir -p inputs/public
+          python3 - <<'PY'
+          import datetime,email.utils,hashlib,html,json,re,urllib.request,xml.etree.ElementTree as ET
+          from pathlib import Path
+          now=datetime.datetime.now(datetime.timezone.utc)
+          items=[];errors=[]
+          def get(url):
+              request=urllib.request.Request(url,headers={'User-Agent':'MeBot-public-source-review/0.8.2'})
+              with urllib.request.urlopen(request,timeout=25) as r:
+                  data=r.read(4*1024*1024+1)
+                  if len(data)>4*1024*1024:raise ValueError('oversized source')
+                  return data
+          def clean(s):return re.sub(r'\s+',' ',html.unescape(re.sub('<[^>]+>',' ',s or ''))).strip()
+          for kind,name,url in [('news','Daily News Tanzania','https://dailynews.co.tz/feed/'),('business','Daily News Business','https://dailynews.co.tz/category/business/feed/'),('news','BBC Swahili','https://feeds.bbci.co.uk/swahili/rss.xml'),('science','NASA','https://www.nasa.gov/news-release/feed/')]:
+              try:
+                  raw=get(url);root=ET.fromstring(raw)
+                  for e in root.findall('.//item')[:6]:
+                      title=clean(e.findtext('title'));link=(e.findtext('link') or '').strip()
+                      if not title or not link.startswith('https://'):continue
+                      summary=clean(e.findtext('description'))[:650]
+                      pub=e.findtext('pubDate') or ''
+                      items.append(dict(kind=kind,title=title,summary=summary,sourceName=name,sourceUrl=link,publishedAt=pub,capturedAt=now.isoformat(),evidenceSource=url))
+              except Exception as exc:errors.append({'source':url,'error':str(exc)[:200]})
+          for repo in ['ollama/ollama','flutter/flutter','JetBrains/kotlin']:
+              url='https://api.github.com/repos/'+repo+'/releases/latest'
+              try:
+                  x=json.loads(get(url));items.append(dict(kind='github',title=repo+' · '+(x.get('name') or x['tag_name']),summary=clean(x.get('body',''))[:650],sourceName='GitHub · '+repo,sourceUrl=x['html_url'],publishedAt=x.get('published_at',''),capturedAt=now.isoformat(),evidenceSource=url))
+              except Exception as exc:errors.append({'source':url,'error':str(exc)[:200]})
+          Path('inputs/public/source-captures.json').write_text(json.dumps({'capturedAt':now.isoformat(),'items':items,'errors':errors},ensure_ascii=False,indent=2)+'\n')
+          print('Captured',len(items),'real public items;',len(errors),'source failures recorded.')
+          assert len(items)>=3, 'No adequate public examples retrieved'
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mebot-082-verification-inputs
+          path: inputs/
+          retention-days: 7
+          compression-level: 0
