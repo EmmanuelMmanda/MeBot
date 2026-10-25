@@ -26,9 +26,9 @@
     <string name="chatgpt_sign_out">Toka kwenye akaunti</string>
     <string name="chatgpt_choose_model">Chagua modeli</string>
     <string name="chatgpt_models_empty">Haikuwezekana kupata orodha ya modeli. Kagua muunganisho tena.</string>
-    <string name="chatgpt_api_alternative">Tumia ufunguo wa API</string>
-    <string name="chatgpt_api_heading">Muunganisho wa API</string>
-    <string name="chatgpt_api_active">Unatumia muunganisho wa API</string>
+    <string name="chatgpt_api_alternative">Watoa huduma wengine au seva yako</string>
+    <string name="chatgpt_api_heading">Muunganisho wako</string>
+    <string name="chatgpt_api_active">AI imeunganishwa</string>
     <string name="chatgpt_api_billing">API ina malipo tofauti. MeBot hubadilisha muunganisho tu unapochagua kuunganisha.</string>
     <string name="chatgpt_memory_note">Kuingia hakuleti mazungumzo au kumbukumbu zako. Chagua MeBot ijue nini kwenye Muktadha wangu.</string>
     <string name="chatgpt_error_ineligible">Akaunti hii haiwezi kushiriki mpango wa ChatGPT na MeBot kwa sasa.</string>

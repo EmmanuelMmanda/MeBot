@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="photo_dar_alt">Dar es Salaam skyline viewed from the sea.</string>
+    <string name="photo_earth_alt">A satellite composite of Earth at night.</string>
+    <string name="photo_dar_credit">Dar es Salaam · Len pel · CC BY-SA 4.0</string>
+    <string name="photo_earth_credit">Earth at night · NASA/NOAA</string>
+    <string name="photo_source">Photo source</string>
+    <string name="photo_license">Photo licence</string>
+    <string name="photo_near_far">From your city to the wider world</string>
+    <string name="photo_near_far_body">Choose local news, useful opportunities and subjects you enjoy.</string>
+    <string name="photo_explore_title">Explore a question</string>
+    <string name="photo_explore_body">Why do some places look brighter at night?</string>
+    <string name="photo_explore_fact">NASA combines satellite images to show where artificial lights are visible at night.</string>
+    <string name="about_project">News, learning, sources and practical tools, shaped around your interests.</string>
+    <string name="about_images">Photo credits</string>
+    <string name="about_source">Public source code</string>
+</resources>

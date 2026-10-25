@@ -27,9 +27,9 @@
     <string name="chatgpt_sign_out">Sign out</string>
     <string name="chatgpt_choose_model">Choose a model</string>
     <string name="chatgpt_models_empty">Couldn’t load model access. Check the connection again.</string>
-    <string name="chatgpt_api_alternative">Use an API key instead</string>
-    <string name="chatgpt_api_heading">API connection</string>
-    <string name="chatgpt_api_active">Using your API connection</string>
+    <string name="chatgpt_api_alternative">Other providers or your own server</string>
+    <string name="chatgpt_api_heading">Your provider connection</string>
+    <string name="chatgpt_api_active">AI connection is active</string>
     <string name="chatgpt_api_billing">API usage has separate billing. MeBot only switches when you choose to connect.</string>
     <string name="chatgpt_memory_note">Sign-in does not import chats or memories. Choose what MeBot knows under My context.</string>
     <string name="chatgpt_error_ineligible">This account cannot share its ChatGPT plan with MeBot yet.</string>

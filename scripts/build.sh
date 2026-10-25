@@ -15,8 +15,8 @@ case "$mode" in
     tasks=(:app:assembleDebug)
     ;;
   release)
-    release_keystore="${MEBOT_KEYSTORE:-${MYNGULI_KEYSTORE:-}}"
-    release_password="${MEBOT_KEYSTORE_PASSWORD:-${MYNGULI_KEYSTORE_PASSWORD:-}}"
+    release_keystore="${MEBOT_KEYSTORE:-${MEBOT_KEYSTORE:-}}"
+    release_password="${MEBOT_KEYSTORE_PASSWORD:-${MEBOT_KEYSTORE_PASSWORD:-}}"
     if [[ -z "$release_keystore" || -z "$release_password" ]]; then
       printf 'Set MEBOT_KEYSTORE and MEBOT_KEYSTORE_PASSWORD through your local secrets manager.\n' >&2
       exit 2

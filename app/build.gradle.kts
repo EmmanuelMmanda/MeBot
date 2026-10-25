@@ -6,25 +6,25 @@ plugins {
 }
 
 android {
-    namespace = "app.mynguli"
+    namespace = "mebot.nguli.com"
     compileSdk = 36
     defaultConfig {
-        applicationId = "app.mynguli"
+        applicationId = "mebot.nguli.com"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.8.1"
+        versionCode = 13
+        versionName = "0.8.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
-    val signingPath = System.getenv("MEBOT_KEYSTORE") ?: System.getenv("MYNGULI_KEYSTORE")
+    val signingPath = System.getenv("MEBOT_KEYSTORE")
     signingConfigs {
         if (!signingPath.isNullOrBlank()) {
             create("release") {
                 storeFile = file(signingPath)
-                storePassword = System.getenv("MEBOT_KEYSTORE_PASSWORD") ?: System.getenv("MYNGULI_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("MEBOT_KEY_ALIAS") ?: System.getenv("MYNGULI_KEY_ALIAS") ?: "mynguli"
-                keyPassword = System.getenv("MEBOT_KEY_PASSWORD") ?: System.getenv("MYNGULI_KEY_PASSWORD") ?: storePassword
+                storePassword = System.getenv("MEBOT_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("MEBOT_KEY_ALIAS") ?: "mebot"
+                keyPassword = System.getenv("MEBOT_KEY_PASSWORD") ?: storePassword
             }
         }
     }

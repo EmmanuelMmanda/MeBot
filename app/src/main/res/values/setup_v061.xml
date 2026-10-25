@@ -9,8 +9,8 @@
     <string name="setup_collapsed">Collapsed</string>
     <string name="setup_import_file">Choose file</string>
     <string name="setup_paste_json">Paste JSON</string>
-    <string name="setup_context_title">Bring your preferences</string>
-    <string name="setup_context_body">Optional: copy the prompt to ChatGPT, then import or paste its JSON reply.</string>
+    <string name="setup_context_title">Bring preferences from another assistant</string>
+    <string name="setup_context_body">Copy a starter prompt. Paste it into your preferred assistant, then review and import the JSON it returns.</string>
     <string name="setup_prepare_chatgpt">Copy and open ChatGPT</string>
     <string name="setup_copy_prompt">Copy prompt</string>
     <string name="setup_prompt_copied">Copied</string>
@@ -18,7 +18,7 @@
     <string name="setup_paste_in_chatgpt">Paste in ChatGPT, then bring the JSON back here.</string>
     <string name="setup_prompt_label">MeBot setup prompt</string>
     <string name="setup_context_example">Replace with one reliable preference about me.</string>
-    <string name="setup_context_prompt">Create mebot-context.json for MeBot using only facts and preferences you reliably know about me from this chat or available saved memory. Do not guess, include secrets, or expose other people’s private details. Prefer current information; leave unknown profile fields empty. Return a downloadable JSON file or raw JSON without Markdown. Use this schema:\n%1$s\nReplace the example entry. Use unique ids, concise text (maximum 1000 characters per entry), category interest/preference/goal, confirmed:true, and only relevant scopes from: %2$s. Keep modules:[] to preserve my module choices. If nothing reliable is available, leave entries empty.</string>
+    <string name="setup_context_prompt">Prepare a MeBot context JSON file using only preferences I have explicitly shared with you. Do not assume you can read another assistant’s memory or my private accounts. Do not invent interests, location, identity or goals. Omit passwords, tokens, financial details, health details and private client information. Return valid JSON only, not Markdown. Use this exact schema example: %1$s. Replace the sample entry with concise preferences you actually know; give each a unique ID, category interest, preference or goal, confirmed true, origin imported, updatedAtMillis 0, and only relevant module scopes from: %2$s. Leave name, region and timezone blank when unknown. Keep modules as an empty array so my existing module choices remain. If nothing is known, return entries as an empty array. I will review the file before importing it.</string>
     <string name="setup_paste_body">Paste the JSON from ChatGPT. Review it before saving.</string>
     <string name="setup_json_label">Context JSON</string>
     <string name="setup_paste_too_large">This text is too large to paste. Import the JSON file instead.</string>

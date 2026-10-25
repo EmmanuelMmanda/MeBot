@@ -1,0 +1,207 @@
+{
+  "capturedAt": "2026-10-25T05:55:42.894510+00:00",
+  "notice": "Public source captures and concise editorial paraphrases. Native UI screenshots use controlled inference; these are not live personal-account results. Publisher images are loaded from externally verified test inputs, not bundled in the APK. Older resources retain their actual dates.",
+  "items": [
+    {
+      "id": "capture-news",
+      "moduleId": "news",
+      "title": "Ubungo repairs school furniture and reports savings",
+      "summary": "Daily News reports that furniture repairs in Goba Ward returned desks, chairs and tables to public schools. Read the municipal figures and the scope of the work.",
+      "why": "Local public-service spending and school infrastructure.",
+      "sourceName": "Daily News Tanzania",
+      "sourceUrl": "https://dailynews.co.tz/ubungo-saves-233m-in-school-furniture-repairs/",
+      "publishedAtMillis": 1792862213000,
+      "fetchedAtMillis": 1792907742894,
+      "kind": "news",
+      "contentType": "article",
+      "citations": [
+        {
+          "title": "Ubungo saves 233m/- in school furniture repairs",
+          "url": "https://dailynews.co.tz/ubungo-saves-233m-in-school-furniture-repairs/"
+        }
+      ],
+      "relevance": 80,
+      "media": {
+        "url": "https://dailynews.co.tz/wp-content/uploads/2026/10/IMG-20261024-WA0048.jpg",
+        "sourceUrl": "https://dailynews.co.tz/ubungo-saves-233m-in-school-furniture-repairs/",
+        "credit": "Daily News Tanzania"
+      }
+    },
+    {
+      "id": "capture-business",
+      "moduleId": "business",
+      "title": "Tanzania and Angola explore further cooperation",
+      "summary": "The two countries are discussing additional areas of development cooperation. The original report explains the talks and their relationship.",
+      "why": "Regional partnerships and practical business context.",
+      "sourceName": "Daily News Tanzania",
+      "sourceUrl": "https://dailynews.co.tz/tanzania-angola-explore-new-development-areas-to-cement-their-longstanding-ties/",
+      "publishedAtMillis": 1792860216000,
+      "fetchedAtMillis": 1792907742894,
+      "kind": "business",
+      "contentType": "article",
+      "citations": [
+        {
+          "title": "Tanzania, Angola explore new development areas to cement their longstanding ties",
+          "url": "https://dailynews.co.tz/tanzania-angola-explore-new-development-areas-to-cement-their-longstanding-ties/"
+        }
+      ],
+      "relevance": 65
+    },
+    {
+      "id": "capture-travel",
+      "moduleId": "travel",
+      "title": "Explore Rondo Forest in southern Tanzania",
+      "summary": "An introduction to Rondo Forest Reserve and its natural setting. Check official visitor information before arranging a visit.",
+      "why": "A place to learn about, not a booking or price quote.",
+      "sourceName": "Daily News Tanzania",
+      "sourceUrl": "https://dailynews.co.tz/rondo-forest-reserve-discovering-the-hidden-natural-treasure-of-southern-tanzania/",
+      "publishedAtMillis": 1792859973000,
+      "fetchedAtMillis": 1792907742894,
+      "kind": "travel",
+      "contentType": "article",
+      "citations": [
+        {
+          "title": "Rondo forest reserve: Discovering the hidden natural treasure of Southern Tanzania",
+          "url": "https://dailynews.co.tz/rondo-forest-reserve-discovering-the-hidden-natural-treasure-of-southern-tanzania/"
+        }
+      ],
+      "relevance": 65
+    },
+    {
+      "id": "capture-science",
+      "moduleId": "science",
+      "title": "RS-25 engine testing at NASA Stennis",
+      "summary": "NASA documents an RS-25 engine hot-fire test at Stennis. The image and original report explain the test setting.",
+      "why": "Engineering and space research, from the original source.",
+      "sourceName": "NASA",
+      "sourceUrl": "https://www.nasa.gov/image-article/rs-25-engine-tests-at-nasa-stennis/",
+      "publishedAtMillis": 1792781824000,
+      "fetchedAtMillis": 1792907742894,
+      "kind": "science",
+      "contentType": "article",
+      "citations": [
+        {
+          "title": "RS-25 Engine Tests at NASA Stennis",
+          "url": "https://www.nasa.gov/image-article/rs-25-engine-tests-at-nasa-stennis/"
+        }
+      ],
+      "relevance": 65,
+      "media": {
+        "url": "https://www.nasa.gov/wp-content/uploads/2026/10/ssc-20261021-s00947horig.jpg",
+        "sourceUrl": "https://www.nasa.gov/image-article/rs-25-engine-tests-at-nasa-stennis/",
+        "credit": "NASA"
+      }
+    },
+    {
+      "id": "capture-github",
+      "moduleId": "github",
+      "title": "Ollama v0.40.11 release notes",
+      "summary": "Review the published release notes, fixes and installation assets before updating a local inference server.",
+      "why": "A practical resource for self-hosted AI.",
+      "sourceName": "GitHub · ollama/ollama",
+      "sourceUrl": "https://github.com/ollama/ollama/releases/tag/v0.40.11",
+      "publishedAtMillis": 1792801813000,
+      "fetchedAtMillis": 1792907742894,
+      "kind": "github",
+      "contentType": "repository",
+      "citations": [
+        {
+          "title": "ollama/ollama · v0.40.11",
+          "url": "https://github.com/ollama/ollama/releases/tag/v0.40.11"
+        }
+      ],
+      "relevance": 65,
+      "media": {
+        "url": "https://opengraph.githubassets.com/b74e83ef60ea2a633f09f0ca055406e51021d0999b7d1acebac91bbea19e1e21/ollama/ollama/releases/tag/v0.40.11",
+        "sourceUrl": "https://github.com/ollama/ollama/releases/tag/v0.40.11",
+        "credit": "GitHub · ollama/ollama"
+      }
+    },
+    {
+      "id": "capture-learning",
+      "moduleId": "learning",
+      "title": "CRDB Foundation: entrepreneurship and financial literacy",
+      "summary": "Explore the foundation’s support programmes for Tanzanian women and young people. Check programme details with the foundation; this page is not an open scholarship notice.",
+      "why": "Business skills and financial inclusion in Tanzania.",
+      "sourceName": "CRDB Bank Foundation",
+      "sourceUrl": "https://crdbbankfoundation.co.tz/",
+      "fetchedAtMillis": 1792907742894,
+      "kind": "learning",
+      "contentType": "course",
+      "citations": [
+        {
+          "title": "CRDB Bank Foundation programmes",
+          "url": "https://crdbbankfoundation.co.tz/"
+        },
+        {
+          "title": "2025 Annual Impact Report · PDF",
+          "url": "https://cbf.crdbbankfoundation.co.tz/wp-content/uploads/2026/07/CRDB-Bank-Foundation-Annual-Report-2025-Digital-Copy.pdf"
+        },
+        {
+          "title": "Our Story of Making a Difference · Video",
+          "url": "https://www.youtube.com/watch?v=PNsEfesf6rw"
+        }
+      ],
+      "relevance": 75
+    }
+  ],
+  "imageProvenance": [
+    {
+      "id": "tanzania-school",
+      "page": "https://dailynews.co.tz/ubungo-saves-233m-in-school-furniture-repairs/",
+      "title": "Ubungo saves 233m/- in school furniture repairs - Daily News",
+      "description": "UBUNGO: THE Ubungo Municipal Council has saved more than 233m/- through a school furniture rehabilitation campaign in Goba Ward, with 2,583 damaged desks, chairs and tables restored for use in public primary and secondary schools. The initiative, spearheaded by Kibamba Member of Parliament (CCM) and Minister for Communication and Information Technology, Mr Angela Kairuki, seeks …",
+      "imageUrl": "https://dailynews.co.tz/wp-content/uploads/2026/10/IMG-20261024-WA0048.jpg",
+      "usage": "Publisher image; attributed editorial app screenshot only; not a bundled app asset.",
+      "capturedAt": "2026-10-25T06:19:03.076669+00:00",
+      "file": "images/tanzania-school.jpg",
+      "sha256": "ca72d21d06e8518c9fcf7fb304b8ef6574eb0133f39ac3dad3d6aa69676be061"
+    },
+    {
+      "id": "nasa-stennis",
+      "page": "https://www.nasa.gov/image-article/rs-25-engine-tests-at-nasa-stennis/",
+      "title": "RS-25 Engine Tests at NASA Stennis - NASA",
+      "description": "Teams at NASA’s Stennis Space Center near Bay St. Louis, Mississippi tested RS-25 engine No. 10001 on Oct. 21, 2026. The hot fire test lasted for almost",
+      "imageUrl": "https://www.nasa.gov/wp-content/uploads/2026/10/ssc-20261021-s00947horig.jpg",
+      "usage": "NASA page: inspect image credit. Only NASA-owned content may be bundled; no endorsement implied.",
+      "capturedAt": "2026-10-25T06:19:05.574224+00:00",
+      "file": "images/nasa-stennis.jpg",
+      "sha256": "37ade34a81387c70852157d2b0097f7ad064869a176f2b65f5cb72b3fc50ae6f"
+    },
+    {
+      "id": "nasa-earth",
+      "page": "https://science.nasa.gov/resource/earth-at-night/",
+      "title": "Earth at Night - NASA Science",
+      "description": "This composite image, which has become a popular poster, shows a global view of Earth at night, compiled from over 400 satellite images",
+      "imageUrl": "https://assets.science.nasa.gov/content/dam/science/psd/solar/2023/09/3/324350main_11_full.jpg/jcr:content/renditions/cq5dam.web.1280.1280.jpeg",
+      "usage": "NASA page: inspect image credit before any reuse.",
+      "capturedAt": "2026-10-25T06:19:06.303293+00:00",
+      "file": "images/nasa-earth.jpg",
+      "sha256": "0bf00353955867e7ed98a827282c099bacdae587fe4c20e34fb98cff069db4f9"
+    },
+    {
+      "id": "ollama",
+      "page": "https://github.com/ollama/ollama/releases/tag/v0.40.11",
+      "title": "Release v0.40.11 · ollama/ollama",
+      "description": "Speech\nOllama can now generate speech on macOS. ollama run plays text or a chat model's reply aloud as the audio is generated, and apps can stream audio through the OpenAI-compatible /v1/audio/spee...",
+      "imageUrl": "https://opengraph.githubassets.com/b74e83ef60ea2a633f09f0ca055406e51021d0999b7d1acebac91bbea19e1e21/ollama/ollama/releases/tag/v0.40.11",
+      "usage": "Repository release metadata; preview only.",
+      "capturedAt": "2026-10-25T06:19:07.239661+00:00",
+      "file": "images/ollama.png",
+      "sha256": "03707a143f9ed630bfac9b9d6a94fff1982670174a31956f2f4ccd2a1952303e"
+    },
+    {
+      "id": "dar-2",
+      "page": "https://commons.wikimedia.org/wiki/File:Dar_es_salaam_Skyline_from_the_sea.jpg",
+      "title": "File:Dar es salaam Skyline from the sea.jpg",
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/3/34/Dar_es_salaam_Skyline_from_the_sea.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+      "file": "images/dar-2.jpg",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+      "artist": "<a rel=\"mw:WikiLink\" href=\"https://commons.wikimedia.org/wiki/User:Len_pel?action=edit&amp;redlink=1\" title=\"User:Len pel (page does not exist)\" class=\"new\" typeof=\"mw:LocalizedAttrs\" data-mw-i18n='{\"title\":{\"lang\":\"x-page\",\"key\":\"red-link-title\",\"params\":[\"User:Len pel\"]}}'>Len pel</a>",
+      "credit": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+      "sha256": "543ddb37b9ab9438834ba208ce1f77da5597b3075a2d53d7c1785392eccfd423",
+      "usage": "Licensed photograph, preserve credit and license; crop only with attribution."
+    }
+  ]
+}

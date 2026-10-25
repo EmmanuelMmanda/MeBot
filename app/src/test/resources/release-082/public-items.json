@@ -1,0 +1,144 @@
+[
+  {
+    "id": "capture-news",
+    "moduleId": "news",
+    "title": "Ubungo repairs school furniture and reports savings",
+    "summary": "Daily News reports that furniture repairs in Goba Ward returned desks, chairs and tables to public schools. Read the municipal figures and the scope of the work.",
+    "why": "Local public-service spending and school infrastructure.",
+    "sourceName": "Daily News Tanzania",
+    "sourceUrl": "https://dailynews.co.tz/ubungo-saves-233m-in-school-furniture-repairs/",
+    "publishedAtMillis": 1792862213000,
+    "fetchedAtMillis": 1792907742894,
+    "kind": "news",
+    "contentType": "article",
+    "citations": [
+      {
+        "title": "Ubungo saves 233m/- in school furniture repairs",
+        "url": "https://dailynews.co.tz/ubungo-saves-233m-in-school-furniture-repairs/"
+      }
+    ],
+    "relevance": 80,
+    "media": {
+      "url": "https://dailynews.co.tz/wp-content/uploads/2026/10/IMG-20261024-WA0048.jpg",
+      "sourceUrl": "https://dailynews.co.tz/ubungo-saves-233m-in-school-furniture-repairs/",
+      "credit": "Daily News Tanzania"
+    }
+  },
+  {
+    "id": "capture-business",
+    "moduleId": "business",
+    "title": "Tanzania and Angola explore further cooperation",
+    "summary": "The two countries are discussing additional areas of development cooperation. The original report explains the talks and their relationship.",
+    "why": "Regional partnerships and practical business context.",
+    "sourceName": "Daily News Tanzania",
+    "sourceUrl": "https://dailynews.co.tz/tanzania-angola-explore-new-development-areas-to-cement-their-longstanding-ties/",
+    "publishedAtMillis": 1792860216000,
+    "fetchedAtMillis": 1792907742894,
+    "kind": "business",
+    "contentType": "article",
+    "citations": [
+      {
+        "title": "Tanzania, Angola explore new development areas to cement their longstanding ties",
+        "url": "https://dailynews.co.tz/tanzania-angola-explore-new-development-areas-to-cement-their-longstanding-ties/"
+      }
+    ],
+    "relevance": 65
+  },
+  {
+    "id": "capture-travel",
+    "moduleId": "travel",
+    "title": "Explore Rondo Forest in southern Tanzania",
+    "summary": "An introduction to Rondo Forest Reserve and its natural setting. Check official visitor information before arranging a visit.",
+    "why": "A place to learn about, not a booking or price quote.",
+    "sourceName": "Daily News Tanzania",
+    "sourceUrl": "https://dailynews.co.tz/rondo-forest-reserve-discovering-the-hidden-natural-treasure-of-southern-tanzania/",
+    "publishedAtMillis": 1792859973000,
+    "fetchedAtMillis": 1792907742894,
+    "kind": "travel",
+    "contentType": "article",
+    "citations": [
+      {
+        "title": "Rondo forest reserve: Discovering the hidden natural treasure of Southern Tanzania",
+        "url": "https://dailynews.co.tz/rondo-forest-reserve-discovering-the-hidden-natural-treasure-of-southern-tanzania/"
+      }
+    ],
+    "relevance": 65
+  },
+  {
+    "id": "capture-science",
+    "moduleId": "science",
+    "title": "RS-25 engine testing at NASA Stennis",
+    "summary": "NASA documents an RS-25 engine hot-fire test at Stennis. The image and original report explain the test setting.",
+    "why": "Engineering and space research, from the original source.",
+    "sourceName": "NASA",
+    "sourceUrl": "https://www.nasa.gov/image-article/rs-25-engine-tests-at-nasa-stennis/",
+    "publishedAtMillis": 1792781824000,
+    "fetchedAtMillis": 1792907742894,
+    "kind": "science",
+    "contentType": "article",
+    "citations": [
+      {
+        "title": "RS-25 Engine Tests at NASA Stennis",
+        "url": "https://www.nasa.gov/image-article/rs-25-engine-tests-at-nasa-stennis/"
+      }
+    ],
+    "relevance": 65,
+    "media": {
+      "url": "https://www.nasa.gov/wp-content/uploads/2026/10/ssc-20261021-s00947horig.jpg",
+      "sourceUrl": "https://www.nasa.gov/image-article/rs-25-engine-tests-at-nasa-stennis/",
+      "credit": "NASA"
+    }
+  },
+  {
+    "id": "capture-github",
+    "moduleId": "github",
+    "title": "Ollama v0.40.11 release notes",
+    "summary": "Review the published release notes, fixes and installation assets before updating a local inference server.",
+    "why": "A practical resource for self-hosted AI.",
+    "sourceName": "GitHub · ollama/ollama",
+    "sourceUrl": "https://github.com/ollama/ollama/releases/tag/v0.40.11",
+    "publishedAtMillis": 1792801813000,
+    "fetchedAtMillis": 1792907742894,
+    "kind": "github",
+    "contentType": "repository",
+    "citations": [
+      {
+        "title": "ollama/ollama · v0.40.11",
+        "url": "https://github.com/ollama/ollama/releases/tag/v0.40.11"
+      }
+    ],
+    "relevance": 65,
+    "media": {
+      "url": "https://opengraph.githubassets.com/b74e83ef60ea2a633f09f0ca055406e51021d0999b7d1acebac91bbea19e1e21/ollama/ollama/releases/tag/v0.40.11",
+      "sourceUrl": "https://github.com/ollama/ollama/releases/tag/v0.40.11",
+      "credit": "GitHub · ollama/ollama"
+    }
+  },
+  {
+    "id": "capture-learning",
+    "moduleId": "learning",
+    "title": "CRDB Foundation: entrepreneurship and financial literacy",
+    "summary": "Explore the foundation’s support programmes for Tanzanian women and young people. Check programme details with the foundation; this page is not an open scholarship notice.",
+    "why": "Business skills and financial inclusion in Tanzania.",
+    "sourceName": "CRDB Bank Foundation",
+    "sourceUrl": "https://crdbbankfoundation.co.tz/",
+    "fetchedAtMillis": 1792907742894,
+    "kind": "learning",
+    "contentType": "course",
+    "citations": [
+      {
+        "title": "CRDB Bank Foundation programmes",
+        "url": "https://crdbbankfoundation.co.tz/"
+      },
+      {
+        "title": "2025 Annual Impact Report · PDF",
+        "url": "https://cbf.crdbbankfoundation.co.tz/wp-content/uploads/2026/07/CRDB-Bank-Foundation-Annual-Report-2025-Digital-Copy.pdf"
+      },
+      {
+        "title": "Our Story of Making a Difference · Video",
+        "url": "https://www.youtube.com/watch?v=PNsEfesf6rw"
+      }
+    ],
+    "relevance": 75
+  }
+]

@@ -9,8 +9,8 @@
     <string name="setup_collapsed">Imefungwa</string>
     <string name="setup_import_file">Chagua faili</string>
     <string name="setup_paste_json">Bandika JSON</string>
-    <string name="setup_context_title">Weka unavyopenda</string>
-    <string name="setup_context_body">Si lazima: nakili maelekezo kwenye ChatGPT, kisha leta faili au bandika jibu la JSON.</string>
+    <string name="setup_context_title">Leta mapendeleo kutoka kwa msaidizi mwingine</string>
+    <string name="setup_context_body">Nakili maelekezo ya kuanzia. Yabandike kwa msaidizi wako, kisha kagua na uingize JSON atakayokupa.</string>
     <string name="setup_prepare_chatgpt">Nakili, fungua ChatGPT</string>
     <string name="setup_copy_prompt">Nakili maelekezo</string>
     <string name="setup_prompt_copied">Imenakiliwa</string>
@@ -18,7 +18,7 @@
     <string name="setup_paste_in_chatgpt">Bandika kwenye ChatGPT, kisha rudisha JSON hapa.</string>
     <string name="setup_prompt_label">Ombi la kuandaa MeBot</string>
     <string name="setup_context_example">Badilisha kwa pendekezo moja la uhakika kunihusu.</string>
-    <string name="setup_context_prompt">Andaa mebot-context.json kwa MeBot ukitumia taarifa na mapendeleo yangu unayoyajua kwa uhakika kutoka kwenye mazungumzo haya au kumbukumbu zilizopo. Usibuni taarifa, kuingiza siri, au kuweka taarifa binafsi za watu wengine. Tumia taarifa za sasa; acha nafasi tupu kwa usichokijua. Toa faili la JSON la kupakua au JSON pekee bila Markdown. Tumia muundo huu:\n%1$s\nBadilisha mfano wa dokezo. Tumia id tofauti, maandishi mafupi (herufi zisizozidi 1000 kwa kila dokezo), category interest/preference/goal, confirmed:true, na scopes zinazohusika tu kutoka: %2$s. Weka modules:[] ili chaguo zangu za moduli zibaki. Kama hakuna taarifa ya uhakika, acha entries tupu.</string>
+    <string name="setup_context_prompt">Tengeneza JSON ya mapendeleo ya MeBot kwa kutumia mambo niliyokwambia wazi. Usidhani unaweza kusoma kumbukumbu za msaidizi mwingine au akaunti zangu binafsi. Usibuni mambo ninayopenda, mahali nilipo, utambulisho au malengo. Usiweke nywila, tokeni, taarifa za fedha, afya au siri za wateja. Rudisha JSON halali tu, si Markdown. Fuata mfano huu: %1$s. Badili mfano wa entry kwa mapendeleo mafupi unayojua kweli; kila entry iwe na ID yake, category interest, preference au goal, confirmed true, origin imported, updatedAtMillis 0, na scopes zinazofaa tu kutoka: %2$s. Acha name, region na timezone tupu kama hujui. modules iwe array tupu ili chaguo zangu za mada zibaki. Kama hujui lolote, entries iwe array tupu. Nitakagua faili kabla ya kuliingiza.</string>
     <string name="setup_paste_body">Bandika JSON kutoka ChatGPT. Kagua taarifa kabla ya kuhifadhi.</string>
     <string name="setup_json_label">JSON ya mapendeleo</string>
     <string name="setup_paste_too_large">Maandishi ni mengi sana kubandika. Leta faili la JSON.</string>
