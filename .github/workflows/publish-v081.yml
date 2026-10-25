@@ -22,12 +22,14 @@ jobs:
     timeout-minutes: 25
     env:
       GH_TOKEN: ${{ github.token }}
-      MEBOT_CANDIDATE_DIR: ${{ runner.temp }}/mebot-candidate
-      RELEASE_DIRECTORY: ${{ runner.temp }}/mebot-release
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
+      - name: Initialize temporary release paths
+        run: |
+          echo "MEBOT_CANDIDATE_DIR=$RUNNER_TEMP/mebot-candidate" >> "$GITHUB_ENV"
+          echo "RELEASE_DIRECTORY=$RUNNER_TEMP/mebot-release" >> "$GITHUB_ENV"
       - name: Verify provenance and download the tested build
         run: |
           test "$(gh api repos/EmmanuelMmanda/MeBot/actions/runs/40126322372 --jq .conclusion)" = success
