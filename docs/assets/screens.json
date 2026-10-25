@@ -1,162 +1,146 @@
 [
   {
-    "file": "screenshots/v081/mebot-0.8.1-ai-resources.png",
-    "title": "Answers with useful files",
-    "alt": "MeBot AI answer with Sources, Media and Files tabs and a PDF Save file action",
-    "caption": "Read the answer first, then open or save its resources.",
+    "file": "screenshots/v082/feed.png",
+    "title": "Your first edition",
+    "alt": "Personalized feed containing dated public reporting and source links.",
+    "caption": "Fresh results appear as modules finish; reading position is preserved.",
     "group": "read",
-    "version": "0.8.1"
+    "version": "0.8.2",
+    "captureDate": "2026-10-25"
   },
   {
-    "file": "screenshots/v081/mebot-0.8.1-streaming.png",
-    "title": "One place for AI activity",
-    "alt": "MeBot top activity panel above a streaming answer",
-    "caption": "See brief processing updates without duplicate spinners in the answer.",
+    "file": "screenshots/v082/news.png",
+    "title": "News near you",
+    "alt": "Tanzania news filter showing the Daily News report on Ubungo school furniture repairs.",
+    "caption": "Actual publisher reporting captured on 25 October 2026.",
     "group": "read",
-    "version": "0.8.1"
+    "version": "0.8.2",
+    "captureDate": "2026-10-25"
   },
   {
-    "file": "screenshots/v081/mebot-0.8.1-detail-files.png",
-    "title": "Keep the story and its sources",
-    "alt": "MeBot story detail with original notes and grouped file resources",
-    "caption": "Original notes, sources and follow-up actions remain together.",
+    "file": "screenshots/v082/detail-answer.png",
+    "title": "Read and keep exploring",
+    "alt": "Source-backed story introduction and a square, unclipped streaming answer surface.",
+    "caption": "The introduction remains visible while more detail arrives.",
     "group": "read",
-    "version": "0.8.1"
+    "version": "0.8.2",
+    "captureDate": "2026-10-25"
   },
   {
-    "file": "screenshots/v081/mebot-0.8.1-appearance.png",
-    "title": "Colours that feel like you",
-    "alt": "MeBot appearance controls with a custom colour and page styles",
-    "caption": "Choose an accent, enter a custom colour or change the page style.",
-    "group": "organize",
-    "version": "0.8.1"
-  },
-  {
-    "file": "screenshots/v070/feed.png",
-    "title": "Your personal feed",
-    "alt": "Topic filters, search and a sourced story in the MeBot Feed",
-    "caption": "A short edition with sources and useful next steps.",
+    "file": "screenshots/v082/detail-streaming.png",
+    "title": "A clear start to each story",
+    "alt": "Story details with an original photo, relevance controls and the stable summary introduction.",
+    "caption": "More notes are optional; the introduction is not hidden behind Show more.",
     "group": "read",
-    "version": "0.7.0 beta"
+    "version": "0.8.2",
+    "captureDate": "2026-10-25"
   },
   {
-    "file": "screenshots/v070/detail.png",
-    "title": "Read a little closer",
-    "alt": "A MeBot story with an AI explanation, original source and follow-up question",
-    "caption": "Open the explanation without losing the original story.",
-    "group": "read",
-    "version": "0.7.0 beta"
-  },
-  {
-    "file": "screenshots/v070/ai.png",
+    "file": "screenshots/v082/mebot.png",
     "title": "Ask MeBot",
-    "alt": "MeBot AI workspace with a model selector, topic, example answer and reviewed text attachment",
-    "caption": "Keep the topic, model and conversation in one place.",
+    "alt": "MeBot conversation about CRDB Bank Foundation with source and resource controls.",
+    "caption": "Public programme information, not an invented open application.",
     "group": "read",
-    "version": "0.7.0 beta"
+    "version": "0.8.2",
+    "captureDate": "2026-10-25"
   },
   {
-    "file": "screenshots/v070/welcome.png",
-    "title": "A short welcome",
-    "alt": "MeBot welcome tour showing examples of news, learning and events",
-    "caption": "See what the app offers before you connect an account.",
+    "file": "screenshots/v082/welcome.png",
+    "title": "A familiar starting point",
+    "alt": "MeBot welcome with a licensed photograph of Dar es Salaam.",
+    "caption": "A historical city photograph with credit, not a current weather or location view.",
     "group": "start",
-    "version": "0.7.0 beta"
+    "version": "0.8.2",
+    "captureDate": "2026-10-25"
   },
   {
-    "file": "screenshots/v070/interests.png",
-    "title": "Choose your interests",
-    "alt": "Selectable topic tiles during MeBot onboarding, including news, technology and music",
-    "caption": "Choose topics; change them whenever you like.",
+    "file": "screenshots/v082/interests.png",
+    "title": "Choose what matters",
+    "alt": "Interactive MeBot interest tiles in onboarding.",
+    "caption": "Start with your interests. Importing a context file is optional.",
     "group": "start",
-    "version": "0.7.0 beta"
+    "version": "0.8.2",
+    "captureDate": "2026-10-25"
   },
   {
-    "file": "screenshots/v070/preferences.png",
-    "title": "Make it yours",
-    "alt": "Final onboarding step with optional city and interests fields and an Open my feed action",
-    "caption": "Add a little more, or continue without typing.",
+    "file": "screenshots/v082/daily-tools.png",
+    "title": "Three optional daily tools",
+    "alt": "Alarm, Focus and Daily Check-in presented together in onboarding.",
+    "caption": "Use the tools you need without making alarms the whole app.",
     "group": "start",
-    "version": "0.7.0 beta"
+    "version": "0.8.2",
+    "captureDate": "2026-10-25"
   },
   {
-    "file": "screenshots/v070/background.png",
-    "title": "Set your pace",
-    "alt": "Discovery batches, daily AI request limits and background update settings",
-    "caption": "Control request limits, refresh intervals and preparation.",
+    "file": "screenshots/v082/modules.png",
+    "title": "Explore the catalog",
+    "alt": "MeBot module catalog with searchable categories and module controls.",
+    "caption": "Each module keeps its own preferences and relevant context.",
     "group": "organize",
-    "version": "0.7.0 beta"
+    "version": "0.8.2",
+    "captureDate": "2026-10-25"
   },
   {
-    "file": "screenshots/54-mebot-module-discovery-v061.png",
-    "title": "Discover modules",
-    "alt": "Module catalog with search, All Enabled Disabled filters and individual switches",
-    "caption": "Find available topics and enable the ones you need.",
+    "file": "screenshots/v082/providers.png",
+    "title": "Choose your connection",
+    "alt": "AI connection with provider choices and capability-specific setup.",
+    "caption": "Subscription sign-in, API keys and a personal server are distinct choices.",
     "group": "organize",
-    "version": "0.6.1"
+    "version": "0.8.2",
+    "captureDate": "2026-10-25"
   },
   {
-    "file": "screenshots/52-mebot-search-v06.png",
-    "title": "Search your topics",
-    "alt": "MeBot search interface with a query field and topic filters",
-    "caption": "Explore a question across your enabled modules.",
+    "file": "screenshots/v082/usage.png",
+    "title": "Keep usage in view",
+    "alt": "AI request allowance alongside provider connection settings.",
+    "caption": "One persisted request budget; changing its limit does not erase usage.",
+    "group": "organize",
+    "version": "0.8.2",
+    "captureDate": "2026-10-25"
+  },
+  {
+    "file": "screenshots/v082/background.png",
+    "title": "Set the pace",
+    "alt": "Card-based background settings for timing, network conditions, notifications and preparation.",
+    "caption": "Completed results are published independently of slower modules.",
+    "group": "organize",
+    "version": "0.8.2",
+    "captureDate": "2026-10-25"
+  },
+  {
+    "file": "screenshots/v082/software-updates.png",
+    "title": "Software Updates",
+    "alt": "Software Updates screen showing automatic-check controls and release state.",
+    "caption": "Updates verify package, version, checksum and certificate before installation.",
+    "group": "organize",
+    "version": "0.8.2",
+    "captureDate": "2026-10-25"
+  },
+  {
+    "file": "screenshots/v082/my-mebot.png",
+    "title": "Your own setup",
+    "alt": "My MeBot area with setup, guide and software update actions.",
+    "caption": "Manage preferences without ambiguous shortcuts.",
+    "group": "organize",
+    "version": "0.8.2",
+    "captureDate": "2026-10-25"
+  },
+  {
+    "file": "screenshots/v082/learning.png",
+    "title": "Discover beyond headlines",
+    "alt": "Learning module showing a public NASA resource about RS-25 tests at Stennis.",
+    "caption": "A dated public research example, not a personal AI account transcript.",
     "group": "read",
-    "version": "0.6.0"
+    "version": "0.8.2",
+    "captureDate": "2026-10-25"
   },
   {
-    "file": "screenshots/69-mebot-alarm-audio-v061.png",
-    "title": "Choose your alarm sound",
-    "alt": "Alarm controls for bundled tones, a custom audio file, spoken message and volume",
-    "caption": "Use a tone, your own audio or an optional spoken message.",
+    "file": "screenshots/v082/about.png",
+    "title": "About MeBot",
+    "alt": "About screen with app identity, real imagery, credits and open-source information.",
+    "caption": "The Android host captures identify their build; no device testing is implied.",
     "group": "tools",
-    "version": "0.6.1"
-  },
-  {
-    "file": "screenshots/60-mebot-context-v061.png",
-    "title": "Review your preferences",
-    "alt": "Personal context screen with Import file, Paste JSON and editable preference notes",
-    "caption": "Optional imports and notes stay separate from account sign-in.",
-    "group": "organize",
-    "version": "0.6.1"
-  },
-  {
-    "file": "screenshots/61-mebot-faq-v061.png",
-    "title": "Find a clear answer",
-    "alt": "MeBot Help and FAQ screen with a search field and expandable setup answers",
-    "caption": "Setup, account and everyday questions in one place.",
-    "group": "organize",
-    "version": "0.6.1"
-  },
-  {
-    "file": "screenshots/70-mebot-alarm-audio-small-sw-v061.png",
-    "title": "Kiswahili on a small screen",
-    "alt": "Dark MeBot alarm settings in Kiswahili on a narrow display",
-    "caption": "A supporting example of the Kiswahili and dark layouts.",
-    "group": "tools",
-    "version": "0.6.1"
-  },
-  {
-    "file": "screenshots/50-mebot-module-order-v06.png",
-    "title": "Keep your order",
-    "alt": "MeBot module list with controls to arrange the home feed filters",
-    "caption": "Arrange topics in the order that works for you.",
-    "group": "organize",
-    "version": "0.6.0"
-  },
-  {
-    "file": "screenshots/44-mebot-connection-polish-v051.png",
-    "title": "Connect an AI account",
-    "alt": "MeBot account recovery screen with a model selector and Check connection action",
-    "caption": "Inspect the connection and available model before using AI.",
-    "group": "organize",
-    "version": "0.5.1"
-  },
-  {
-    "file": "screenshots/v081/mebot-0.8.1-detail-working.png",
-    "title": "Read while MeBot searches",
-    "alt": "An example opportunity stays readable below the fixed activity panel; Show more reveals notes.",
-    "caption": "The active badges follow this request. The opportunity is example test content.",
-    "group": "read",
-    "version": "0.8.1"
+    "version": "0.8.2",
+    "captureDate": "2026-10-25"
   }
 ]

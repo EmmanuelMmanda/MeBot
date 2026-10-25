@@ -1,6 +1,10 @@
+# Current implementation note — 0.8.2
+
+Native provider adapters, module-scoped relevance signals, incremental refresh outcomes, setup guidance, independent Software Updates and the renamed MeBot package extend the architecture below. See [the completed release tracker](RELEASE-TRACKER-0.8.2.md) and [current guide](USER-GUIDE.md). `SoftwareUpdateManager` owns update IO separately from AI requests; `RelevanceFeedback` owns bounded per-module signals.
+
 # Architecture
 
-MeBot is a native Android application with five destinations: Feed, Modules, AI, Saved and You. The middle AI workspace contains local conversations; information modules, cached reading and personal settings remain separate concerns. Alarms, a quick daily check-in and focus are independent local tools. An owner-configured AI connection, public data adapters and optional RSS fallbacks supply the feed; local utilities and cached reading do not depend on them. The application ID, existing storage paths and operational alarm identifiers retain their original `mynguli` values for in-place updates. Visible branding is MeBot.
+MeBot is a native Android application with five destinations: Feed, Modules, MeBot, Saved and You. The middle AI workspace contains local conversations; information modules, cached reading and personal settings remain separate concerns. Alarms, a quick daily check-in and focus are independent local tools. An owner-configured AI connection, public data adapters and optional RSS fallbacks supply the feed; local utilities and cached reading do not depend on them. Version0.8.2 uses the new `mebot.nguli.com` identity. Active component and storage names are MeBot; earlier experimental installations are separate.
 
 This document describes the implementation in the repository. Build versions, commands, and device acceptance steps are in [BUILD.md](BUILD.md). Data handling is described in [PRIVACY.md](PRIVACY.md).
 
@@ -8,15 +12,15 @@ This document describes the implementation in the repository. Build versions, co
 
 | Area | Responsibility | Main source |
 | --- | --- | --- |
-| `core` | Serializable models, validation, daily rules, focus calculations, alarm date calculation, portable backups | [Core source](../core/src/main/kotlin/app/mynguli/core) |
-| Main Compose UI | Feed onboarding, five destinations, story details/search, optional tools, preferences and history | [UI source](../app/src/main/java/app/mynguli/ui) |
-| Feed domain | Modules/preferences/order, context scopes, item identity, conversation/cache validation, ranking and retention | [FeedLogic.kt](../core/src/main/kotlin/app/mynguli/core/FeedLogic.kt), [ModulePreferences.kt](../core/src/main/kotlin/app/mynguli/core/ModulePreferences.kt), [Conversations.kt](../core/src/main/kotlin/app/mynguli/core/Conversations.kt) |
-| Feed runtime | Feed DataStore, credential vault, HTTPS/RSS, provider adapter, refresh coordination and delivery | [Feed source](../app/src/main/java/app/mynguli/feed) |
-| ChatGPT sessions | Browser PKCE, loopback callback, verified identity, encrypted renewable accounts and model discovery | [Auth source](../app/src/main/java/app/mynguli/feed/auth) |
+| `core` | Serializable models, validation, daily rules, focus calculations, alarm date calculation, portable backups | [Core source](../core/src/main/kotlin/mebot/nguli/com/core) |
+| Main Compose UI | Feed onboarding, five destinations, story details/search, optional tools, preferences and history | [UI source](../app/src/main/java/mebot/nguli/com/ui) |
+| Feed domain | Modules/preferences/order, context scopes, item identity, conversation/cache validation, ranking and retention | [FeedLogic.kt](../core/src/main/kotlin/mebot/nguli/com/core/FeedLogic.kt), [ModulePreferences.kt](../core/src/main/kotlin/mebot/nguli/com/core/ModulePreferences.kt), [Conversations.kt](../core/src/main/kotlin/mebot/nguli/com/core/Conversations.kt) |
+| Feed runtime | Feed DataStore, credential vault, HTTPS/RSS, provider adapter, refresh coordination and delivery | [Feed source](../app/src/main/java/mebot/nguli/com/feed) |
+| ChatGPT sessions | Browser PKCE, loopback callback, verified identity, encrypted renewable accounts and model discovery | [Auth source](../app/src/main/java/mebot/nguli/com/feed/auth) |
 | Personal service | Optional authenticated Python backend, source checks, caching, budgets and scheduled preparation | [Service](../service/README.md) |
-| View model | Apply user actions, publish state, coordinate persistence with platform alarms, report localized outcomes | [MyNguliViewModel.kt](../app/src/main/java/app/mynguli/MyNguliViewModel.kt) |
-| Main repository | Store one immutable `AppState` through AndroidX DataStore | [AppRepository.kt](../app/src/main/java/app/mynguli/data/AppRepository.kt) |
-| Alarm runtime | Exact schedules, persisted occurrences, snooze/checkpoint transitions, sound, vibration, restoration, and cancellation | [Alarm source](../app/src/main/java/app/mynguli/alarm) |
+| View model | Apply user actions, publish state, coordinate persistence with platform alarms, report localized outcomes | [MeBotViewModel.kt](../app/src/main/java/mebot/nguli/com/MeBotViewModel.kt) |
+| Main repository | Store one immutable `AppState` through AndroidX DataStore | [AppRepository.kt](../app/src/main/java/mebot/nguli/com/data/AppRepository.kt) |
+| Alarm runtime | Exact schedules, persisted occurrences, snooze/checkpoint transitions, sound, vibration, restoration, and cancellation | [Alarm source](../app/src/main/java/mebot/nguli/com/alarm) |
 
 The `core` module is Kotlin/JVM and has no Android dependency. The `app` module owns the Android lifecycle and services. Alarm operation does not depend on the daily screen staying open.
 
@@ -175,7 +179,7 @@ The current validation limits are intentional bounds on the format:
 | Alarm volume | 1–100 percent |
 | Checkpoint label / code | 80 / 512 characters |
 
-Validation also checks dates, timestamps, selected-outcome references, required completed-visit fields, allowed module/language/theme values, and alarm parameter ranges. The constants are in [Validation.kt](../core/src/main/kotlin/app/mynguli/core/Validation.kt). The additive 0.2.0 fields use explicit decode defaults: older alarms keep STANDARD dismissal, while legacy required checkpoints resolve to QR. New alarms are created explicitly in MATH mode. Older portable backups are accepted; the older 0.1.0 importer rejects MeBot-only fields. There is no automatic archival or pruning. Exceeding a limit fails the operation rather than authorizing silent deletion.
+Validation also checks dates, timestamps, selected-outcome references, required completed-visit fields, allowed module/language/theme values, and alarm parameter ranges. The constants are in [Validation.kt](../core/src/main/kotlin/mebot/nguli/com/core/Validation.kt). The additive 0.2.0 fields use explicit decode defaults: older alarms keep STANDARD dismissal, while legacy required checkpoints resolve to QR. New alarms are created explicitly in MATH mode. Older portable backups are accepted; the older 0.1.0 importer rejects MeBot-only fields. There is no automatic archival or pruning. Exceeding a limit fails the operation rather than authorizing silent deletion.
 
 ## Alarm operation
 

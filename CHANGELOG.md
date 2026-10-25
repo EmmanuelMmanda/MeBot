@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.2 — 2026-10-25
+
+New `mebot.nguli.com` identity; provider choices; Software Updates; module-scoped feedback; progressive feed; clearer setup, background and detail UI; real sourced captures. [Release notes](docs/RELEASE-0.8.2.md).
+
 ## 0.8.1 — 2026-10-25
 
 Accurate anchored activity; scoped refresh; compact MeBot details; Tanzania public-source defaults; verified resource actions. See [release notes](docs/RELEASE-0.8.1.md).

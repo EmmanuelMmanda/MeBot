@@ -8,21 +8,21 @@ Start with [AGENTS.md](../AGENTS.md), the [user guide](USER-GUIDE.md) and [archi
 
 | Path | Responsibility |
 | --- | --- |
-| `app/src/main/java/app/mynguli/MainActivity.kt` | Five-tab navigation, nested routes, system/browser return and lifecycle wiring. |
-| `app/src/main/java/app/mynguli/ui/` | Local-tool screens, shared Compose components, theme and design tokens. |
-| `app/src/main/java/app/mynguli/ui/feed/` | Feed, catalog/editor, details, AI workspace, connection/context setup, background settings and FAQ. |
-| `app/src/main/java/app/mynguli/feed/` | Feed state orchestration, durable repository, request engine, discovery, source media, budgets and background work. |
-| `app/src/main/java/app/mynguli/feed/auth/` | Official ChatGPT authorization, verified accounts, renewable encrypted sessions and model catalog. |
-| `app/src/main/java/app/mynguli/alarm/` | Independent native scheduling, operational sessions, ringing, audio/file access and offline speech. |
-| `app/src/main/java/app/mynguli/data/` | Local-tool repository and backup integration. |
-| `core/src/main/kotlin/app/mynguli/core/` | Typed schemas, validation, module defaults/preferences, ranking, context rules, conversation limits, alarms and local-tool logic. |
+| `app/src/main/java/mebot/nguli/com/MainActivity.kt` | Five-tab navigation, nested routes, system/browser return and lifecycle wiring. |
+| `app/src/main/java/mebot/nguli/com/ui/` | Local-tool screens, shared Compose components, theme and design tokens. |
+| `app/src/main/java/mebot/nguli/com/ui/feed/` | Feed, catalog/editor, details, AI workspace, connection/context setup, background settings and FAQ. |
+| `app/src/main/java/mebot/nguli/com/feed/` | Feed state orchestration, durable repository, request engine, discovery, source media, budgets and background work. |
+| `app/src/main/java/mebot/nguli/com/feed/auth/` | Official ChatGPT authorization, verified accounts, renewable encrypted sessions and model catalog. |
+| `app/src/main/java/mebot/nguli/com/alarm/` | Independent native scheduling, operational sessions, ringing, audio/file access and offline speech. |
+| `app/src/main/java/mebot/nguli/com/data/` | Local-tool repository and backup integration. |
+| `core/src/main/kotlin/mebot/nguli/com/core/` | Typed schemas, validation, module defaults/preferences, ranking, context rules, conversation limits, alarms and local-tool logic. |
 | `app/src/main/res/values/`, `values-sw/` | English and Kiswahili interface resources. |
 | `app/src/test/`, `core/src/test/` | Host-side integration/native Compose tests and pure domain tests. |
 | `service/` | Optional single-person FastAPI/SQLite service, tests, synthetic requests and deployment instructions. |
 | `docs/` | User/developer/protocol documentation, screenshots and the static documentation site. |
 | `scripts/` | Repeatable verification/build commands and the original alarm-tone generator. |
 
-The `app.mynguli` namespace and release application ID are retained for compatibility with earlier installations. The product name is MeBot. A package rename would create a different Android installation and change browser-return identity; it is not a cosmetic rename.
+The `mebot.nguli.com` namespace and release application ID are retained for compatibility with earlier installations. The product name is MeBot. A package rename would create a different Android installation and change browser-return identity; it is not a cosmetic rename.
 
 ## Workstation and toolchain
 
@@ -88,7 +88,7 @@ For an iteration that only needs an APK, `./scripts/build.sh debug` assembles th
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Debug uses `app.mynguli.debug` and a `-debug` version suffix. Release uses `app.mynguli`. They can coexist; debug is not an in-place update of release. No live account or provider key is required by the automated tests.
+Debug uses `mebot.nguli.com.debug` and a `-debug` version suffix. Release uses `mebot.nguli.com`. They can coexist; debug is not an in-place update of release. No live account or provider key is required by the automated tests.
 
 | Output | Location |
 | --- | --- |
@@ -110,7 +110,7 @@ The [CI workflow](../.github/workflows/android.yml) verifies Android and the opt
 
 The reusable defaults are in `core`. Personal state belongs in typed persisted models, not Kotlin constants. A clean source build starts without a person's name, location, history or API credential.
 
-The preferred personalization flow is runtime import under **You → My context**, using `mebot-context-v1`. The [empty example](context-example.json) and [user guide prompt](USER-GUIDE.md#prepare-a-context-file-in-chatgpt) describe this contract. Import validates and reviews the replacement; `modules: []` preserves module choices.
+The preferred personalization flow is runtime import under **You → My context**, using `mebot-context-v1`. The [empty example](context-example.json) and [user guide prompt](USER-GUIDE.md#your-preferences) describe this contract. Import validates and reviews the replacement; `modules: []` preserves module choices.
 
 An optional private build may supply `app/src/main/assets/mebot-profile.json`. It is a one-time editable seed, excluded from public source. Anyone receiving a personalized APK can inspect its assets, so it must not contain keys or confidential documents. A reset does not reapply the seed. Prefer the runtime import flow for public distributions.
 
@@ -151,7 +151,7 @@ The service is one person per deployment, with one Bearer-token boundary, not a 
 
 Use a repository transform against the current state for a write. Do not persist an old full UI snapshot over a concurrent change. Persist user intent before scheduling or launching work. Pending operations must be invalidated when credentials, context, configuration or reset generation change. A late callback must not re-create erased data or commit a result for a no-longer-selected account.
 
-Context import, feed restore and local-tool restore have different replacement semantics. Validate the complete input and supported format/version before replacement; a parse failure must not erase a store. Preserve reviewed-import cancellation and stale-preview guards. Feed restore disables delivery and clears credentials after durable state replacement. Local-tool restore disables imported alarms and clears active focus state. Keep migrations compatible with the documented formats in [FEED-CONTRACT.md](FEED-CONTRACT.md) and [BackupCodec.kt](../core/src/main/kotlin/app/mynguli/core/BackupCodec.kt).
+Context import, feed restore and local-tool restore have different replacement semantics. Validate the complete input and supported format/version before replacement; a parse failure must not erase a store. Preserve reviewed-import cancellation and stale-preview guards. Feed restore disables delivery and clears credentials after durable state replacement. Local-tool restore disables imported alarms and clears active focus state. Keep migrations compatible with the documented formats in [FEED-CONTRACT.md](FEED-CONTRACT.md) and [BackupCodec.kt](../core/src/main/kotlin/mebot/nguli/com/core/BackupCodec.kt).
 
 ### Personalization and source evidence
 
@@ -187,8 +187,8 @@ Run the generator without `--check` only when deliberately changing those assets
 
 A module is a typed discovery configuration with a complete UI and request contract. Adding a card alone is insufficient.
 
-1. Add a reusable kind/preset in [ModuleCatalog](../core/src/main/kotlin/app/mynguli/core/FeedModels.kt): category, purpose, editorial requirements, output type and whether it has a real public adapter. Keep defaults general and supported by implemented retrieval.
-2. Add validated kind-specific choices in [ModulePreferences.kt](../core/src/main/kotlin/app/mynguli/core/ModulePreferences.kt). Preserve empty-map compatibility. Only persist explicit, typed choice values; do not accept arbitrary privileged instruction fields.
+1. Add a reusable kind/preset in [ModuleCatalog](../core/src/main/kotlin/mebot/nguli/com/core/FeedModels.kt): category, purpose, editorial requirements, output type and whether it has a real public adapter. Keep defaults general and supported by implemented retrieval.
+2. Add validated kind-specific choices in [ModulePreferences.kt](../core/src/main/kotlin/mebot/nguli/com/core/ModulePreferences.kt). Preserve empty-map compatibility. Only persist explicit, typed choice values; do not accept arbitrary privileged instruction fields.
 3. Add English and Kiswahili name, description, default-focus and preference resources. Wire icons, grouping and editor controls. Verify catalog discovery, disabled filtering, module settings, context selection, ordering and feed/detail actions on a narrow screen with larger text.
 4. Add a direct public adapter only when the endpoint is intended for public retrieval. Otherwise use the explicit AI contract. Keep factual URL evidence, safe networking, errors and partial-refresh preservation intact. If the Python service supports the new kind, update its validated schema/default guidance and tests too.
 5. Add meaningful core/provider tests for validation, defaults, scope isolation and source evidence. Add a native journey only where it verifies a distinct user or lifecycle risk. Use fixtures and local fake providers.
@@ -198,7 +198,7 @@ For a new private connector, first define the user authorization, minimal scopes
 
 ## UI and accessibility changes
 
-Use the tokens, components and typography in [Theme.kt](../app/src/main/java/app/mynguli/ui/Theme.kt) and [Components.kt](../app/src/main/java/app/mynguli/ui/Components.kt), following [DESIGN.md](DESIGN.md). Keep the five main destinations and short default feed intact unless the change explicitly calls for a navigation redesign.
+Use the tokens, components and typography in [Theme.kt](../app/src/main/java/mebot/nguli/com/ui/Theme.kt) and [Components.kt](../app/src/main/java/mebot/nguli/com/ui/Components.kt), following [DESIGN.md](DESIGN.md). Keep the five main destinations and short default feed intact unless the change explicitly calls for a navigation redesign.
 
 All interface copy belongs in both resource locales. Preserve minimum touch targets, semantics, heading labels, contrast, large-text wrapping, keyboard/IME reachability and reduced-motion behavior. A gesture must have an accessible alternative when it is essential, such as module reordering. Loading, saving, empty, offline, denied-permission and failure states are part of the feature.
 

@@ -1,5 +1,10 @@
 # Security policy
 
+## 0.8.2 connection and updater boundaries
+
+Provider origins and redirect behavior are explicit. Custom inference requires HTTPS, except for an explicitly approved private/localhost HTTP endpoint with no API key sent over HTTP. APK updating only uses the fixed public MeBot repository and allowed HTTPS asset hosts, enforces size/checksum/package/newer-version/minimumSDK/certificate checks, and delegates installation approval to Android. This is not silent arbitrary code installation.
+
+
 MeBot is local Android software with optional public-source retrieval, ChatGPT subscription access, direct API access and a separately operated personal service. Sensitive data can include personal context, conversations/attachments, cached explanations, local check-ins, alarm plans, exports, OAuth sessions, API/service credentials and release-signing material. The app does not include analytics or operate a shared MeBot account server.
 
 This document describes the current v0.6.1 implementation and how to report a problem. See [privacy](docs/PRIVACY.md) for user-facing data handling and [verification](docs/VERIFICATION.md) for tested behavior and remaining device/provider checks. It is not a claim that the code has undergone an independent security audit.
@@ -67,7 +72,7 @@ Selecting custom audio grants access to one document, not the media library. The
 
 Optional alarm speech uses an installed offline voice and leaves the tone ringing when speech is unavailable. The text is handled by the selected phone engine, not MeBot's AI connection. Workspace voice input/read-aloud use available Android services whose own processing/network policies may differ. MeBot does not retain voice recordings or request broad microphone/media access itself.
 
-Force-stop, power-off, revoked permissions, DND/audio routes and manufacturer restrictions can prevent ringing. Host tests do not establish physical-device reliability. See the [device acceptance procedure](docs/BUILD.md#device-acceptance-before-relying-on-alarms).
+Force-stop, power-off, revoked permissions, DND/audio routes and manufacturer restrictions can prevent ringing. Host tests do not establish physical-device reliability. See the [device acceptance procedure](docs/BUILD.md#device-only-checks).
 
 ### Optional personal service
 

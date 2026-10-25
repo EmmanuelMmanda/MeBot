@@ -1,5 +1,10 @@
 # Privacy and data
 
+## Provider and update privacy in 0.8.2
+
+Selected provider requests go only to that configured provider/endpoint with approved scoped context. Credentials are isolated and omitted from portable exports. Claude/Gemini/OpenRouter use their own billing and capability rules. A compatible private/localhost HTTP endpoint requires explicit consent and cannot receive a saved API key over HTTP. Software Updates contacts the public GitHub release API and asset hosts without personal context or AI credentials. The app has no added analytics service. Relevance feedback stays in local persisted state and may be summarized within the same module’s approved AI request. Capture inputs in public documentation are public records, not a user's personal profile.
+
+
 MeBot 0.6.1 keeps local utilities, conversations and cached reading on the device, retrieves configured public feeds, and optionally uses an explicitly connected ChatGPT account, API key or personal service. There is no advertising, analytics client, separate MeBot account service or automatic ChatGPT memory sync. Daily notes, alarm plans and focus records are not included in AI prompts. Personal context is a separate, editable collection of explicitly supplied notes.
 
 This document describes the code in this repository. It does not cover another application, a modified build, an operating-system service, or a document provider you choose when exporting a file.
@@ -83,7 +88,7 @@ The manifest disables normal automatic app backup, and [data extraction rules](.
 | **You → Preferences → Export a backup** | Local-tool profile/settings, check-ins, focus history and alarm plans. |
 | **You → My context → Export context** | A narrower portable profile/context file, including the current module settings. |
 
-To preserve both feed and local-tool data, use both full-backup actions. A context export does not include conversations or local tools. The [user guide](USER-GUIDE.md#three-different-exportrestore-paths) explains the matching import paths and their different replacement effects.
+To preserve both feed and local-tool data, use both full-backup actions. A context export does not include conversations or local tools. The [user guide](USER-GUIDE.md#data-controls) explains the matching import paths and their different replacement effects.
 
 You choose where an export is written. If you select a cloud-backed document provider, that provider may upload the file using its own service and permissions. The app does not encrypt the exported backup or control retention and sharing at that destination.
 
@@ -111,7 +116,7 @@ This feature is an application-level reset, not a promise of forensic secure del
 
 A contribution that adds a new private connector, telemetry, another processing destination, accounts or cloud synchronization must make the behavior explicit and update this document. Configurability does not authorize broader data access.
 
-For implementation detail, see [AppRepository.kt](../app/src/main/java/app/mynguli/data/AppRepository.kt), [AlarmStore.kt](../app/src/main/java/app/mynguli/alarm/AlarmStore.kt), and the [checkpoint scanner](../app/src/main/java/app/mynguli/alarm/AlarmActivity.kt). For responsible reports about the code, follow the repository's [security guidance](../SECURITY.md).
+For implementation detail, see [AppRepository.kt](../app/src/main/java/mebot/nguli/com/data/AppRepository.kt), [AlarmStore.kt](../app/src/main/java/mebot/nguli/com/alarm/AlarmStore.kt), and the [checkpoint scanner](../app/src/main/java/mebot/nguli/com/alarm/AlarmActivity.kt). For responsible reports about the code, follow the repository's [security guidance](../SECURITY.md).
 
 ## Connection recovery details
 

@@ -1,0 +1,13 @@
+{
+  "version": "0.8.2",
+  "apk_file": "mebot-0.8.2.apk",
+  "apk_sha256": "fe7b2742b2c236b3a8cabee72c5d0d575dec11eeae5c48c1ecdddadb55e61fda",
+  "apk_size_bytes": 16135271,
+  "application_id": "mebot.nguli.com",
+  "version_code": 13,
+  "signer_certificate_sha256": "b1b69dcefe26c815dbaec76223b7b80be76af06ba30da774637a806a7f75e3e9",
+  "personal_profile_asset_present": false,
+  "source_code_commit": "36cc6ad8a59f4a1e8516f42129b0ff2577de1f70",
+  "source_ref": "v0.8.2",
+  "source_integrity_file": "SHA256SUMS.txt"
+}

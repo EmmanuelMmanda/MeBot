@@ -1,178 +1,190 @@
 #!/usr/bin/env python3
-"""Render static product pages and README from reviewed release and screen data.
-No network requests. Existing illustrated guides are retained. Generated downloads
-and image links work without JavaScript. Run before checking or publishing docs.
+"""Render MeBot's static product surface from reviewed release data and captures.
+No external requests; download links and image originals work without JavaScript.
 """
 from pathlib import Path
 from html import escape as esc
-from datetime import date
-import json
-import re
-import struct
-
-ROOT = Path(__file__).resolve().parents[1]
-DOCS = ROOT / 'docs'
-REPO = 'https://github.com/EmmanuelMmanda/MeBot'
-SITE = 'https://emmanuelmmanda.github.io/MeBot/'
-r = json.loads((DOCS / 'assets/release.json').read_text())
-screens = json.loads((DOCS / 'assets/screens.json').read_text())
-v = r['version']
-assert r['status'] == 'published' and r['tag'] == 'v' + v
-assert re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9.]+)?', v)
-base = f"{REPO}/releases/download/{r['tag']}/"
-notes = f"{REPO}/releases/tag/{r['tag']}"
-apk = base + r['filename']
-source = base + r['sourceFilename']
-previews = base + r['previewsFilename']
-size = f"{r['sizeBytes'] / 1_000_000:.1f} MB"
-published = date.fromisoformat(r['publishedDate']).strftime('%d %B %Y')
+import json,re,struct
+ROOT=Path(__file__).resolve().parents[1];DOCS=ROOT/'docs'
+REPO='https://github.com/EmmanuelMmanda/MeBot';SITE='https://emmanuelmmanda.github.io/MeBot/'
+r=json.loads((DOCS/'assets/release.json').read_text());v=r['version'];tag=r['tag']
+assert r['status']=='published' and tag=='v'+v and re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9.]+)?',v)
+base=f'{REPO}/releases/download/{tag}/';apk=base+r['filename'];notes=f'{REPO}/releases/tag/{tag}'
+source=base+r['sourceFilename'];size=f"{r['sizeBytes']/1000000:.1f} MB"
+screens=json.loads((DOCS/'assets/screens.json').read_text())
 for s in screens:
-    path = (DOCS / s['file']).resolve()
-    assert path.is_relative_to(DOCS.resolve()) and path.is_file(), s['file']
-    assert path.read_bytes()[:8] == b'\x89PNG\r\n\x1a\n', s['file']
-    s['width'], s['height'] = struct.unpack('>II', path.read_bytes()[16:24])
+ p=(DOCS/s['file']).resolve();assert p.is_relative_to(DOCS.resolve()) and p.is_file()
+ raw=p.read_bytes();assert raw[:8]==b'\x89PNG\r\n\x1a\n';s['width'],s['height']=struct.unpack('>II',raw[16:24])
+by={Path(s['file']).stem:s for s in screens}
+shell=(DOCS/'index.html').read_text();footer=shell[shell.index('<footer'):]
+footer=re.sub(r'MeBot 0\.[0-9.]+(?:-beta\.[0-9]+)? ·',f'MeBot {v} ·',footer)
+footer=footer.replace('Native Android host render. Example content is not a live account result.','Native Android host capture with dated public source content and controlled request state.').replace('Native screens with example content','Dated public content · native captures')
+header=shell[shell.index('<a class="skip-link"'):shell.index('<main')].replace(' aria-current="page"','')
 
-# Shared navigation fixes preserve existing guide content and anchors.
-for path in DOCS.rglob('*.html'):
-    text = path.read_text()
-    text = text.replace(REPO + '/blob/master/', REPO + '/blob/main/')
-    text = text.replace(REPO + '/tree/master/', REPO + '/tree/main/')
-    text = text.replace(REPO + '/releases/latest', notes)
-    text = re.sub(r'<span>MeBot 0\.6\.1 ·', f'<span>MeBot {v} ·', text)
-    if 'showcase.css' not in text:
-        prefix = '../' if path.parent.name == 'guides' else ''
-        text = text.replace('</head>', f'<link rel="stylesheet" href="{prefix}showcase.css"><script src="{prefix}showcase.js" defer></script>\n</head>')
-    if '<!-- beta-notice -->' not in text and path.parent.name == 'guides':
-        text = text.replace('</header>', f'</header>\n<!-- beta-notice --><aside class="beta-banner">Current release: <a href="../download.html">MeBot {v}</a>. See update and installation instructions.</aside>', 1)
-    path.write_text(text)
+def page(name,title,desc,body,current=None):
+ nav=header
+ if current:nav=nav.replace(f'href="{current}"',f'href="{current}" aria-current="page"',1)
+ head=f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{esc(title)} · MeBot</title><meta name="description" content="{esc(desc,quote=True)}"><meta name="theme-color" content="#f7f8fa"><meta name="color-scheme" content="light dark"><meta name="referrer" content="strict-origin-when-cross-origin"><link rel="canonical" href="{SITE}{name}"><link rel="icon" href="assets/mebot.svg" type="image/svg+xml"><meta property="og:type" content="website"><meta property="og:title" content="{esc(title,quote=True)} · MeBot"><meta property="og:description" content="{esc(desc,quote=True)}"><meta property="og:url" content="{SITE}{name}"><meta property="og:image" content="{SITE}screenshots/v082/feed.png"><meta property="og:image:alt" content="MeBot feed with dated public reporting"><link rel="stylesheet" href="site.css"><link rel="stylesheet" href="showcase.css"><script src="site.js" defer></script><script src="showcase.js" defer></script></head><body data-release-manifest="assets/release.json">'''
+ (DOCS/name).write_text(head+nav+'<main id="main">'+body+'</main>'+footer)
 
-shell = (DOCS / 'index.html').read_text()
-footer = re.sub(r'MeBot 0\.[0-9.]+(?:-beta\.[0-9]+)? ·', f'MeBot {v} ·', shell[shell.index('<footer'):])
-header = shell[shell.index('<a class="skip-link"'):shell.index('<main')]
-header = header.replace(' aria-current="page"', '')
-if 'href="tour.html"' not in header:
-    header = header.replace('<a href="guide.html">Guide</a>', '<a href="tour.html">Start here</a><a href="guide.html">Guide</a>')
-if 'href="screenshots.html"' not in header:
-    header = header.replace('<a href="guide.html">Guide</a>', '<a href="screenshots.html">Screenshots</a><a href="guide.html">Guide</a>')
+def shot(key,hero=False):
+ s=by[key] if isinstance(key,str) else key;load='fetchpriority="high"' if hero else 'loading="lazy"'
+ return f'''<figure class="shot" data-screen-group="{s['group']}"><a href="{s['file']}" data-lightbox data-title="{esc(s['title'],quote=True)}" aria-label="Enlarge: {esc(s['title'],quote=True)}"><img src="{s['file']}" width="{s['width']}" height="{s['height']}" alt="{esc(s['alt'],quote=True)}" {load} decoding="async"></a><figcaption><span class="shot-version">{esc(s['version'])} · {esc(s['captureDate'])}</span><strong>{esc(s['title'])}</strong><span>{esc(s['caption'])}</span></figcaption></figure>'''
 
-
-def page(filename, title, desc, content, current=None):
-    nav = header
-    if current:
-        nav = nav.replace(f'href="{current}"', f'href="{current}" aria-current="page"', 1)
-    head = f'''<!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{esc(title)} · MeBot</title><meta name="description" content="{esc(desc, quote=True)}">
-<meta name="theme-color" content="#f7f8fa"><meta name="color-scheme" content="light dark"><meta name="referrer" content="strict-origin-when-cross-origin">
-<link rel="canonical" href="{SITE}{filename}"><link rel="icon" href="assets/mebot.svg" type="image/svg+xml">
-<meta property="og:type" content="website"><meta property="og:title" content="{esc(title, quote=True)} · MeBot"><meta property="og:description" content="{esc(desc, quote=True)}"><meta property="og:url" content="{SITE}{filename}"><meta property="og:image" content="{SITE}screenshots/v070/feed.png"><meta property="og:image:alt" content="MeBot Android feed with module filters and a sample story">
-<link rel="stylesheet" href="site.css"><link rel="stylesheet" href="showcase.css"><script src="site.js" defer></script><script src="showcase.js" defer></script>
-</head><body data-release-manifest="assets/release.json">
-'''
-    (DOCS / filename).write_text(head + nav + '<main id="main">\n' + content + '\n</main>\n' + footer)
-
-
-def shot(s, hero=False):
-    load = 'fetchpriority="high"' if hero else 'loading="lazy"'
-    return f'''<figure class="shot" data-screen-group="{s['group']}"><a href="{s['file']}" data-lightbox data-title="{esc(s['title'], quote=True)}" aria-label="Enlarge: {esc(s['title'], quote=True)}"><img src="{s['file']}" width="{s['width']}" height="{s['height']}" alt="{esc(s['alt'], quote=True)}" {load} decoding="async"></a><figcaption><span class="shot-version">{esc(s['version'])}</span><strong>{esc(s['title'])}</strong><span>{esc(s['caption'])}</span></figcaption></figure>'''
-
-
-def buttons():
-    return f'<div class="actions"><a class="button" data-release-apk href="{apk}">Download APK ↓</a><a class="button secondary" href="screenshots.html">See the app →</a></div>'
-
-
-beta = f'<p class="beta-note"><strong>Official MeBot {v}.</strong> Updates your original MeBot installation. Keep MeBot Test installed until you have moved any data you need. <a href="{notes}">Release notes</a>.</p>'
-page('index.html', 'MeBot Daily for Android', 'A personal Android feed, sourced AI answers and optional everyday tools. See actual app screens and download the current official APK.', f'''
-<section class="hero wrap"><div class="hero-copy"><p class="eyebrow">Android · Open source <span class="version">{v}</span></p><h1>MeBot Daily</h1><p class="hero-lead">News, learning, music and useful finds, chosen around your interests. Open a story, ask a question, or explore a topic.</p>{buttons()}<p class="micro">Android 8.0+ · {size} · English &amp; Kiswahili</p>{beta}<div class="connection-intro"><h2>Connect the AI account you use</h2><p>Use MeBot’s ChatGPT sign-in where your account supports it, or choose an API key. Model access and usage limits depend on your provider.</p><a class="text-link" href="guides/ai-connections.html">Account setup and limits →</a></div></div><div class="hero-phones">{shot(screens[4], True)}{shot(screens[0])}</div></section>
-<section class="section wrap hairline"><div class="section-heading"><div><p class="eyebrow">Start with what you like</p><h2>A few choices. Your first feed.</h2><p>Pick topics, add an optional city or interest, then open your feed. No context file required.</p></div><a class="text-link" href="tour.html">Walk through the app →</a></div><div class="screen-grid three">{''.join(shot(screens[i]) for i in (7,8,9))}</div></section>
-<section class="section wrap hairline"><div class="section-heading"><div><p class="eyebrow">Read and ask</p><h2>Keep the story and the answer together.</h2><p>Read sourced explanations, ask follow-up questions and switch the topic of a conversation.</p></div><a class="text-link" href="guides/feed-and-ai.html">Explore Feed &amp; AI →</a></div><div class="feature-pair">{shot(screens[0])}<div class="feature-copy"><h3>Choose how you use it</h3><div class="feature-line"><strong>Follow your topics</strong><p>News, technology, opportunities, learning, music, weather and more.</p></div><div class="feature-line"><strong>Ask a closer question</strong><p>Read an explanation with source links, then keep the conversation going.</p></div><div class="feature-line"><strong>Keep useful finds</strong><p>Save a story, reorder modules or change the information MeBot uses about you.</p></div><a class="text-link" href="screenshots.html">View all {len(screens)} screens →</a></div></div></section>
-<section class="section wrap hairline"><div class="section-heading"><div><p class="eyebrow">Optional tools</p><h2>Make room for the rest of your day.</h2><p>Alarms, focus and check-in sit alongside your feed. You decide which modules stay enabled.</p></div><a class="text-link" href="guides/modules.html">All modules →</a></div><div class="screen-grid three">{''.join(shot(screens[i]) for i in (11,13,3))}</div></section>
-<section class="next-step wrap"><div><p class="eyebrow">Available on GitHub</p><h2>Try {v}</h2><p>The APK, tested source snapshot, screenshots and verification files are published together.</p></div><div class="actions"><a class="button" data-release-apk href="{apk}">Download APK ↓</a><a class="button secondary" href="releases.html">Releases &amp; files →</a></div></section>
-<p class="image-provenance wrap">Screens are native Android renders with example content, not live account results. Each image is labelled by version. <a href="screenshots.html#image-notes">Image notes</a>.</p>
-''', 'index.html')
-
-filter_html = ''.join(f'<button type="button" data-screen-filter="{key}" aria-pressed="{str(key=="all").lower()}">{label}</button>' for key,label in [('all','All screens'),('start','Getting started'),('read','Feed & AI'),('organize','Your preferences'),('tools','Everyday tools')])
-page('screenshots.html', 'Inside the app', 'Explore actual MeBot Android screens, with full-size previews, captions, version labels and accessible image descriptions.', f'''
-<section class="section wrap"><p class="eyebrow">App gallery</p><h1>Inside MeBot</h1><p class="lead">See what you can do before installing. Choose a screen to open it full-size.</p><div class="screen-filters js-only" role="group" aria-label="Filter app screenshots">{filter_html}</div><p id="screen-count" role="status" class="micro">{len(screens)} screens</p><div class="screen-grid" id="screen-gallery">{''.join(shot(s) for s in screens)}</div></section>
-<section class="section wrap hairline" id="image-notes"><h2>About these images</h2><p>Five current screens are from 0.8.1. Seven supporting screens are from the 0.7.0 beta. Supporting screens from 0.6.1, 0.6.0 and 0.5.1 are labelled individually. They are native Android host renders with synthetic example content, not photographs of a physical phone or proof of a live AI connection.</p><p>Images open at their original resolution. Use Tab and Enter to select an image, Escape to close the viewer, or the original-image link to inspect it in your browser.</p><div class="actions"><a class="button secondary" href="{previews}">Download screenshots and evidence ↓</a><a class="text-link" href="{REPO}/blob/main/docs/screenshots/README.md">Capture notes &amp; credits →</a></div></section>
-''', 'screenshots.html')
-
-resources = [('Matching source ZIP', 'The source snapshot published with this release.', r['sourceFilename']), ('Native screen previews', 'Native app screenshots, test evidence and supporting resources.', r['previewsFilename']), ('Verification report', 'Build evidence, test results and remaining device checks.', r['verificationFilename']), ('Test-result archive', 'The test evidence attached to this release.', r['testsFilename']), ('SHA-256 checksums', 'Compare downloaded files with the published digests.', 'SHA256SUMS.txt')]
-resource_html = ''.join(f'<div class="download-row"><div><strong>{title}</strong><p>{desc}</p></div><a href="{base}{file}">Download <span class="sr-only">{title}</span> ↓</a></div>' for title,desc,file in resources)
-page('download.html', 'Download MeBot', 'Download the official MeBot Android APK, matching source, screenshots and verification files.', f'''
-<div class="release-page"><p class="eyebrow">Official Android release</p><h1>Download MeBot</h1><p class="lead">The current public release is {v}. Install it over original official MeBot; do not uninstall first.</p><section class="release-card" aria-labelledby="current-build"><span class="release-state" data-release-status>{v} · Official release</span><h2 id="current-build">MeBot <span data-release-version>{v}</span></h2><p>Android 8.0+ · <span data-release-size>{size}</span> · English &amp; Kiswahili</p><div class="actions"><a class="button" data-release-apk href="{apk}">Download APK ↓</a><a class="button secondary" href="{notes}">Release notes ↗</a></div>{beta}<p class="micro">This button downloads the published APK directly. JavaScript is not required.</p><div class="release-metadata"><p>File: <code data-release-filename>{r['filename']}</code></p><p>Application: <code>app.mynguli</code> · Original release signing certificate</p><details><summary>Verify the APK checksum</summary><div class="code-block"><div class="code-toolbar"><span>SHA-256</span><button type="button" class="copy-button js-only" data-copy-target="apk-checksum">Copy checksum</button></div><pre id="apk-checksum" data-release-sha tabindex="0">{r['sha256']}</pre></div><p><a href="{base}SHA256SUMS.txt">All release checksums</a></p></details></div></section>
-<section class="article-section" id="install"><h2>Install without disturbing your existing app</h2><ol><li>Open the APK on your Android phone. Allow installation from that browser or file manager when Android asks.</li><li>Choose <strong>Update</strong> when replacing original official MeBot. Its package and signing certificate match.</li><li>Open <strong>MeBot</strong>. Existing official-app settings stay in place. A fresh install starts with the interest-based setup.</li><li>Using the earlier <strong>MeBot Test</strong>? It remains separate. Export and review any preferences you need in MeBot; reconnect accounts if needed.</li></ol><p>Keep only the alarms you intend to use enabled across the two apps. Test sound and alarm delivery on your phone before relying on them overnight.</p><p><a href="guides/install.html">Full setup guide →</a></p></section>
-<section class="article-section" id="resources"><h2>Source and release files</h2><div class="download-list">{resource_html}</div></section>
-<section class="article-section" id="limits"><h2>Verification and device checks</h2><p>This build is signed with the original MeBot release key. The verification report records the actual checks and any gaps. Live account access, physical-phone alarms, Android’s file picker and third-party media still require device checks.</p><p>Official MeBot updates retain the original package and signing key. A fork or the earlier test package does not automatically share its data with this installation.</p><p><a href="{base}{r['verificationFilename']}">Current verification report ↗</a> · <a href="{notes}">Release details and limits ↗</a></p></section>
-<section class="article-section" id="context"><h2>Optional context import</h2><p>Onboarding is enough to get started. Existing users can also import reviewed preferences.</p><div class="actions"><a class="button secondary" href="context-example.json" download="mebot-context.json">Example JSON ↓</a><a class="text-link" href="guides/personal-context.html">Import guide →</a></div></section></div>
-''', 'download.html')
-
-history = ''.join(f'<tr><th scope="row">{esc(x["version"])}</th><td>{"Published release" if x["status"] == "published" else "Earlier development milestone"}</td><td>{("<a href=\""+REPO+"/releases/tag/"+x["tag"]+"\">Release files →</a>") if x["status"] == "published" else "Not published in this repository’s release list"}</td></tr>' for x in r.get('releases', []) if x['version'] != v)
-page('releases.html', 'Releases and downloads', 'Published MeBot releases, download files, checksums and clearly labelled earlier milestones.', f'''
-<div class="release-page"><p class="eyebrow">Release directory</p><h1>Releases &amp; files</h1><p class="lead">Choose a published build and see exactly what comes with it.</p><section class="release-card" id="latest"><span class="release-state">Published {published} · Official</span><h2>{v}</h2><p>Original MeBot package and signing identity. Android 8.0+ · {size}.</p><div class="actions"><a class="button" data-release-apk href="{apk}">Download APK ↓</a><a class="button secondary" href="download.html">Installation &amp; checksums →</a><a class="text-link" href="{notes}">View on GitHub ↗</a></div></section>
-<section class="article-section" id="directory"><h2>Files for this release</h2><div class="download-list">{resource_html}</div></section>
-<section class="article-section"><h2>In this release</h2><p>Accurate request-specific activity in a fixed top panel; readable details with Show more; selected-module refresh; editable Tanzania-focused defaults and public fallbacks; verified file availability. Existing appearance choices, media, modules and local tools remain.</p><p>Read the <a href="{notes}">release notes</a> and <a href="{base}{r['verificationFilename']}">verification report</a> for the executed checks and remaining device tests.</p><p><a href="screenshots.html">See the app screens →</a></p></section>
-<section class="article-section"><h2>Earlier milestones</h2><p>The project’s changelog records earlier versions. Published releases are linked below. Unpublished milestones remain labelled as history, without invented download links.</p><div class="table-wrap"><table><caption class="sr-only">Earlier recorded versions and their publication status</caption><thead><tr><th scope="col">Version</th><th scope="col">Record</th><th scope="col">Download status</th></tr></thead><tbody>{history}</tbody></table></div><p><a href="{REPO}/blob/main/CHANGELOG.md">Read the changelog ↗</a> · <a href="{REPO}/releases">All GitHub releases ↗</a></p></section></div>
-''', 'releases.html')
-
-# Retain hand-maintained connection, technical and contribution sections.
-readme = (ROOT / 'README.md').read_text()
-readme = readme[readme.index('## Use your ChatGPT subscription'):]
-old_start = readme.index('## Preferences that stay yours') if '## Preferences that stay yours' in readme else readme.index('## Releases and verification')
-old_end = readme.index('## Build from source')
-readme = readme[:old_start] + f'''## Releases and verification
-
-The published release is **MeBot {v}**, application ID `app.mynguli`, version code **{r.get("versionCode", 12)}**, signed with the original release certificate. Install it over original official MeBot. The earlier **MeBot Test** is separate; export and review any data you need before removing it.
-
-[Download the APK]({apk}) · [Source ZIP]({source}) · [Screen previews]({previews}) · [Verification report]({base}{r['verificationFilename']}) · [SHA-256 checksums]({base}SHA256SUMS.txt)
-
-See the current [verification report]({base}{r['verificationFilename']}) for executed tests and remaining device checks. [Release notes and limits]({notes}).
-
-Older versions are development history, not claimed as published downloads. See the [release directory]({SITE}releases.html) and [changelog](CHANGELOG.md).
-
-Personal profiles, credentials and private signing keys must not be published. See [privacy](docs/PRIVACY.md), [source distribution](docs/PUBLIC-RELEASES.md) and [security reporting](SECURITY.md).
-
-''' + readme[old_end:]
-readme = readme.replace(REPO + '/releases/latest', notes)
-readme = readme.replace('promote to **master**', 'promote to **main**')
-readme = readme.replace('**Open the six-step tour or skip it.**', '**Choose your interests, or skip the tour.**')
-readme = readme.replace(REPO + '/blob/master/', REPO + '/blob/main/')
-readme = readme.replace('The current beta installs separately; retain your existing MeBot.', 'This version updates original official MeBot. The earlier MeBot Test is separate.')
-rows = []
-for i in range(0, len(screens), 3):
-    group = screens[i:i+3]
-    rows.append('<p align="center">\n' + '\n'.join(f'  <a href="docs/{s["file"]}"><img src="docs/{s["file"]}" width="225" alt="{esc(s["alt"] + " — " + s["version"], quote=True)}"></a>' for s in group) + '\n</p>\n\n' + ' · '.join(f'**{s["title"]}** ({s["version"]})' for s in group) + '\n')
-intro = f'''<div align="center">
+def download(label='Download MeBot APK ↓'):return f'<a class="button" data-release-apk href="{apk}">{label}</a>'
+identity='<p class="beta-note"><strong>A fresh MeBot identity.</strong> This release uses <code>mebot.nguli.com</code>. Install it as a new app, reconnect your account and review your preferences. It does not overwrite the older MyNguli-package installation.</p>'
+provenance='<p class="image-provenance wrap">Actual Android UI, dated public content, controlled provider states. These are not screenshots of a live personal account or proof that an application window is open. <a href="screenshots.html#image-notes">Sources and image credits →</a></p>'
+page('index.html','MeBot Daily for Android','Explore your interests, read sourced information, ask MeBot and keep useful resources. Download the official Android release.',f'''
+<section class="hero wrap"><div class="hero-copy"><p class="eyebrow">Android · Open source <span class="version">{v}</span></p><h1>MeBot Daily</h1><p class="hero-lead">Explore what matters to you. Read local and global updates, ask a closer question, and keep useful sources.</p><div class="actions">{download()}<a class="button secondary" href="tour.html">Take a look inside →</a></div><p class="micro">Android 8.0+ · {size} · English &amp; Kiswahili</p>{identity}<div class="connection-intro"><h2>Your choice of AI connection</h2><p>Connect an eligible ChatGPT account, use a supported provider key, or connect a personal inference server. Public information and local tools remain available without AI.</p><a class="text-link" href="guides/release-082.html#connections">Providers and capabilities →</a></div></div><div class="hero-phones">{shot('news',True)}{shot('detail-answer')}</div></section>
+<section class="section wrap hairline"><div class="section-heading"><div><p class="eyebrow">Make it yours</p><h2>Start with your interests.</h2><p>Choose topics. Add a city when it helps. No JSON file is needed to begin.</p></div><a class="text-link" href="tour.html">A short guided start →</a></div><div class="screen-grid three">{''.join(shot(k) for k in ['welcome','interests','daily-tools'])}</div></section>
+<section class="section wrap hairline"><div class="section-heading"><div><p class="eyebrow">Read, ask and refine</p><h2>Keep the useful information in view.</h2><p>Answers stream beneath a stable introduction. Sources, media and files have their own place.</p></div></div><div class="feature-pair">{shot('mebot')}<div class="feature-copy"><h3>More useful with your feedback</h3><div class="feature-line"><strong>Relevant / Not relevant</strong><p>Refine the topics within a module. Change your choice, undo it or reset feedback separately.</p></div><div class="feature-line"><strong>New results as they arrive</strong><p>Completed modules update the feed while others continue. New information does not move the item you are reading.</p></div><div class="feature-line"><strong>One activity area</strong><p>Expand the top panel for actual request events. The detail panel follows the same width as its anchor.</p></div><a class="text-link" href="screenshots.html">Explore all {len(screens)} screens →</a></div></div></section>
+<section class="section wrap hairline"><div class="section-heading"><div><p class="eyebrow">You stay in control</p><h2>Clear settings. Useful actions.</h2><p>Choose a connection, keep usage in view and check for verified software updates.</p></div></div><div class="screen-grid three">{''.join(shot(k) for k in ['providers','background','software-updates'])}</div></section>
+<section class="next-step wrap"><div><h2>Get MeBot {v}</h2><p>The Android APK, source, screenshots and verification files are published together.</p></div><div class="actions">{download()}<a class="button secondary" href="releases.html">Release files →</a></div></section>{provenance}''','index.html')
+filters=''.join(f'<button type="button" data-screen-filter="{k}" aria-pressed="{str(k=="all").lower()}">{t}</button>' for k,t in [('all','All screens'),('start','Getting started'),('read','Feed & MeBot'),('organize','Your preferences'),('tools','Everyday tools')])
+page('screenshots.html','Inside MeBot','Current Android screens, full-size previews, captions and public-source credits.',f'''
+<section class="section wrap"><p class="eyebrow">Current app gallery · {v}</p><h1>Inside MeBot</h1><p class="lead">The actual interface, with concrete reporting and resources. Select an image for its original size.</p><div class="screen-filters js-only" role="group" aria-label="Filter app screenshots">{filters}</div><p id="screen-count" role="status" class="micro">{len(screens)} screens</p><div class="screen-grid" id="screen-gallery">{''.join(shot(s) for s in screens)}</div></section>
+<section class="section wrap hairline" id="image-notes"><h2>About these captures</h2><p>These screens were rendered from the Android implementation on 25 October 2026. Public reporting comes from Daily News Tanzania, NASA and original repositories; CRDB Bank Foundation examples describe published programmes, not an unverified open application.</p><p>The screenshot host uses controlled request and account state for repeatable testing. It is not a live account recording or a physical-phone test. Software Updates may show a debug suffix in the host capture; the downloadable APK is the signed official release. Photography has separate credits and capture dates.</p><div class="actions"><a class="button secondary" href="{base}{r['previewsFilename']}">Screenshots and evidence ↓</a><a class="text-link" href="{REPO}/blob/main/docs/screenshots/v082/README.md">Capture provenance →</a><a class="text-link" href="{REPO}/blob/main/docs/IMAGE-CREDITS.md">Image credits →</a></div></section>''','screenshots.html')
+resources=[('Matching source','Exact source snapshot for this release.',r['sourceFilename']),('Screenshots and evidence','Native captures, test results and verification evidence.',r['previewsFilename']),('Documentation','Offline website and usage guides.',r['documentationFilename']),('Verification report','Executed checks and explicit device-testing limits.',r['verificationFilename']),('SHA-256 checksums','Digests for every published asset.','SHA256SUMS.txt')]
+resource_html=''.join(f'<div class="download-row"><div><strong>{t}</strong><p>{desc}</p></div><a href="{base}{f}">Download <span class="sr-only">{t}</span> ↓</a></div>' for t,desc,f in resources)
+page('download.html','Download MeBot','Official MeBot APK, source, verification and installation instructions.',f'''
+<div class="release-page"><p class="eyebrow">Official Android release</p><h1>Download MeBot</h1><p class="lead">MeBot {v} · Android 8.0+ · {size}.</p><section class="release-card"><span class="release-state" data-release-status>Version {v} · Official release</span><h2>MeBot <span data-release-version>{v}</span></h2><div class="actions">{download()}<a class="button secondary" href="{notes}">Release notes ↗</a></div>{identity}<p class="micro">Direct APK download. JavaScript is not required.</p><details class="release-metadata"><summary>File identity and verification</summary><p>Package: <code>mebot.nguli.com</code> · Version code {r['versionCode']}.</p><p><code data-release-filename>{r['filename']}</code> · <span data-release-size>{size}</span></p><div class="code-block"><div class="code-toolbar"><span>SHA-256</span><button type="button" class="copy-button js-only" data-copy-target="apk-checksum">Copy checksum</button></div><pre id="apk-checksum" data-release-sha tabindex="0">{r['sha256']}</pre></div></details></section>
+<section class="article-section" id="install"><h2>First installation with the new identity</h2><ol><li>Open the downloaded APK on Android. Allow your browser or file manager to install when Android asks.</li><li>Open MeBot, choose your language and interests, then explore your feed.</li><li>Connect an AI provider when ready. Public-source information and daily tools do not require an AI account.</li><li>For future releases, open <strong>My MeBot → Software Updates</strong>. Automatic checks are available; Android asks before installation.</li></ol><p>The previous development package remains separate. Accounts, protected credentials and system alarm registrations do not automatically transfer. Reconnect accounts and test any alarms you configure. Export old personal preferences only when you need them.</p></section>
+<section class="article-section" id="resources"><h2>Release resources</h2><div class="download-list">{resource_html}</div></section><section class="article-section" id="limits"><h2>What has and has not been tested</h2><p>See the verification report for exact test counts, lint findings and signing checks. Automated provider responses and Android host tests are not substitutes for a real account login, physical-phone media, save-picker or overnight alarm testing.</p><p>Software Updates verifies the trusted release, downloaded bytes, package, version and certificate. It does not bypass Android installation approval. API keys have separate provider billing; subscription access remains subject to eligibility and limits.</p></section><section class="article-section" id="context"><h2>Optional preferences import</h2><p>Onboarding interests are enough to start. Later, use <strong>Copy starter prompt</strong> with your preferred assistant, then import or paste its JSON and review the changes.</p><a class="text-link" href="guides/release-082.html#personalization">Personalization guide →</a></section></div>''','download.html')
+history=''.join(f'<tr><th scope="row">{esc(x["version"])}</th><td>{"Published" if x["status"]=="published" else "Development history"}</td><td>{("<a href="+REPO+"/releases/tag/"+x["tag"]+">Release files ↗</a>") if x["status"]=="published" else "No public assets claimed"}</td></tr>' for x in r['releases'] if x['version']!=v)
+page('releases.html','Releases and files','Versioned Android releases, source snapshots and verification evidence.',f'''<div class="release-page"><p class="eyebrow">Release directory</p><h1>Releases &amp; files</h1><section class="release-card"><span class="release-state">Official · {r['publishedDate']}</span><h2>MeBot {v}</h2><p>Android-only release. New identity: <code>mebot.nguli.com</code>.</p><div class="actions">{download()}<a class="button secondary" href="{notes}">Full release notes ↗</a></div></section><section class="article-section"><h2>Files for this release</h2><div class="download-list">{resource_html}</div></section><section class="article-section"><h2>What changed</h2><p>Provider choices and a generic starter prompt, Software Updates, module-scoped relevance feedback, progressive feed results, useful setup notices, clearer background cards, a first-use guide and the complete package rename. The activity popup matches its anchor and the summary introduction stays visible.</p><p><a href="guides/release-082.html">Illustrated usage guide →</a></p></section><section class="article-section"><h2>Earlier releases</h2><p>Older binaries retain their original identities and are not overwritten by this release.</p><div class="table-wrap"><table><thead><tr><th scope="col">Version</th><th scope="col">Status</th><th scope="col">Files</th></tr></thead><tbody>{history}</tbody></table></div></section></div>''','releases.html')
+steps=[('Choose your interests','Pick topics, not technical settings.','interests','First launch','Choose topics and an optional city. Skip anything you do not need. Onboarding preferences already personalize the feed; a JSON import is not required.','personalization'),('Read and refine','Keep the introduction in view.','detail-answer','Feed → open an item','Read the source-backed introduction while MeBot prepares more detail. Relevant or Not relevant adjusts future recommendations within that module; Undo reverses the signal.','feedback'),('Connect your provider','Choose the account or server you use.','providers','My MeBot → AI connection','ChatGPT and OpenRouter have different authorization flows. Claude and Gemini use API keys. A compatible personal server is explicit. The screen shows the actual capabilities and local request allowance.','connections'),('Set your pace','Decide what happens in the background.','background','My MeBot → background settings','Choose intervals, module preparation, network conditions and quiet hours. Usage limits are managed in AI connection. Completed modules publish without waiting for the rest.','background'),('Keep MeBot current','Verify, then install.','software-updates','My MeBot → Software Updates','Automatic checks find eligible releases for this package. Download verification checks integrity and signing. Android asks you to approve installation; your current app is not silently replaced.','updates'),('Use the tools you need','Alarm, Focus and Check-in.','daily-tools','Modules → daily tools','Configure alarms, start a focus session or make a short check-in. These remain optional and work independently of the AI connection. Test alarm sound on your device.','tools')]
+controls=''.join(f'<button type="button" data-tour-step="{i}" aria-pressed="{str(i==0).lower()}" aria-controls="tour-panel-{i}"><span aria-hidden="true">{i+1:02d}</span>{t}</button>' for i,(t,*_) in enumerate(steps))
+panels=''.join(f'<section class="tour-panel" id="tour-panel-{i}" aria-labelledby="tour-heading-{i}"><div class="tour-copy"><p class="eyebrow">{esc(where)}</p><h2 id="tour-heading-{i}">{esc(t)}</h2><p class="lead">{esc(lead)}</p><p>{esc(body)}</p><a class="text-link" href="guides/release-082.html#{anchor}">Detailed guide →</a></div>{shot(key)}</section>' for i,(t,lead,key,where,body,anchor) in enumerate(steps))
+page('tour.html','Start here','A six-step visual guide to MeBot, from interests to verified software updates.',f'<section class="section wrap"><p class="eyebrow">MeBot {v} · Start here</p><h1>A short walk through MeBot</h1><p class="lead">The important actions, with real app screens. Move at your own pace.</p><div class="tour-layout"><nav class="tour-steps js-only" aria-label="Guide steps">{controls}</nav><div class="tour-panels">{panels}</div></div><div class="tour-navigation js-only"><button class="button secondary" type="button" data-tour-prev>← Back</button><span id="tour-status" role="status" aria-live="polite">Step 1 of 6</span><button class="button" type="button" data-tour-next>Next →</button></div></section><section class="next-step wrap"><div><h2>Explore MeBot</h2><p>The in-app quick guide is skippable and replayable from Help.</p></div><div class="actions">{download()}<a class="button secondary" href="guide.html">All guides →</a></div></section>','tour.html')
+image_rows=[]
+for i in range(0,len(screens),3):
+ group=screens[i:i+3]
+ image_rows.append('<p align="center">\n'+'\n'.join(f'<a href="docs/{s["file"]}"><img src="docs/{s["file"]}" width="225" alt="{esc(s["alt"],quote=True)}"></a>' for s in group)+'\n</p>\n\n'+' · '.join(f'**{s["title"]}**' for s in group)+'\n')
+README=f'''<div align="center">
 <img src="docs/assets/mebot.svg" width="64" height="64" alt="MeBot robot logo">
-<h1>MeBot Daily</h1>
-<p>A native Android app for your topics, sourced AI answers and everyday tools.</p>
-<p><a href="{SITE}"><strong>Website &amp; user guide</strong></a> · <a href="{apk}"><strong>Download APK</strong></a> · <a href="{REPO}/releases">Releases</a> · <a href="{SITE}screenshots.html">Screenshot gallery</a></p>
-<p>Android 8.0+ · English &amp; Kiswahili · Kotlin + Jetpack Compose · Apache 2.0</p>
-</div>
+<h1>MeBot Daily</h1><p>Your topics, source-linked answers and optional everyday tools.</p>
+<p><a href="{apk}"><strong>Download APK</strong></a> · <a href="{REPO}/releases/tag/{tag}">Release files</a> · <a href="START-HERE.md">Start here</a> · <a href="docs/USER-GUIDE.md">User guide</a></p>
+<p>Android 8.0+ · English &amp; Kiswahili · Kotlin + Jetpack Compose · Apache 2.0</p></div>
 
-> **Current release: {v} · {size}.** The original official MeBot can be updated in place. The earlier **MeBot Test** remains a separate app. [Installation and limits]({SITE}download.html).
+> **Official MeBot {v} · {size} · `mebot.nguli.com`.** This is a new installation identity, not an in-place update to `app.mynguli`. Reconnect accounts and review your settings. Future updates use **Software Updates**.
 
-Choose the subjects you care about. Read a source-linked feed, open a story for an explanation, search, or ask a follow-up. Alarms, focus and check-in remain optional tools, not the whole app.
+Choose interests during onboarding, read a sourced feed, search, ask follow-ups and keep useful resources. Public information and local tools stay available without AI. No personal starter profile is baked into the app.
 
-## See the app
+## See the current app
 
-{''.join(rows)}
-These are **actual native Android renders with synthetic example content**, not live AI responses or physical-phone photographs. Current 0.8.1 screens are shown with their capture version. Supporting screens are labelled by their capture version. Select any image for the full-size original. The [web gallery]({SITE}screenshots.html) includes captions, filters and keyboard-accessible enlargement. [Capture notes and image credits](docs/screenshots/README.md).
+{''.join(image_rows)}
+Captured 25 October 2026 from the actual Android UI. Reporting and photographs have recorded public sources; provider/update states are controlled for testing. These are **not live account sessions or physical-device photographs**. [Sources and capture notes](docs/screenshots/v082/README.md) · [Image credits](docs/IMAGE-CREDITS.md).
 
+## Choose your AI connection
+
+| Connection | What it means |
+| --- | --- |
+| ChatGPT | Existing provider-authorized sign-in for eligible accounts; account/model policy applies. No access to ChatGPT memory or chats is implied. |
+| OpenAI API | Explicit API key with separate API billing. |
+| Claude | Anthropic API key. Claude.ai subscription credentials are not used by third-party MeBot. |
+| Gemini | Gemini API key. This adapter uses the public source material supplied by MeBot; it does not claim native Google Search grounding. |
+| OpenRouter | PKCE authorization with a one-time code return or API key; uses OpenRouter credits, not an imported Claude subscription. |
+| Personal server | Explicit OpenAI-compatible endpoint and model. Features depend on the endpoint; a saved key is never sent over HTTP. |
+| Personal service | Optional self-hosted Python service. The service currently uses its own OpenAI API adapter. |
+
+Provider selection is explicit. No automatic switching to a separately billed provider. Model lists, completed-response checks, streaming support and source discovery follow each adapter’s capabilities. Provider credentials stay outside portable exports.
+
+**Copy starter prompt** prepares the exact preferences JSON schema for any suitable assistant. Review imports before applying. Onboarding interests already count as personalization.
+
+## What is included
+
+| Area | Behavior |
+| --- | --- |
+| Feed | Completed modules publish immediately; new results wait behind Show new items while you read. Cached content survives partial failures. |
+| Feedback | Relevant / Not relevant improves recommendations within the module, with undo, decay and an independent reset. Not social likes. |
+| Item detail | Stable introduction, unclipped square answer surface, streaming explanations and grouped sources/media/files. |
+| Activity | One fixed top panel with an anchor-width popover; real events and provider-published summaries, never invented thoughts. |
+| Connection | Provider and model choice, one persisted request budget, presets/custom/unlimited and clear capability limits. |
+| Background | Timing, preparation batches, Wi-Fi/battery conditions, notifications and quiet hours in actionable cards. |
+| Software Updates | Automatic checks and optional Wi-Fi preparation, verified package/version/certificate/hash, and Android’s installer approval. |
+| Guidance | One relevant dismissible setup notice, a short first-use tour and replay from Help. |
+| Daily tools | Alarm, Focus and Daily Check-in; independent of AI. |
+| Data | Clear reading history explains its scope before confirmation; saved items, conversations and relevance feedback are separate. |
+
+## Install and use
+
+[Download the official APK]({apk}). The new package installs separately from pre-0.8.2 development builds. Choose interests, connect a provider when ready, then open Feed. Test any configured alarm on your phone before overnight reliance. [Start here](START-HERE.md).
+
+## Verification and release files
+
+[Verification report]({base}{r['verificationFilename']}) · [Source]({source}) · [Resources]({base}{r['previewsFilename']}) · [Checksums]({base}SHA256SUMS.txt).
+
+Tests use controlled providers and native Android host journeys. Real account eligibility, physical playback, file-picker behavior and overnight alarms need device checks. Historical releases are preserved. No private profile or signing key is published.
+
+## Build
+
+JDK **17**, Gradle **8.13**, Android SDK **36**, Build Tools **35.0.0**.
+
+```sh
+git clone {REPO}.git
+cd MeBot
+git switch develop
+python3 scripts/prepare-build.py
+./gradlew :core:test :app:testDebugUnitTest :app:assembleRelease :app:lintRelease
+```
+
+The preparation script retrieves pinned typography and generates original alarm tones. Release signing uses private `MEBOT_*` environment values; debug builds need no key. Use `mebot.buildJdk=21` only for a local JDK21 environment; official CI uses17. Source archives intentionally omit font binaries and build outputs.
+
+```sh
+cd service
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m pytest -q
+```
+
+## Project structure
+
+`core/` contains domain models, validation, feedback and recommendation policy. `app/` contains Compose UI, Android lifecycle, providers, local tools, secure storage and software updates. `service/` is an optional backend. `docs/` includes illustrated guides, capture provenance and the static website. `.github/` contains verification and publication workflows.
+
+Work on develop, verify, then promote to main. iOS/multiplatform implementation is **not included** in 0.8.2.
+
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Privacy](docs/PRIVACY.md) · [Architecture](docs/ARCHITECTURE.md) · [Build guide](docs/BUILD.md) · [Complete change tracker](docs/RELEASE-TRACKER-0.8.2.md).
+
+## License
+
+[Apache 2.0](LICENSE). Third-party material retains its own [notices](NOTICE) and [image credits](docs/IMAGE-CREDITS.md). MeBot is independent and is not endorsed by OpenAI, Anthropic, Google or any publisher. Documentation hosting is independent of the package identifier.
 '''
-(ROOT / 'README.md').write_text(intro + readme)
-print(f'Rendered homepage, {len(screens)}-screen gallery, download page, release directory and README for {v}.')
+(ROOT/'README.md').write_text(README)
+start=f'''# Start here — MeBot {v}
 
-# Illustrated, user-controlled tutorial; every section remains readable without JavaScript.
-steps = [
- ("Choose your interests", "Pick the topics you actually want to follow.", "screenshots/v070/interests.png", "MeBot onboarding with selectable interest tiles", "On first launch", "Tap topics such as News, Music, Learning or Weather. Add a city only when local information matters to you. You can change these choices later in Modules.", "guides/modules.html", "Explore modules"),
- ("Read, then ask", "Open a story and keep its useful details together.", "screenshots/v081/mebot-0.8.1-detail-files.png", "Story details with grouped sources and downloadable files", "Feed → open a story", "The explanation appears with the story. Original notes and next steps stay available in the notes section. Ask a follow-up without losing the original source.", "guides/feed-and-ai.html", "Read the feed guide"),
- ("See what is happening", "Follow AI activity in one place at the top.", "screenshots/v081/mebot-0.8.1-streaming.png", "MeBot activity panel above an AI response", "MeBot → send a question", "The top panel reports actual request activity. Expand it for brief updates. Your answer arrives below; media and file previews do not replace it. No invented countdown is shown.", "guides/ai-connections.html", "Connection help"),
- ("Save a useful file", "Use Files to keep a document on your phone.", "screenshots/v081/mebot-0.8.1-ai-resources.png", "A PDF resource card with Save file and Open original actions", "Answer → Files → Save file", "Choose a supported public file, tap Save file, then pick a folder in Android’s save screen. Files are checked and limited to 20 MiB. A protected page or missing file keeps Open original instead.", "guides/resources.html", "Files and media guide"),
- ("Choose your look", "Change the accent and page style without losing your data.", "screenshots/v081/mebot-0.8.1-appearance.png", "Appearance controls including a custom colour and soft colour page style", "You → Preferences → Appearance", "Pick one of eight accents or enter a six-digit colour. Choose Original, Warm, Soft colour or Deep black. Light, dark and device settings remain available.", "guides/appearance.html", "Appearance guide"),
- ("Set your pace", "Choose how much MeBot prepares for your next visit.", "screenshots/v070/background.png", "Background refresh, discovery batches and request limits", "You → background settings", "Set refresh intervals, preparation and daily request limits. Unlimited removes MeBot’s local cap, not your provider’s limits. Keep useful content cached while new information is prepared.", "guides/background-and-data.html", "Background and data guide"),
-]
-controls = ''.join(f'<button type="button" data-tour-step="{i}" aria-pressed="{str(i==0).lower()}" aria-controls="tour-panel-{i}"><span aria-hidden="true">{i+1:02d}</span>{title}</button>' for i,(title,*_) in enumerate(steps))
-panels = ''.join(f'<section class="tour-panel" id="tour-panel-{i}" aria-labelledby="tour-heading-{i}"><div class="tour-copy"><p class="eyebrow">{esc(where)}</p><h2 id="tour-heading-{i}">{esc(title)}</h2><p class="lead">{esc(lead)}</p><p>{esc(body)}</p><a class="text-link" href="{link}">{esc(label)} →</a></div><figure class="shot"><a href="{image}" data-lightbox data-title="{esc(title, quote=True)}"><img src="{image}" width="822" height="1782" alt="{esc(alt,quote=True)}" loading="lazy" decoding="async"></a><figcaption>Native app screen · example content. Select the image to enlarge it.</figcaption></figure></section>' for i,(title,lead,image,alt,where,body,link,label) in enumerate(steps))
-page('tour.html', 'A short walk through MeBot', 'A six-step illustrated guide to choosing topics, reading AI answers, saving files and personalizing MeBot.', f'<section class="section wrap"><p class="eyebrow">Start here</p><h1>A short walk through MeBot</h1><p class="lead">See the main actions with real app screens. Move at your own pace.</p><div class="tour-layout"><nav class="tour-steps js-only" aria-label="Guide steps">{controls}</nav><div class="tour-panels">{panels}</div></div><div class="tour-navigation js-only"><button class="button secondary" type="button" data-tour-prev>← Back</button><span id="tour-status" role="status" aria-live="polite">Step 1 of {len(steps)}</span><button class="button" type="button" data-tour-next>Next →</button></div></section><section class="next-step wrap"><div><h2>Ready to use MeBot?</h2><p>Install the official app or keep reading the full guide.</p></div><div class="actions"><a class="button" href="download.html">Get MeBot ↓</a><a class="button secondary" href="guide.html">All guides →</a></div></section>', 'tour.html')
+[Download Android APK]({apk}) · [Release files]({notes}) · [Full user guide](docs/USER-GUIDE.md)
+
+## 1. Choose interests
+Pick topics and, optionally, a city. The app does not require an imported context file.
+
+![Choose interests](docs/screenshots/v082/interests.png)
+
+## 2. Read, ask and refine
+Open an item for the introduction and an automatic explanation when AI is connected. Sources remain accessible. Relevant / Not relevant tunes that module; Undo changes your choice.
+
+![A sourced item and its explanation](docs/screenshots/v082/detail-answer.png)
+
+## 3. Choose a connection
+Open My MeBot → AI connection. Choose an eligible sign-in, an API key or your personal endpoint. Set the request allowance here. Public information stays usable without AI.
+
+![Provider choices](docs/screenshots/v082/providers.png)
+
+## 4. Set background behavior
+Choose timing, preparation, connection/battery conditions and quiet hours. New results arrive as modules complete.
+
+![Background controls](docs/screenshots/v082/background.png)
+
+## 5. Keep MeBot current
+Open My MeBot → Software Updates. Automatic checks and optional Wi-Fi downloads prepare eligible releases; Android requires installation approval. This package is `mebot.nguli.com`, separate from older development builds.
+
+![Software Updates](docs/screenshots/v082/software-updates.png)
+
+## 6. Use optional tools
+Alarm, Focus and Daily Check-in are together during onboarding and remain available independently of AI. Run a short alarm test before relying on it overnight.
+
+![Daily tools](docs/screenshots/v082/daily-tools.png)
+
+The in-app guide is skippable and replayable from Help. Captures use dated public content and controlled provider state; [source and image notes](docs/screenshots/v082/README.md).
+'''
+(ROOT/'START-HERE.md').write_text(start)
+print(f'Rendered {v}: five product pages, {len(screens)} captures, README and Start Here.')

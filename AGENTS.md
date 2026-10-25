@@ -1,7 +1,7 @@
 # MeBot development
 
 - Work on `develop`. A release is reviewed and validated before promotion.
-- Feed is the home. Feed, Modules, AI, Saved and You are the main destinations. Start with five items and reveal detail on demand; alarms are one independent module.
+- Feed is the home. Feed, Modules, MeBot, Saved and You are the main destinations. Start with five items and reveal detail on demand; alarms are one independent module.
 - Never bake a person's name, work, schedule, location, or secrets into application code.
 - All user-facing copy belongs in localized resources. Preferences belong in the persisted schema.
 - Keep core domain logic independent of Android. Keep platform alarm logic independent of daily UI.

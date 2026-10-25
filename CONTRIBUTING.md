@@ -14,7 +14,7 @@ For a normal bug report, include the app version, Android version/device, select
 
 ## Product and implementation expectations
 
-- Keep Feed as the home and preserve the five main destinations: Feed, Modules, AI, Saved and You. Alarms are an independent tool, not the organizing structure of the whole app.
+- Keep Feed as the home and preserve the five main destinations: Feed, Modules, MeBot, Saved and You. Alarms are an independent tool, not the organizing structure of the whole app.
 - Keep the first experience brief and useful. Supply sensible module defaults, clear next actions and optional depth. Do not add promotional slogans, placeholder controls or long instruction walls.
 - Put personal configuration in typed persisted models. Keep names, locations, schedules, private profile values, credentials and environment paths out of reusable defaults and fixtures.
 - Preserve the user's own check-in language. Do not turn self-reports into diagnoses, performance scores or compulsory positive outcomes.
