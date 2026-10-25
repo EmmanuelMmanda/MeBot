@@ -180,7 +180,7 @@ fun ModuleEditor(module: FeedModule, ui: FeedUiState, isNew: Boolean, onSave: (F
     val preferences = remember(preferencesJson) { Json.decodeFromString<Map<String, String>>(preferencesJson) }
     var advanced by rememberSaveable(module.id) { mutableStateOf(false) }
     var personalization by rememberSaveable(module.id) { mutableStateOf(false) }
-    val availableNotes = ui.state?.context.orEmpty().filter { it.confirmed }
+    val availableNotes = ui.state?.context.orEmpty().filter { it.confirmed && !PersonalProfile085.isGlobal(it) }
     var selectedNotes by rememberSaveable(module.id) { mutableStateOf(availableNotes.filter { module.kind in it.scopes }.map { it.id }) }
     var localError by rememberSaveable { mutableStateOf<Int?>(null) }
     var pendingJson by rememberSaveable { mutableStateOf<String?>(null) }

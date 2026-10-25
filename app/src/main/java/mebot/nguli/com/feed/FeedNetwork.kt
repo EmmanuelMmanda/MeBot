@@ -341,7 +341,7 @@ class OpenAiFeedProvider(
                 !it.enabled || it.kind in setOf("weather", "horoscope") || it !in state.modules
             }) throw FeedFailure("invalid_input")
         val selected = modules.associateBy { it.id }
-        val scoped = modules.flatMap { FeedLogic.scopedContext(state, it) }.distinctBy { it.id }.take(64)
+        val scoped = FeedLogic.contextForKinds(state, modules.map { it.kind }.toSet(), limit = 64)
         if (state.connection.mode == "service") {
             val body = buildJsonObject {
                 put("model", state.connection.model); put("query", question)
@@ -384,7 +384,7 @@ class OpenAiFeedProvider(
             put("selectionVariation", state.editionSequence % 997)
             put("variationGuidance", "Vary similarly relevant verified choices; never trade accuracy or strong preferences for random content.")
                     put("preferences", FeedJson.encodeToJsonElement(module.preferences))
-                    put("contextIds", buildJsonArray { scoped.filter { module.kind in it.scopes }.forEach { add(it.id) } })
+                    put("contextIds", buildJsonArray { scoped.filter { PersonalProfile085.isGlobal(it) || module.kind in it.scopes }.forEach { add(it.id) } })
                 })
             } })
         }.toString()
@@ -441,7 +441,7 @@ class OpenAiFeedProvider(
         val kind = item?.kind ?: module?.kind ?: "news"
         val context = if (conversation != null && conversation.moduleId == null && conversation.itemId == null) RecommendationPolicy.contextForQuestion(state, question)
             else if (conversation != null) ConversationLogic.context(state, conversation)
-            else state.context.filter { it.confirmed && kind in it.scopes }.take(32)
+            else FeedLogic.contextForKinds(state, setOfNotNull(item?.kind ?: module?.kind))
         val history = conversation?.let(ConversationLogic::requestHistory).orEmpty()
             .let { turns -> if (turns.lastOrNull()?.let { it.role == "user" && it.text == question } == true) turns.dropLast(1) else turns }
         if (state.connection.mode == "service") {
@@ -449,10 +449,13 @@ class OpenAiFeedProvider(
                 put("model", state.connection.model); put("question", question); put("language", responseLanguage)
                 put("item", item?.let { FeedJson.encodeToJsonElement(it) } ?: JsonNull); put("context", FeedJson.encodeToJsonElement(context))
                 if (module != null) put("module", FeedJson.encodeToJsonElement(module))
+                put("moduleKind", module?.kind ?: item?.kind ?: "")
                 if (conversation != null) {
                     put("history", buildJsonArray { history.forEach { turn -> add(buildJsonObject { put("role", turn.role); put("text", turn.text) }) } })
                     put("attachments", buildJsonArray { conversation.attachments.forEach { attachment -> add(buildJsonObject { put("name", attachment.name); put("text", attachment.text) }) } })
-                    put("moduleKind", module?.kind ?: item?.kind ?: "")
+                    if (conversation.moduleId == null && conversation.itemId == null) {
+                        put("contextKinds", FeedJson.encodeToJsonElement(RecommendationPolicy.questionKinds(state, question)))
+                    }
                 }
             }
             val response = requestService(state, "/v1/ask", body, secret)

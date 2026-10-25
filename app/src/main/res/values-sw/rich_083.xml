@@ -17,4 +17,5 @@
     <string name="rich_voice_choice">Sauti ya simu</string>
     <string name="rich_voice_default">Sauti ya kawaida</string>
     <string name="rich_voice_unavailable">Hakuna sauti ya simu inayofaa kwa lugha hii.</string>
+    <string name="rich_pdf_zoom">Bana kukuza au tumia vidhibiti. Tosheleza huonyesha ukurasa mzima.</string>
 </resources>

@@ -7,4 +7,9 @@
     <string name="media_reset">Reset</string>
     <string name="media_loading">Loading image…</string>
     <string name="media_youtube_controls">Use YouTube’s player controls for full screen and settings, when available.</string>
+    <string name="media_stream_quality">Stream quality is selected automatically by the source and Android player. Manual quality selection is not available here. Playback depends on the stream format and your device.</string>
+    <string name="media_zoom_in">Zoom in</string>
+    <string name="media_zoom_out">Zoom out</string>
+    <string name="media_zoom_fit">Fit to screen</string>
+    <string name="media_zoom_percent">%1$d%%</string>
 </resources>

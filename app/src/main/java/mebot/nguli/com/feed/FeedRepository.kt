@@ -42,7 +42,7 @@ class FeedRepository(context: Context, scope: CoroutineScope = CoroutineScope(Di
                 timezone = s.timezone.ifBlank { java.time.ZoneId.systemDefault().id },
                 editionSequence = if (s.editionSequence == 0L) java.security.SecureRandom().nextInt(999_999_998).toLong() + 1 else s.editionSequence)
             else s.copy(name = seed.name, region = seed.region, timezone = seed.timezone,
-                context = seed.entries.map { it.copy(origin = "imported") },
+                context = seed.entries.map { it.copy(origin = "imported", global = false) },
                 modules = ModuleCatalog.mergeCatalog(seed.modules.ifEmpty { s.modules }), personalSeedApplied = true)
         }
     }

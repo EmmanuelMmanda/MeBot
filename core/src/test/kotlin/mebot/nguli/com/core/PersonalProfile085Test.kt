@@ -17,7 +17,8 @@ class PersonalProfile085Test {
         val old = listOf(ContextEntry(id="old",text="Keep this",scopes=setOf("food"),confirmed=false,origin="imported",updatedAtMillis=1))
         val draft = PersonalProfile085.draft(old,setOf("learning"))
         assertEquals(old.single(),draft.last())
-        assertEquals(setOf("learning"),PersonalProfile085.primary(draft)!!.scopes)
+        assertTrue(PersonalProfile085.primary(draft)!!.scopes.isEmpty())
+        assertFalse(PersonalProfile085.primary(draft)!!.global)
         assertEquals("",PersonalProfile085.primary(draft)!!.text)
         assertEquals(draft,PersonalProfile085.draft(draft,setOf("news")))
     }
@@ -36,7 +37,7 @@ class PersonalProfile085Test {
     @Test fun onboardingEntryIsReusedWithoutAutomaticMergeOrPermissionExpansion() {
         val entry=ContextEntry(id="onboarding-interests",text="Kilimo",scopes=setOf("farming"),updatedAtMillis=1)
         val old=listOf(entry,ContextEntry(id="private",text="Other details",scopes=emptySet(),confirmed=false))
-        assertEquals(old,PersonalProfile085.draft(old,setOf("news")))
+        assertEquals(old,PersonalProfile085.draft(old,setOf("news")).filterNot { it.id == PersonalProfile085.PROFILE_ID })
         val updated=PersonalProfile085.onboarding(old,"  Bustani  ",setOf("farming"))
         assertEquals(old.last(),updated.first())
         assertEquals("Bustani",updated.last().text)

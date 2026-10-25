@@ -30,7 +30,14 @@ object FeedLogic {
         .digest(canonicalUrl(url).toByteArray()).take(16).joinToString("") { "%02x".format(it) }
 
     fun scopedContext(state: FeedState, module: FeedModule): List<ContextEntry> =
-        state.context.filter { it.confirmed && module.kind in it.scopes }.take(32)
+        contextForKinds(state, setOf(module.kind))
+
+    /** Explicit About-you consent applies to future/disabled/custom modules too; old notes remain scoped. */
+    fun contextForKinds(state: FeedState, kinds: Set<String>, limit: Int = 32): List<ContextEntry> {
+        require(limit >= 0)
+        return state.context.filter { it.confirmed && (PersonalProfile085.isGlobal(it) || (!it.global && it.scopes.any(kinds::contains))) }
+            .sortedByDescending { PersonalProfile085.isGlobal(it) }.take(limit)
+    }
 
     fun visible(state: FeedState, now: Long = System.currentTimeMillis()): List<FeedItem> {
         val enabled = state.modules.filter { it.enabled }.map { it.id }.toSet()
@@ -123,6 +130,7 @@ object FeedLogic {
         s.modules.forEach(::validateModule)
         require(s.context.size <= 80 && s.context.map { it.id }.distinct().size == s.context.size)
         s.context.forEach { require(it.id.length in 1..100 && it.text.length in 1..1000 && it.category.length <= 40 && it.origin.length <= 40 && it.scopes.all { scope -> scope in ModuleCatalog.kinds }) }
+        s.context.forEach { require(!it.global || PersonalProfile085.isGlobal(it)) }
         require(s.items.size <= 1000 && s.items.map { it.id }.distinct().size == s.items.size)
         s.items.forEach(::validateItem)
         require(s.savedIds.size <= 500 && s.hiddenIds.size <= 1000)

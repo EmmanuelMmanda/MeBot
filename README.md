@@ -1,5 +1,5 @@
 <!-- preview-085:start -->
-> **0.8.5 candidate:** Custom interests, a simpler About you screen and clearer navigation; 841 local automated tests passed. [Current candidate guide](docs/RELEASE-0.8.5.md). The official download remains **0.8.2**. Earlier candidate release notes are preserved as history.
+> **0.8.5 candidate:** Custom interests, a simpler About you screen and clearer navigation; 878 local automated tests passed. [Current candidate guide](docs/RELEASE-0.8.5.md). The official download remains **0.8.2**. Earlier candidate release notes are preserved as history.
 <!-- preview-085:end -->
 
 <div align="center">

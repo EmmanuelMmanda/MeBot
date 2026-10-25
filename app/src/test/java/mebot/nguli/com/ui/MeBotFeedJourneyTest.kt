@@ -140,33 +140,36 @@ class MeBotFeedJourneyTest {
 
     @Test fun editingContextPreservesExistingScopesAndChangesTheReopenedGreeting() {
         start()
-        val scoped = ContextEntry(id = "scoped-interest", text = "Build small Android tools", scopes = setOf("news"), origin = "imported", updatedAtMillis = 1)
-        val changedText = "Build accessible Android tools\nKeep them easy to maintain"
+        val scoped = ContextEntry(id = "scoped-interest", text = "For business updates, focus on stock management and customer service in Tanzania.", scopes = setOf("business"), origin = "imported", updatedAtMillis = 1)
+        val changedText = "I am a Tanzanian entrepreneur running a neighbourhood shop, a food business and a delivery service. I want practical ideas and concise explanations with local examples."
         runBlocking { app.feedRepository.update { it.copy(context = listOf(scoped), items = listOf(stories().first().copy(why = "An old explanation", relevance = 90))) } }
         tab("you")
         clickText(R.string.preferences_title_083)
         waitForTag("context-name")
         compose.onNodeWithTag("context-name").performScrollTo().performTextInput("Alex")
         compose.onNodeWithTag("context-edit").performScrollTo().performTextReplacement(changedText)
-        compose.onNodeWithTag("context-edit-scoped-interest").assertDoesNotExist()
-        compose.onNodeWithTag("context-legacy-toggle").performScrollTo().performClick()
         compose.onNodeWithTag("context-edit-scoped-interest").assertTextContains(scoped.text)
         compose.activityRule.scenario.recreate()
         waitForTag("context-name")
         compose.onNodeWithTag("context-name").assertTextContains("Alex")
         compose.onNodeWithTag("context-edit").assertTextContains(changedText)
         compose.onNodeWithTag("context-edit-scoped-interest").assertTextContains(scoped.text)
-        compose.onNodeWithTag("context-legacy-toggle").performScrollTo().performClick()
-        compose.onNodeWithText(text(R.string.preferences_title_083)).performScrollTo()
+        compose.onNode(hasText(text(R.string.preferences_title_083)) and !hasSetTextAction()).performScrollTo()
         screenshot("28-mebot-context")
         screenshot("v085-personal-page")
+        compose.onNodeWithTag("context-global-use").performScrollTo().assertExists()
+        compose.onNodeWithTag("context-scopes-${PersonalProfile085.PROFILE_ID}").assertDoesNotExist()
+        compose.onNodeWithTag("context-scopes-scoped-interest").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("context-edit-scoped-interest").assertIsDisplayed()
+        screenshot("v085-context-notes")
         compose.onNodeWithTag("context-save").performScrollTo().performClick()
         waitForState { it.name == "Alex" && it.context.size == 2 }
         waitForTag("nav-you")
         assertEquals(scoped, state().context.single { it.id == scoped.id })
         val profile = state().context.single { it.id == PersonalProfile085.PROFILE_ID }
         assertEquals(changedText, profile.text)
-        assertEquals(state().modules.filter { it.enabled && it.kind != "weather" }.map { it.kind }.toSet(), profile.scopes)
+        assertTrue(profile.global)
+        assertTrue(profile.scopes.isEmpty())
         assertTrue(state().items.single().why.isEmpty())
         assertEquals(0, state().items.single().relevance)
         compose.activityRule.scenario.recreate()

@@ -129,6 +129,9 @@ class FeedModule(StrictModel):
 
 
 class ContextEntry(StrictModel):
+    # Alias matches Android JSON; field-name population preserves stored schedule round trips.
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, populate_by_name=True)
+    global_: bool = Field(default=False, alias="global")
     id: Identifier
     text: str = Field(min_length=1, max_length=1500)
     category: str = Field(default="interest", max_length=50)
@@ -136,6 +139,12 @@ class ContextEntry(StrictModel):
     confirmed: bool = True
     origin: str = Field(default="manual", max_length=100)
     updatedAtMillis: int = Field(default_factory=now_millis, ge=0, le=32503680000000)
+
+    @model_validator(mode="after")
+    def dedicated_global_profile(self) -> "ContextEntry":
+        if self.global_ and (self.id != "about-you-global" or self.category != "profile" or self.scopes):
+            raise ValueError("Only the dedicated About you profile can have global scope")
+        return self
 
     @field_validator("text")
     @classmethod
@@ -314,8 +323,9 @@ class AskRequest(StrictModel):
     history: list[AskTurn] = Field(default_factory=list, max_length=16)
     attachments: list[AskAttachment] = Field(default_factory=list, max_length=3)
     # Missing retains the legacy news scope. An explicit empty value is the
-    # v0.6 general workspace and sends no personal context.
+    # general workspace: global profile plus only explicitly routed known kinds.
     moduleKind: ModuleKind | Literal[""] | None = None
+    contextKinds: set[ModuleKind] = Field(default_factory=set, max_length=24)
     # Optional v0.6.1 selection data. Editorial instructions remain server-owned.
     module: FeedModule | None = None
 

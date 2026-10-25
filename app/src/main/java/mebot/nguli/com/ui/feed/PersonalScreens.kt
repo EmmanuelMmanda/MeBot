@@ -3,6 +3,7 @@ package mebot.nguli.com.ui.feed
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
@@ -14,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -67,7 +69,6 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
     }
     val entries = remember(entriesJson) { FeedJson.decodeFromString<List<ContextEntry>>(entriesJson) }
     var showMore by rememberSaveable { mutableStateOf(false) }
-    var showLegacy by rememberSaveable { mutableStateOf(false) }
     val primaryId = PersonalProfile085.primary(entries)?.id ?: PersonalProfile085.PROFILE_ID
     var showPaste by rememberSaveable { mutableStateOf(false) }
     var pastedContext by rememberSaveable { mutableStateOf("") }
@@ -104,45 +105,49 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
                 entriesJson = FeedJson.encodeToString(entries.map { if (it.id == primaryId) it.copy(text = text) else it })
                 localError = false
             })
-            val scopeNames = primary.scopes.sorted().map { stringResource(moduleNameResource(it)) }.joinToString(", ")
-            Text(if (scopeNames.isEmpty()) stringResource(R.string.feed_context_unshared) else stringResource(R.string.feed_context_used_by, scopeNames),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TextButton(onClick = { scopeEntryId = primaryId }, enabled = canEdit, modifier = Modifier.testTag("context-scopes-$primaryId")) {
-                Icon(Icons.Outlined.Tune, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.edition_context_choose))
-            }
+            Text(stringResource(R.string.profile_global_use_085), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("context-global-use"))
         }
-        if (localError) Text(stringResource(R.string.feed_context_invalid), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-        if (ui.importPreview == null) ui.error?.let { FeedStatus(it) }
+        val saveDetails: @Composable (String) -> Unit = { tag ->
         Button(onClick = {
             val now = System.currentTimeMillis()
             val updated = entries.filter { it.text.isNotBlank() }.map { entry ->
                 val text = entry.text.trim()
-                if (state.context.find { it.id == entry.id } == entry) entry else entry.copy(text = text, confirmed = true, updatedAtMillis = now)
+                if (entry.id == primaryId) entry.copy(text = text, global = true, category = "profile", scopes = emptySet(), confirmed = true, updatedAtMillis = now)
+                else if (state.context.find { it.id == entry.id } == entry) entry else entry.copy(text = text, confirmed = true, updatedAtMillis = now)
             }
-            localError = entries.find { it.id == primaryId }?.let { !PersonalProfile085.valid(it.text) } == true || updated.size > 80 || updated.any { it.text.length > 1000 } || timezoneInvalid
+            localError = entries.find { it.id == primaryId }?.let { !PersonalProfile085.valid(it.text) } == true || updated.size > 80 || updated.any { it.text.length > 1000 || '\u0000' in it.text } || timezoneInvalid
             if (timezoneInvalid) showMore = true
             if (!localError) {
                 desiredContextJson = FeedJson.encodeToString(updated); pending = true
                 vm.clearMessage()
                 vm.saveContext(name.trim(), region.trim(), timezone.trim(), updated)
             }
-        }, enabled = canEdit && entries.find { it.id == primaryId }?.let { PersonalProfile085.valid(it.text) } != false, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("context-save"), shape = RoundedCornerShape(16.dp)) { Text(stringResource(R.string.profile_save_085)) }
-        if (legacy.isNotEmpty()) {
-            TextButton(onClick = { showLegacy = !showLegacy }, modifier = Modifier.testTag("context-legacy-toggle")) {
-                Text(stringResource(R.string.profile_legacy_085, legacy.size))
-                Icon(if (showLegacy) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
-            }
-            Text(stringResource(R.string.profile_legacy_body_085), style = MaterialTheme.typography.bodySmall)
+        }, enabled = canEdit && entries.none { it.text.length > 1000 || '\u0000' in it.text } && entries.find { it.id == primaryId }?.let { PersonalProfile085.valid(it.text) } != false, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag(tag), shape = RoundedCornerShape(16.dp)) { Text(stringResource(R.string.profile_save_085)) }
         }
-        if (showLegacy) legacy.forEach { entry ->
+        saveDetails("context-save")
+        if (localError) Text(stringResource(R.string.feed_context_invalid), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+        if (ui.importPreview == null) ui.error?.let { FeedStatus(it) }
+        HorizontalDivider()
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.profile_notes_title_085), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = {
+                entriesJson = FeedJson.encodeToString(entries + ContextEntry(text = "", scopes = emptySet(), confirmed = false))
+            }, enabled = canEdit && entries.size < 80, modifier = Modifier.testTag("context-add")) {
+                Icon(Icons.Outlined.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.profile_note_add_085))
+            }
+        }
+        Text(stringResource(R.string.profile_notes_body_085), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (legacy.isEmpty()) Text(stringResource(R.string.profile_notes_empty_085), style = MaterialTheme.typography.bodySmall)
+        legacy.forEach { entry ->
             key(entry.id) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedTextField(entry.text, { text ->
-                        if (text.length <= 1000) {
-                            entriesJson = FeedJson.encodeToString(entries.map { if (it.id == entry.id) it.copy(text = text) else it })
-                            localError = false
-                        }
-                    }, label = { Text(stringResource(preferencePromptTitle083(entry.category))) },
+                        entriesJson = FeedJson.encodeToString(entries.map { if (it.id == entry.id) it.copy(text = text) else it })
+                        localError = false
+                    }, isError = entry.text.length > 1000 || '\u0000' in entry.text,
+                        supportingText = { if (entry.text.length > 1000 || '\u0000' in entry.text) Text(stringResource(R.string.profile_note_limit_085)) }, label = { Text(stringResource(preferencePromptTitle083(entry.category))) },
                         placeholder = { Text(stringResource(preferencePromptHint083(entry.category))) }, minLines = 2, maxLines = 6,
                         modifier = Modifier.fillMaxWidth().testTag("context-edit-${entry.id}"),
                         shape = RoundedCornerShape(18.dp), enabled = canEdit)
@@ -163,6 +168,7 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
                 }
             }
         }
+        saveDetails("context-save-bottom")
         TextButton(onClick = { showMore = !showMore }, modifier = Modifier.testTag("context-more")) {
             Text(stringResource(R.string.preferences_advanced_083))
             Icon(if (showMore) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
@@ -196,7 +202,7 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
                             entriesJson = FeedJson.encodeToString(entries.map { entry ->
                                 if (entry.id == scopeEntry.id) entry.copy(scopes = if (selected) entry.scopes - kind else entry.scopes + kind) else entry
                             })
-                        }, color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp)) {
+                        }, modifier = Modifier.testTag("context-scope-${scopeEntry.id}-$kind"), color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp)) {
                             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Checkbox(selected, onCheckedChange = null, modifier = Modifier.padding(12.dp))
                                 Text(stringResource(moduleNameResource(kind)), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))

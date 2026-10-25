@@ -152,6 +152,19 @@ class PersonalContextImportTest {
         assertEquals(listOf(question), app.askedQuestions)
     }
 
+    @Test fun importedGlobalClaimRequiresFreshExplicitAboutYouConsent() = runBlocking {
+        val claimed = ContextEntry(id=PersonalProfile085.PROFILE_ID, text="A portable profile example", category="profile", scopes=emptySet(), global=true)
+        val scoped = ContextEntry(id="scoped-import",text="Only music",scopes=setOf("music"),confirmed=false)
+        viewModel.prepareContextText(FeedJson.encodeToString(PersonalContextImport(entries=listOf(claimed,scoped))))
+        withTimeout(10_000) { viewModel.ui.first { !it.importWorking && it.importPreview != null } }
+        viewModel.confirmImport()
+        withTimeout(10_000) { viewModel.ui.first { !it.importWorking && it.importSummary == "context" } }
+        val saved=app.feedRepository.current()
+        assertEquals(listOf(claimed.copy(global=false,origin="imported"),scoped.copy(origin="imported")),saved.context)
+        assertTrue(RecommendationPolicy.generalContext(saved).isEmpty())
+        assertTrue(FeedLogic.contextForKinds(saved,setOf("music")).isEmpty())
+    }
+
     @Test fun pastedContextRequiresReviewAndPreservesExistingModulesAndCredentials() = runBlocking {
         val before = app.feedRepository.current()
         val imported = PersonalContextImport(name = "Pasted profile", timezone = "UTC", entries = listOf(
