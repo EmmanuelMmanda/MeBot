@@ -1,35 +1,35 @@
 [
   {
-    "file": "screenshots/v080/ai-resources.png",
+    "file": "screenshots/v081/mebot-0.8.1-ai-resources.png",
     "title": "Answers with useful files",
     "alt": "MeBot AI answer with Sources, Media and Files tabs and a PDF Save file action",
     "caption": "Read the answer first, then open or save its resources.",
     "group": "read",
-    "version": "0.8.0"
+    "version": "0.8.1"
   },
   {
-    "file": "screenshots/v080/streaming.png",
+    "file": "screenshots/v081/mebot-0.8.1-streaming.png",
     "title": "One place for AI activity",
     "alt": "MeBot top activity panel above a streaming answer",
     "caption": "See brief processing updates without duplicate spinners in the answer.",
     "group": "read",
-    "version": "0.8.0"
+    "version": "0.8.1"
   },
   {
-    "file": "screenshots/v080/detail-files.png",
+    "file": "screenshots/v081/mebot-0.8.1-detail-files.png",
     "title": "Keep the story and its sources",
     "alt": "MeBot story detail with original notes and grouped file resources",
     "caption": "Original notes, sources and follow-up actions remain together.",
     "group": "read",
-    "version": "0.8.0"
+    "version": "0.8.1"
   },
   {
-    "file": "screenshots/v080/appearance.png",
+    "file": "screenshots/v081/mebot-0.8.1-appearance.png",
     "title": "Colours that feel like you",
     "alt": "MeBot appearance controls with a custom colour and page styles",
     "caption": "Choose an accent, enter a custom colour or change the page style.",
     "group": "organize",
-    "version": "0.8.0"
+    "version": "0.8.1"
   },
   {
     "file": "screenshots/v070/feed.png",
@@ -150,5 +150,13 @@
     "caption": "Inspect the connection and available model before using AI.",
     "group": "organize",
     "version": "0.5.1"
+  },
+  {
+    "file": "screenshots/v081/mebot-0.8.1-detail-working.png",
+    "title": "Read while MeBot searches",
+    "alt": "An example opportunity stays readable below the fixed activity panel; Show more reveals notes.",
+    "caption": "The active badges follow this request. The opportunity is example test content.",
+    "group": "read",
+    "version": "0.8.1"
   }
 ]

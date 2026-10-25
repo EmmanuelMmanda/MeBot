@@ -1,15 +1,26 @@
 # MeBot 0.8.1
 
-Targeted activity, exploration and resource-availability fixes on the official app.
+Official MeBot update, signed with the original release certificate. Android 8.0+.
+Install over your existing official MeBot; do not uninstall it. The older MeBot Test package remains separate.
 
-- Fixed top activity panel with an expandable popover and request-scoped running badges.
-- Real stages distinguish discovery/search from answers; validated counts and provider-published summaries only.
-- MeBot destination name, immediately readable detail summaries and a lighter Show more action.
-- Selected-module pull-to-refresh and refresh-button behavior, with explicit public-cache invalidation.
-- Editable Tanzania-focused defaults and public news/business sources without account setup.
-- Small per-install variation among similarly relevant items; explicit preferences remain dominant.
-- Bounded public file preflight checks before verified file counts and Save file actions.
+## Changes
+- Fixed top activity panel stays outside page scrolling. Expand it for actual request stages and provider-published summaries when available.
+- Rounded activity rings follow the associated request and stop when it finishes. Obsolete feed loaders are removed.
+- Discovery, search and answers use different status labels. Counts appear only after validation; no invented thoughts or estimates.
+- The conversation destination is MeBot. Original details remain readable while an explanation loads, with a compact Show more / Show less action.
+- Pull-to-refresh, refresh and Feed reselection respect the selected module and refresh its public-source cache.
+- Editable Tanzania defaults use local public sources where appropriate; explicit preferences and custom sources win. Small per-install variation breaks ties, not relevance.
+- Public file availability is checked before verified Files counts and Save file. Media checks use independent capacity.
 
-This does not alter alarm behavior, authentication, stored account credentials or existing source configuration. Read [activity and discovery](ACTIVITY-AND-DISCOVERY.md) for behavior, privacy and limitations.
+## Installation and verification
+Package `app.mynguli`, version code 12. Original certificate SHA-256: `b1b69dcefe26c815dbaec76223b7b80be76af06ba30da774637a806a7f75e3e9`.
 
-Publication and signing status are recorded in the release verification report. Do not treat an unsigned build as an installable update.
+693 tests passed: 143 core, 405 Android-host, 145 service, no failures or skipped tests. Release compilation passed. The full CI lint report contains zero errors, 144 warnings and one hint. The earlier local summary counted 143 warnings; this release reports the independent CI result.
+
+The signed APK is assembled from the exact verified unsigned build plus its locally generated public APK signature block; no private signing key is sent to GitHub. Every application ZIP entry is unchanged and the result is verified with Android apksigner and zipalign.
+
+The public source ZIP is an archive of the release tag. Application sources match tested commit `59ef0bf50c4e7d5a1d66d9221535f5d571eba94f`; later changes are publication scripts, documentation and screenshots only.
+
+Physical-phone alarms, live AI account access, provider playback and Android's file picker still need device checks. File availability can change after checking. Protected files and paywalls are not bypassed. Public downloads remain bounded to 20 MiB.
+
+[Illustrated activity and discovery guide](https://emmanuelmmanda.github.io/MeBot/guides/activity.html) · [Downloads](https://emmanuelmmanda.github.io/MeBot/download.html)

@@ -307,3 +307,7 @@ The module/default/preference contracts are in [FeedModels.kt](../core/src/main/
 ## Activity and refresh in 0.8.1
 
 See [the illustrated activity and discovery guide](ACTIVITY-AND-DISCOVERY.md) for the fixed top panel, selected-module pull-to-refresh, local defaults and verified downloads.
+
+## MeBot 0.8.1 guide
+
+[Activity, scoped refresh and verified files](https://emmanuelmmanda.github.io/MeBot/guides/activity.html) — illustrated steps for the current release.

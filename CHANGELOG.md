@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1 — 2026-10-25
+
+Accurate anchored activity; scoped refresh; compact MeBot details; Tanzania public-source defaults; verified resource actions. See [release notes](docs/RELEASE-0.8.1.md).
+
 ## 0.8.0
 
 Official MeBot package (`app.mynguli`), version code 11. Includes the single top activity panel, compact answers and story resources, independent media/file loading, supported direct-file saving, eight accents and custom colours, and four page styles. This publishes the verified 0.7.1 delivery changes under the requested public version. No account, alarm or recommendation implementation is replaced by the version bump.

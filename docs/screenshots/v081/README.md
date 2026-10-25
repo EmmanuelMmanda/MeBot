@@ -1,3 +1,3 @@
-# MeBot 0.8.1 maintenance previews
+# MeBot 0.8.1 captures
 
-Actual Android host renders using synthetic test content. They are not live account responses or physical-device captures. This source branch is awaiting release signing and publication.
+Native Android host renders from controlled provider fixtures, not live news or a physical phone. The activity-details image is an isolated panel fixture; the popup is a separate Android window and is not shown in that capture. Detail-working illustrates the actual page and scoped running badges. No account secrets or private user profile appear.

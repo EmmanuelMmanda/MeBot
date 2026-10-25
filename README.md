@@ -2,30 +2,30 @@
 <img src="docs/assets/mebot.svg" width="64" height="64" alt="MeBot robot logo">
 <h1>MeBot Daily</h1>
 <p>A native Android app for your topics, sourced AI answers and everyday tools.</p>
-<p><a href="https://emmanuelmmanda.github.io/MeBot/"><strong>Website &amp; user guide</strong></a> · <a href="https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.0/mebot-0.8.0.apk"><strong>Download APK</strong></a> · <a href="https://github.com/EmmanuelMmanda/MeBot/releases">Releases</a> · <a href="https://emmanuelmmanda.github.io/MeBot/screenshots.html">Screenshot gallery</a></p>
+<p><a href="https://emmanuelmmanda.github.io/MeBot/"><strong>Website &amp; user guide</strong></a> · <a href="https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.1/mebot-0.8.1.apk"><strong>Download APK</strong></a> · <a href="https://github.com/EmmanuelMmanda/MeBot/releases">Releases</a> · <a href="https://emmanuelmmanda.github.io/MeBot/screenshots.html">Screenshot gallery</a></p>
 <p>Android 8.0+ · English &amp; Kiswahili · Kotlin + Jetpack Compose · Apache 2.0</p>
 </div>
 
-> **Current release: 0.8.0 · 15.9 MB.** The original official MeBot can be updated in place. The earlier **MeBot Test** remains a separate app. [Installation and limits](https://emmanuelmmanda.github.io/MeBot/download.html).
+> **Current release: 0.8.1 · 15.9 MB.** The original official MeBot can be updated in place. The earlier **MeBot Test** remains a separate app. [Installation and limits](https://emmanuelmmanda.github.io/MeBot/download.html).
 
 Choose the subjects you care about. Read a source-linked feed, open a story for an explanation, search, or ask a follow-up. Alarms, focus and check-in remain optional tools, not the whole app.
 
 ## See the app
 
 <p align="center">
-  <a href="docs/screenshots/v080/ai-resources.png"><img src="docs/screenshots/v080/ai-resources.png" width="225" alt="MeBot AI answer with Sources, Media and Files tabs and a PDF Save file action — 0.8.0"></a>
-  <a href="docs/screenshots/v080/streaming.png"><img src="docs/screenshots/v080/streaming.png" width="225" alt="MeBot top activity panel above a streaming answer — 0.8.0"></a>
-  <a href="docs/screenshots/v080/detail-files.png"><img src="docs/screenshots/v080/detail-files.png" width="225" alt="MeBot story detail with original notes and grouped file resources — 0.8.0"></a>
+  <a href="docs/screenshots/v081/mebot-0.8.1-ai-resources.png"><img src="docs/screenshots/v081/mebot-0.8.1-ai-resources.png" width="225" alt="MeBot AI answer with Sources, Media and Files tabs and a PDF Save file action — 0.8.1"></a>
+  <a href="docs/screenshots/v081/mebot-0.8.1-streaming.png"><img src="docs/screenshots/v081/mebot-0.8.1-streaming.png" width="225" alt="MeBot top activity panel above a streaming answer — 0.8.1"></a>
+  <a href="docs/screenshots/v081/mebot-0.8.1-detail-files.png"><img src="docs/screenshots/v081/mebot-0.8.1-detail-files.png" width="225" alt="MeBot story detail with original notes and grouped file resources — 0.8.1"></a>
 </p>
 
-**Answers with useful files** (0.8.0) · **One place for AI activity** (0.8.0) · **Keep the story and its sources** (0.8.0)
+**Answers with useful files** (0.8.1) · **One place for AI activity** (0.8.1) · **Keep the story and its sources** (0.8.1)
 <p align="center">
-  <a href="docs/screenshots/v080/appearance.png"><img src="docs/screenshots/v080/appearance.png" width="225" alt="MeBot appearance controls with a custom colour and page styles — 0.8.0"></a>
+  <a href="docs/screenshots/v081/mebot-0.8.1-appearance.png"><img src="docs/screenshots/v081/mebot-0.8.1-appearance.png" width="225" alt="MeBot appearance controls with a custom colour and page styles — 0.8.1"></a>
   <a href="docs/screenshots/v070/feed.png"><img src="docs/screenshots/v070/feed.png" width="225" alt="Topic filters, search and a sourced story in the MeBot Feed — 0.7.0 beta"></a>
   <a href="docs/screenshots/v070/detail.png"><img src="docs/screenshots/v070/detail.png" width="225" alt="A MeBot story with an AI explanation, original source and follow-up question — 0.7.0 beta"></a>
 </p>
 
-**Colours that feel like you** (0.8.0) · **Your personal feed** (0.7.0 beta) · **Read a little closer** (0.7.0 beta)
+**Colours that feel like you** (0.8.1) · **Your personal feed** (0.7.0 beta) · **Read a little closer** (0.7.0 beta)
 <p align="center">
   <a href="docs/screenshots/v070/ai.png"><img src="docs/screenshots/v070/ai.png" width="225" alt="MeBot AI workspace with a model selector, topic, example answer and reviewed text attachment — 0.7.0 beta"></a>
   <a href="docs/screenshots/v070/welcome.png"><img src="docs/screenshots/v070/welcome.png" width="225" alt="MeBot welcome tour showing examples of news, learning and events — 0.7.0 beta"></a>
@@ -56,11 +56,12 @@ Choose the subjects you care about. Read a source-linked feed, open a story for 
 **Find a clear answer** (0.6.1) · **Kiswahili on a small screen** (0.6.1) · **Keep your order** (0.6.0)
 <p align="center">
   <a href="docs/screenshots/44-mebot-connection-polish-v051.png"><img src="docs/screenshots/44-mebot-connection-polish-v051.png" width="225" alt="MeBot account recovery screen with a model selector and Check connection action — 0.5.1"></a>
+  <a href="docs/screenshots/v081/mebot-0.8.1-detail-working.png"><img src="docs/screenshots/v081/mebot-0.8.1-detail-working.png" width="225" alt="An example opportunity stays readable below the fixed activity panel; Show more reveals notes. — 0.8.1"></a>
 </p>
 
-**Connect an AI account** (0.5.1)
+**Connect an AI account** (0.5.1) · **Read while MeBot searches** (0.8.1)
 
-These are **actual native Android renders with synthetic example content**, not live AI responses or physical-phone photographs. The four latest 0.8.0 screens appear first. Supporting screens are labelled by their capture version. Select any image for the full-size original. The [web gallery](https://emmanuelmmanda.github.io/MeBot/screenshots.html) includes captions, filters and keyboard-accessible enlargement. [Capture notes and image credits](docs/screenshots/README.md).
+These are **actual native Android renders with synthetic example content**, not live AI responses or physical-phone photographs. Current 0.8.1 screens are shown with their capture version. Supporting screens are labelled by their capture version. Select any image for the full-size original. The [web gallery](https://emmanuelmmanda.github.io/MeBot/screenshots.html) includes captions, filters and keyboard-accessible enlargement. [Capture notes and image credits](docs/screenshots/README.md).
 
 ## Use your ChatGPT subscription
 
@@ -101,11 +102,11 @@ Discovery uses connected AI with source checks, direct public adapters for Open-
 
 ## Releases and verification
 
-The published release is **MeBot 0.8.0**, application ID `app.mynguli`, version code **11**, signed with the original release certificate. Install it over original official MeBot. The earlier **MeBot Test** is separate; export and review any data you need before removing it.
+The published release is **MeBot 0.8.1**, application ID `app.mynguli`, version code **12**, signed with the original release certificate. Install it over original official MeBot. The earlier **MeBot Test** is separate; export and review any data you need before removing it.
 
-[Download the APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.0/mebot-0.8.0.apk) · [Source ZIP](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.0/mebot-0.8.0-source.zip) · [Screen previews](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.0/mebot-0.8.0-resources.zip) · [Verification report](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.0/mebot-0.8.0-verification.txt) · [SHA-256 checksums](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.0/SHA256SUMS.txt)
+[Download the APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.1/mebot-0.8.1.apk) · [Source ZIP](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.1/mebot-0.8.1-source.zip) · [Screen previews](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.1/mebot-0.8.1-resources.zip) · [Verification report](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.1/mebot-0.8.1-verification.txt) · [SHA-256 checksums](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.1/SHA256SUMS.txt)
 
-See the current [verification report](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.0/mebot-0.8.0-verification.txt) for executed tests and remaining device checks. [Release notes and limits](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.8.0).
+See the current [verification report](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.1/mebot-0.8.1-verification.txt) for executed tests and remaining device checks. [Release notes and limits](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.8.1).
 
 Older versions are development history, not claimed as published downloads. See the [release directory](https://emmanuelmmanda.github.io/MeBot/releases.html) and [changelog](CHANGELOG.md).
 
@@ -157,3 +158,7 @@ MeBot is an independent application. ChatGPT is a service of OpenAI; the integra
 ## Build the test candidate
 
 Use JDK 17, Android SDK 36 and Gradle 8.13. Run `python3 scripts/prepare-build.py`, then `gradle :core:test :app:testDebugUnitTest :app:assembleBeta :app:lintBeta`. The beta is separately installed as `app.mynguli.beta`; release signing is configured only through private environment variables. Build-resource binaries are fetched from the pinned upstream and verified rather than included in the source archive.
+
+## MeBot 0.8.1 guide
+
+[Activity, scoped refresh and verified files](https://emmanuelmmanda.github.io/MeBot/guides/activity.html) — illustrated steps for the current release.
