@@ -26,7 +26,7 @@ data class AiTurn(
 )
 
 @Serializable
-data class AiAttachment(val id: String = UUID.randomUUID().toString(), val name: String, val text: String)
+data class AiAttachment(val id: String = UUID.randomUUID().toString(), val name: String, val text: String, val usedAtMillis: Long = 0)
 
 @Serializable
 data class AiItemBrief(
@@ -66,6 +66,7 @@ object ConversationLogic {
             require(thread.attachments.size <= 3 && thread.attachments.map { it.id }.distinct().size == thread.attachments.size)
             require(thread.attachments.sumOf { it.text.length } <= maxAttachmentCharacters)
             thread.attachments.forEach { attachment ->
+                require(attachment.usedAtMillis in 0..32_503_680_000_000L)
                 require(attachment.id.length in 1..100 && attachment.name.length in 1..160)
                 require(attachment.text.isNotBlank() && attachment.text.length <= maxAttachmentCharacters && '\u0000' !in attachment.text)
                 characters += attachment.text.length

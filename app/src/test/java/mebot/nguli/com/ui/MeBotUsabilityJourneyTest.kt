@@ -46,7 +46,7 @@ class MeBotUsabilityJourneyTest {
             }
             app.feedRepository.update {
                 val now = System.currentTimeMillis()
-                FeedState(onboardingComplete = true, personalSeedApplied = true,
+                FeedState(readingPreferences = ReadingPreferences(autoLoadMore = false), onboardingComplete = true, personalSeedApplied = true,
                     timezone = "Africa/Dar_es_Salaam", modules = fixtureModules(),
                     items = stories(now), lastRefreshMillis = now)
             }

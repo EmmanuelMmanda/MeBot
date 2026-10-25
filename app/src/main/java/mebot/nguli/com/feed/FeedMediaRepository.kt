@@ -120,7 +120,7 @@ class FeedMediaRepository(
     private class LoadGate(val mutex: Mutex = Mutex(), var users: Int = 0)
     private val loads = mutableMapOf<String, LoadGate>()
 
-    suspend fun load(url: String): Bitmap? {
+    suspend fun load(url: String, retryFailed: Boolean = false): Bitmap? {
         if (!FeedLogic.safeUrl(url, true)) return null
         val key = digest(url)
         synchronized(memory) { memory.get(key) }?.let { return it }
@@ -128,7 +128,12 @@ class FeedMediaRepository(
         // retain two concurrent downloads. Gates exist only while a caller uses or awaits them.
         val gate = synchronized(loads) { loads.getOrPut(key) { LoadGate() }.also { it.users++ } }
         try {
-            return gate.mutex.withLock { loadOnce(url, key) }
+            return gate.mutex.withLock {
+                // Only an explicit user retry bypasses this URL's negative cache.
+                // Clear after acquiring its load gate, never affecting other URLs or automatic throttling.
+                if (retryFailed) lock.withLock { failures.remove(key) }
+                loadOnce(url, key)
+            }
         } finally {
             // No suspension here: cancelling either the leader or a waiter cannot leak a gate.
             synchronized(loads) { if (--gate.users == 0) loads.remove(key) }

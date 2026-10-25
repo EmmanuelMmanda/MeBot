@@ -1,0 +1,20 @@
+<resources>
+    <string name="rich_image">Picha</string>
+    <string name="rich_resources">Viungo na media</string>
+    <string name="rich_pdf_preview">Soma PDF</string>
+    <string name="rich_pdf_loading">Inafungua PDF…</string>
+    <string name="rich_pdf_failed">PDF hii haijafunguka hapa. Jaribu tena, ihifadhi au fungua chanzo chake.</string>
+    <string name="rich_pdf_page">Ukurasa wa %1$d kati ya %2$d</string>
+    <string name="rich_previous_page">Ukurasa uliopita</string>
+    <string name="rich_next_page">Ukurasa unaofuata</string>
+    <string name="rich_pdf_close">Funga PDF</string>
+    <string name="rich_conversation_files">Faili za mazungumzo haya (%1$d)</string>
+    <string name="rich_conversation_files_help">Faili hizi zitatumika kwenye maswali yanayofuata hapa. Ondoa faili usilotaka kushiriki tena kwenye mazungumzo haya.</string>
+    <string name="rich_retry_question">Jaribu swali la mwisho tena</string>
+    <string name="rich_voice_settings">Mipangilio ya sauti</string>
+    <string name="rich_voice_help">Sema swali, likague, kisha tuma. Kusoma kwa sauti kunatumia sauti iliyopo kwenye simu yako. Hii si simu ya sauti inayosikiliza muda wote.</string>
+    <string name="rich_voice_speed">Kasi ya kusoma</string>
+    <string name="rich_voice_choice">Sauti ya simu</string>
+    <string name="rich_voice_default">Sauti ya kawaida</string>
+    <string name="rich_voice_unavailable">Hakuna sauti ya simu inayofaa kwa lugha hii.</string>
+</resources>

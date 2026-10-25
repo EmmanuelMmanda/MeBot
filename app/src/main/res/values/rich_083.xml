@@ -1,0 +1,20 @@
+<resources>
+    <string name="rich_image">Image</string>
+    <string name="rich_resources">Links and media</string>
+    <string name="rich_pdf_preview">Read PDF</string>
+    <string name="rich_pdf_loading">Opening PDF…</string>
+    <string name="rich_pdf_failed">This PDF could not be previewed. You can retry, save it or open the original.</string>
+    <string name="rich_pdf_page">Page %1$d of %2$d</string>
+    <string name="rich_previous_page">Previous page</string>
+    <string name="rich_next_page">Next page</string>
+    <string name="rich_pdf_close">Close PDF</string>
+    <string name="rich_conversation_files">Files in this conversation (%1$d)</string>
+    <string name="rich_conversation_files_help">These files remain available for follow-up questions. Remove any file you no longer want to share in this conversation.</string>
+    <string name="rich_retry_question">Retry last question</string>
+    <string name="rich_voice_settings">Voice options</string>
+    <string name="rich_voice_help">Speak a question, review it, then send. Read-aloud uses a voice installed on your phone. This is not a live, always-listening voice call.</string>
+    <string name="rich_voice_speed">Reading speed</string>
+    <string name="rich_voice_choice">Phone voice</string>
+    <string name="rich_voice_default">Default voice</string>
+    <string name="rich_voice_unavailable">No compatible phone voice is available in this language.</string>
+</resources>

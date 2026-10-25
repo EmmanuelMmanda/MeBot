@@ -54,6 +54,13 @@ fun FeedClock(content: @Composable () -> Unit) {
 fun moduleName(module: FeedModule): String = module.title.ifBlank { stringResource(moduleNameResource(module.kind)) }
 
 fun moduleNameResource(kind: String): Int = when (kind) {
+    "food" -> R.string.interest_food
+    "farming" -> R.string.interest_farming
+    "family" -> R.string.interest_family
+    "sport" -> R.string.interest_sport
+    "home" -> R.string.interest_home
+    "wellbeing" -> R.string.interest_wellbeing
+
     "opportunities" -> R.string.feed_module_opportunities
     "horoscope" -> R.string.feed_module_horoscope
     "watch" -> R.string.feed_module_watch
@@ -74,6 +81,13 @@ fun moduleNameResource(kind: String): Int = when (kind) {
 }
 
 fun moduleDescriptionResource(kind: String): Int = when (kind) {
+    "food" -> R.string.interest_food_body
+    "farming" -> R.string.interest_farming_body
+    "family" -> R.string.interest_family_body
+    "sport" -> R.string.interest_sport_body
+    "home" -> R.string.interest_home_body
+    "wellbeing" -> R.string.interest_wellbeing_body
+
     "opportunities" -> R.string.feed_module_opportunities_body
     "horoscope" -> R.string.feed_module_horoscope_body
     "watch" -> R.string.feed_module_watch_body
@@ -94,6 +108,13 @@ fun moduleDescriptionResource(kind: String): Int = when (kind) {
 }
 
 fun moduleIcon(kind: String): ImageVector = when (kind) {
+    "food" -> Icons.Outlined.Restaurant
+    "farming" -> Icons.Outlined.Grass
+    "family" -> Icons.Outlined.PeopleOutline
+    "sport" -> Icons.Outlined.SportsSoccer
+    "home" -> Icons.Outlined.Home
+    "wellbeing" -> Icons.Outlined.SelfImprovement
+
     "opportunities" -> Icons.Outlined.WorkOutline
     "horoscope" -> Icons.Outlined.NightsStay
     "watch" -> Icons.Outlined.Visibility
@@ -114,6 +135,13 @@ fun moduleIcon(kind: String): ImageVector = when (kind) {
 }
 
 fun moduleFocusResource(kind: String): Int = when (kind) {
+    "food" -> R.string.interest_food_focus
+    "farming" -> R.string.interest_farming_focus
+    "family" -> R.string.interest_family_focus
+    "sport" -> R.string.interest_sport_focus
+    "home" -> R.string.interest_home_focus
+    "wellbeing" -> R.string.interest_wellbeing_focus
+
     "technology" -> R.string.module_technology_focus
     "security" -> R.string.module_security_focus
     "business" -> R.string.module_business_focus
@@ -207,15 +235,7 @@ fun feedDate(timezone: String): String {
     return Instant.ofEpochMilli(LocalFeedClock.current).atZone(zone).format(DateTimeFormatter.ofPattern("EEEE, d MMMM", locale))
 }
 
-fun openSource(context: Context, value: String) {
-    val valid = runCatching { URI(value) }.getOrNull()
-    if (valid?.scheme !in setOf("https", "http") || valid?.host.isNullOrBlank() || valid?.userInfo != null) {
-        Toast.makeText(context, R.string.feed_link_error, Toast.LENGTH_SHORT).show()
-        return
-    }
-    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(value)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-        .onFailure { Toast.makeText(context, R.string.feed_link_error, Toast.LENGTH_SHORT).show() }
-}
+fun openSource(context: Context, value: String) = openInAppSource(context, value)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

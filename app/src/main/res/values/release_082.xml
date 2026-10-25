@@ -30,8 +30,8 @@
     <string name="quick_guide_answers">Open, read and ask</string>
     <string name="quick_guide_answers_body">Open any item for its introduction and sources. Connected AI adds an explanation; ask a follow-up below.</string>
     <string name="quick_guide_done">Start exploring</string>
-    <string name="quick_guide_feedback">Tell MeBot what fits</string>
-    <string name="quick_guide_feedback_body">Relevant and Not relevant improve that topic’s recommendations. You can undo either choice.</string>
+    <string name="quick_guide_feedback">Save or follow</string>
+    <string name="quick_guide_feedback_body">Bookmark keeps a read in Saved. The star beside it follows a story. Manage follow-ups in Saved → Following; checks share your normal AI allowance.</string>
     <string name="quick_guide_replay">Find this guide again in Help &amp; FAQ.</string>
     <string name="quick_guide_title">A few things to know</string>
     <string name="quick_guide_topics">Choose your topics</string>

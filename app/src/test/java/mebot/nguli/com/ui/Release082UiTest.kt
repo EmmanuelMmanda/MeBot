@@ -82,19 +82,19 @@ class Release082UiTest {
         compose.onNodeWithTag("connection-limit-apply").performScrollTo().performClick()
         assertEquals(73,state.value.dailyRequestLimit);assertEquals(9,state.value.requestsToday)
     }
-    @Test fun relevanceIsSingleChoiceWithUndoAndNoSocialCounts() {
+    @Test fun starIsExplicitAndIndependentOfBookmarksAndRelevance() {
         val item=FeedItem("a","music","Piano practice","Useful practice.",sourceUrl="https://example.com/a",sourceName="Source",kind="music")
         val state=mutableStateOf(FeedState(items=listOf(item)))
-        compose.setContent { MeBotTheme { CompositionLocalProvider(LocalRelevanceContext provides RelevanceUiContext(state.value,{id,value->state.value=RelevanceFeedback.record(state.value,item.id,value,System.currentTimeMillis())})) {
+        compose.setContent { MeBotTheme { CompositionLocalProvider(LocalRelevanceContext provides RelevanceUiContext(
+            state = state.value, onStar = { id -> state.value = StarredStories.toggle(state.value,id,100) })) {
             RelevanceControls(item)
         } } }
-        compose.onNodeWithTag("relevance-a-true").performClick().assertIsSelected()
-        assertEquals(1,state.value.relevanceSignals.size)
-        compose.onNodeWithTag("relevance-a-false").performClick().assertIsSelected()
-        compose.onNodeWithTag("relevance-a-true").assertIsNotSelected()
-        assertEquals(1,state.value.relevanceSignals.size)
-        compose.onNodeWithTag("relevance-undo-a").performClick()
+        compose.onNodeWithTag("star-a").performClick().assertIsSelected()
+        assertEquals(1,state.value.starredStories.size)
+        assertTrue(state.value.savedIds.isEmpty())
         assertTrue(state.value.relevanceSignals.isEmpty())
+        compose.onNodeWithTag("star-a").performClick().assertIsNotSelected()
+        assertTrue(state.value.starredStories.isEmpty())
     }
     @Test fun softwareUpdatesHasDistinctCheckDownloadAndInstallActions() {
         val release=SoftwareRelease("0.8.3",14,"mebot.nguli.com",26,"https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.3/mebot-0.8.3.apk","a".repeat(64),16_000_000,"b".repeat(64),"An improved update.")

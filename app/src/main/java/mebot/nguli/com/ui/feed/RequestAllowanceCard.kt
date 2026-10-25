@@ -30,7 +30,7 @@ internal fun RequestAllowanceCard(state: FeedState, enabled: Boolean, onSave: (I
         Text(if (state.dailyRequestLimit == 0) stringResource(R.string.delivery_usage_unlimited, used)
             else stringResource(R.string.delivery_usage_finite, used, state.dailyRequestLimit), style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.testTag("connection-usage"))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             RequestBudget.presets.forEach { n -> FilterChip(state.dailyRequestLimit == n && !editingCustom,
                 onClick = { editingCustom = false; error = false; onSave(n) }, enabled = enabled,
                 label = { Text(n.toString()) }, modifier = Modifier.heightIn(min = 48.dp).testTag("connection-limit-$n")) }

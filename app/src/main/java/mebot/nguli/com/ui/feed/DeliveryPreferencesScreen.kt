@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -67,7 +68,7 @@ fun DeliveryPreferencesScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> 
         }
         AppCard {
             Text(stringResource(R.string.feed_refresh_interval), style = MaterialTheme.typography.titleMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(1,3,6,12,24).forEach { n -> FilterChip(hours == n.toString() && !customHours,
                     onClick = { hours = n.toString(); customHours = false }, enabled = canEdit,
                     label = { Text(stringResource(R.string.delivery_interval_hours, n)) }, modifier = Modifier.heightIn(min = 48.dp).testTag("delivery-interval-$n")) }
@@ -97,13 +98,40 @@ fun DeliveryPreferencesScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> 
             Text(stringResource(R.string.feed_delivery_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (denied) Text(stringResource(R.string.feed_permission_denied), color = MaterialTheme.colorScheme.error)
             Text(stringResource(R.string.feed_quiet_hours), style = MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val configuration = LocalConfiguration.current
+            val startField: @Composable (Modifier) -> Unit = { modifier ->
                 OutlinedTextField(start, { if (it.length <= 2 && it.all(Char::isDigit)) start = it }, label = { Text(stringResource(R.string.feed_quiet_start)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f).testTag("delivery-quiet-start"))
-                OutlinedTextField(end, { if (it.length <= 2 && it.all(Char::isDigit)) end = it }, label = { Text(stringResource(R.string.feed_quiet_end)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f).testTag("delivery-quiet-end"))
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = modifier.testTag("delivery-quiet-start"))
             }
+            val endField: @Composable (Modifier) -> Unit = { modifier ->
+                OutlinedTextField(end, { if (it.length <= 2 && it.all(Char::isDigit)) end = it }, label = { Text(stringResource(R.string.feed_quiet_end)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = modifier.testTag("delivery-quiet-end"))
+            }
+            if (configuration.screenWidthDp < 360 || configuration.fontScale > 1.15f) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { startField(Modifier.fillMaxWidth()); endField(Modifier.fillMaxWidth()) }
+            } else Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { startField(Modifier.weight(1f)); endField(Modifier.weight(1f)) }
             Text(stringResource(R.string.delivery_quiet_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        AppCard {
+            Text(stringResource(R.string.reading_presentation_title), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.reading_presentation_body), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SettingsToggle(stringResource(R.string.reading_auto_more), state.readingPreferences.autoLoadMore, canEdit, "reading-auto-more") {
+                val checked = it
+                vm.saveReadingPreferences { current -> current.copy(autoLoadMore = checked) }
+            }
+            SettingsToggle(stringResource(R.string.reading_activity_details), state.readingPreferences.showActivityDetails, canEdit, "reading-activity-details") {
+                val checked = it
+                vm.saveReadingPreferences { current -> current.copy(showActivityDetails = checked) }
+            }
+            SettingsToggle(stringResource(R.string.reading_notification_images), state.readingPreferences.notificationImages, canEdit, "reading-notification-images") {
+                val checked = it
+                vm.saveReadingPreferences { current -> current.copy(notificationImages = checked) }
+            }
+            SettingsToggle(stringResource(R.string.reading_notification_preview), state.readingPreferences.notificationPreview, canEdit, "reading-notification-preview") {
+                val checked = it
+                vm.saveReadingPreferences { current -> current.copy(notificationPreview = checked) }
+            }
+            Text(stringResource(R.string.reading_notification_privacy), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (onConnection != null) Surface(onClick = onConnection, shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
             Row(Modifier.fillMaxWidth().padding(18.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {

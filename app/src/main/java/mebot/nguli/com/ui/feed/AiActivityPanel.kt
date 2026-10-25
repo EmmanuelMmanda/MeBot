@@ -64,7 +64,7 @@ internal fun activityLabelResource(activity: AiActivity): Int = when (activity.s
 /** Single anchored progress surface. Expanded details overlay, never become page content. */
 @Composable
 internal fun AiActivityPanel(activity: AiActivity?, modifier: Modifier = Modifier, extraCount: Int = 0,
-    scopeLabel: String = "") {
+    scopeLabel: String = "", showDetails: Boolean = true) {
     if (activity == null) return
     var expanded by rememberSaveable { mutableStateOf(false) }
     var seconds by remember(activity.id) { mutableLongStateOf(0) }
@@ -74,7 +74,9 @@ internal fun AiActivityPanel(activity: AiActivity?, modifier: Modifier = Modifie
             delay(1000)
         }
     }
+    LaunchedEffect(showDetails) { if (!showDetails) expanded = false }
     val label = stringResource(activityLabelResource(activity))
+    val resultCount = activity.steps.lastOrNull { it.count != null }?.count
     val operation = stringResource(when (activity.operation) {
         "discovery", "refresh" -> R.string.activity_scope_discovery
         "search" -> R.string.activity_scope_search
@@ -82,7 +84,7 @@ internal fun AiActivityPanel(activity: AiActivity?, modifier: Modifier = Modifie
     })
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val anchorWidth = maxWidth
-        Surface(onClick = { expanded = !expanded }, shape = RoundedCornerShape(18.dp),
+        Surface(onClick = { if (showDetails) expanded = !expanded }, shape = RoundedCornerShape(18.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLow,
             modifier = Modifier.fillMaxWidth().testTag("ai-activity-panel")
                 .semantics { stateDescription = label }) {
@@ -92,16 +94,22 @@ internal fun AiActivityPanel(activity: AiActivity?, modifier: Modifier = Modifie
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(label, style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                    Text(listOf(scopeLabel.ifBlank { operation }, stringResource(R.string.activity_seconds, seconds)).joinToString(" · "),
+                    val detail = when {
+                        resultCount != null -> stringResource(R.string.activity_verified_count, resultCount)
+                        activity.receivedCharacters > 0 -> stringResource(R.string.activity_received_chars, activity.receivedCharacters)
+                        activity.source.isNotBlank() -> activity.source
+                        else -> stringResource(R.string.activity_seconds, seconds)
+                    }
+                    Text(listOf(scopeLabel.ifBlank { operation }, detail).joinToString(" · "),
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (extraCount > 0) Text("+$extraCount", style = MaterialTheme.typography.labelSmall)
-                Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                if (showDetails) Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
                     stringResource(R.string.activity_details), Modifier.size(20.dp))
             }
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
+        DropdownMenu(expanded = expanded && showDetails, onDismissRequest = { expanded = false },
             properties = PopupProperties(focusable = true, usePlatformDefaultWidth = false),
             modifier = Modifier.width(anchorWidth).heightIn(max = 380.dp).testTag("activity-details-popup")) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -12,8 +12,8 @@ android {
         applicationId = "mebot.nguli.com"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.8.2"
+        versionCode = 15
+        versionName = "0.8.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
@@ -44,6 +44,15 @@ android {
             if (!signingPath.isNullOrBlank()) signingConfig = signingConfigs.getByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
+    }
+    // Compact, separately installed preview: release runtime dependencies, test identity only.
+    buildTypes.create("preview") {
+        initWith(buildTypes.getByName("release"))
+        applicationIdSuffix = ".debug"
+        versionNameSuffix = "-preview"
+        isDebuggable = false
+        signingConfig = signingConfigs.getByName("debug")
+        matchingFallbacks += "release"
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     buildFeatures { compose = true; buildConfig = true }

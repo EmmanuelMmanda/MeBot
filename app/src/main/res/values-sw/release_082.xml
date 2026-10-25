@@ -30,8 +30,8 @@
     <string name="quick_guide_answers">Fungua, soma na uliza</string>
     <string name="quick_guide_answers_body">Fungua taarifa uone utangulizi na vyanzo. Ukiunganisha AI utapata maelezo zaidi. Uliza swali jingine hapo chini.</string>
     <string name="quick_guide_done">Anza kuangalia</string>
-    <string name="quick_guide_feedback">Iambie MeBot kinachokufaa</string>
-    <string name="quick_guide_feedback_body">Inanifaa na Sihitaji hii husaidia kuchagua taarifa za mada hiyo. Unaweza kutengua chaguo lako.</string>
+    <string name="quick_guide_feedback">Hifadhi au fuatilia</string>
+    <string name="quick_guide_feedback_body">Alama ya kuhifadhi huweka taarifa kwenye Hifadhi. Nyota iliyo pembeni hufuatilia taarifa. Dhibiti ufuatiliaji kwenye Hifadhi → Ninazofuatilia; ukaguzi hutumia kikomo chako cha kawaida cha AI.</string>
     <string name="quick_guide_replay">Mwongozo huu unapatikana pia kwenye Msaada na maswali.</string>
     <string name="quick_guide_title">Mambo machache ya kuanzia</string>
     <string name="quick_guide_topics">Chagua mada zako</string>

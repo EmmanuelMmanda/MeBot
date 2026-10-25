@@ -61,30 +61,14 @@ fun ModulesScreen(state: FeedState, appState: AppState, onEdit: (String?) -> Uni
         category in setOf(ModuleDiscovery.ALL, "life") &&
             ModuleDiscovery.includesStatus(tool.id in appState.settings.enabledModules, status) && ModuleDiscovery.matches(query, label)
     }
+    val priceToolVisible = category in setOf(ModuleDiscovery.ALL, "life") && status != ModuleDiscovery.DISABLED &&
+        ModuleDiscovery.matches(query, stringResource(R.string.unit_price_title) + " " + stringResource(R.string.unit_price_body))
     Box(Modifier.fillMaxSize().onGloballyPositioned { viewport = it.boundsInRoot() }, contentAlignment = Alignment.TopCenter) {
         Column(Modifier.widthIn(max = MeBotTokens.ContentWidth).fillMaxWidth().verticalScroll(scroll).imePadding()
             .padding(horizontal = MeBotTokens.ScreenPadding, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             ScreenTitle(stringResource(R.string.feed_modules_tab), stringResource(R.string.modules_catalog_count, state.modules.size, state.modules.count { it.enabled }))
             error?.let { FeedStatus(it, onDismiss = onDismissError) }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(query, { query = it.take(120) },
-                    placeholder = { Text(stringResource(R.string.modules_find)) },
-                    leadingIcon = { Icon(Icons.Outlined.Search, null, Modifier.size(21.dp)) },
-                    trailingIcon = if (query.isBlank()) null else {{
-                        IconButton(onClick = { query = "" }, modifier = Modifier.testTag("module-search-clear")) {
-                            Icon(Icons.Outlined.Close, stringResource(R.string.modules_clear_search))
-                        }
-                    }},
-                    singleLine = true, shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier.fillMaxWidth().testTag("module-search"))
-                ChoiceRow(listOf(
-                    ModuleDiscovery.ALL to stringResource(R.string.modules_filter_all),
-                    ModuleDiscovery.ENABLED to stringResource(R.string.modules_filter_enabled),
-                    ModuleDiscovery.DISABLED to stringResource(R.string.modules_filter_disabled),
-                ), status) { status = it }
-                ChoiceRow(listOf(ModuleDiscovery.ALL to stringResource(R.string.modules_all_categories)) +
-                    ModuleCatalog.groups.map { it to stringResource(moduleGroupResource(it)) }, category) { category = it }
-            }
+            ModuleFilters083(query, status, category, filtered.size, { query = it }, { status = it }, { category = it })
             if (enabled.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     SectionLabel(stringResource(R.string.modules_yours))
@@ -98,7 +82,7 @@ fun ModulesScreen(state: FeedState, appState: AppState, onEdit: (String?) -> Uni
                     disabled.forEach { module -> key(module.id) { ModuleRow(module, onEdit, onToggle) } }
                 }
             }
-            if (filtered.isEmpty() && visibleTools.isEmpty()) AppCard {
+            if (filtered.isEmpty() && visibleTools.isEmpty() && !priceToolVisible) AppCard {
                 Text(stringResource(R.string.modules_no_matches), style = MaterialTheme.typography.titleMedium)
                 Text(stringResource(R.string.modules_no_matches_help), style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -110,6 +94,19 @@ fun ModulesScreen(state: FeedState, appState: AppState, onEdit: (String?) -> Uni
                 Icon(Icons.Outlined.Add, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.modules_custom))
             }
             if (state.modules.size >= ModuleCatalog.maxModules) SupportingText(stringResource(R.string.modules_limit))
+            if (priceToolVisible) {
+                Surface(onClick = { onUtility("compare_prices") }, shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth().testTag("module-compare-prices")) {
+                    Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Icon(Icons.Outlined.CompareArrows, null)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(stringResource(R.string.unit_price_title), style = MaterialTheme.typography.titleMedium)
+                            Text(stringResource(R.string.unit_price_body), style = MaterialTheme.typography.bodySmall)
+                        }
+                        Icon(Icons.Outlined.ChevronRight, null)
+                    }
+                }
+            }
             if (visibleTools.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionLabel(stringResource(R.string.modules_local_tools))
                 visibleTools.forEach { tool -> key(tool.id) {

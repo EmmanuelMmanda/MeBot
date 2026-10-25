@@ -1,0 +1,10 @@
+<resources>
+    <string name="media_fullscreen">Full screen</string>
+    <string name="media_close_fullscreen">Close full screen</string>
+    <string name="media_provider_quality">Quality, captions and playback speed are controlled by YouTube. Use its player settings when available.</string>
+    <string name="media_original_quality">Original source quality. This file does not provide selectable quality levels. Playback controls depend on the device and format.</string>
+    <string name="media_image_zoom">Pinch to zoom · drag to move. Image detail is limited by the source.</string>
+    <string name="media_reset">Reset</string>
+    <string name="media_loading">Loading image…</string>
+    <string name="media_youtube_controls">Use YouTube’s player controls for full screen and settings, when available.</string>
+</resources>

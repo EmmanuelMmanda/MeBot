@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.PixelCopy
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import mebot.nguli.com.MainActivity
 import mebot.nguli.com.R
@@ -62,10 +63,10 @@ class MeBotFeedJourneyTest {
         compose.onNodeWithTag("save-toolkit").performScrollTo().performClick()
         waitForState { "toolkit" in it.savedIds }
         tab("saved")
-        waitForText(text(R.string.feed_saved_title))
+        waitForText(text(R.string.library_title))
         compose.onNodeWithTag("item-toolkit").performScrollTo().assertIsDisplayed()
         compose.activityRule.scenario.recreate()
-        waitForText(text(R.string.feed_saved_title))
+        waitForText(text(R.string.library_title))
         assertEquals(setOf("toolkit"), state().savedIds)
         screenshot("22-mebot-saved")
         compose.onNodeWithTag("item-toolkit").performClick()
@@ -79,7 +80,7 @@ class MeBotFeedJourneyTest {
         compose.onNodeWithTag("detail-save").performScrollTo()
         screenshot("23-mebot-update-detail")
         back()
-        waitForText(text(R.string.feed_saved_title))
+        waitForText(text(R.string.library_title))
 
         tab("feed")
         app.sourceFailure = "offline"
@@ -143,17 +144,17 @@ class MeBotFeedJourneyTest {
         val changedText = "Build accessible Android tools\nKeep them easy to maintain"
         runBlocking { app.feedRepository.update { it.copy(context = listOf(scoped), items = listOf(stories().first().copy(why = "An old explanation", relevance = 90))) } }
         tab("you")
-        clickText(R.string.feed_context)
+        clickText(R.string.preferences_title_083)
         waitForTag("context-name")
         compose.onNodeWithTag("context-name").performScrollTo().performTextInput("Alex")
         compose.onNodeWithTag("context-edit").performScrollTo().performTextReplacement(changedText)
         compose.onNodeWithTag("context-add").performScrollTo().performClick()
-        compose.onNode(hasSetTextAction() and hasText(text(R.string.feed_context_entry, 2))).performScrollTo().performTextInput("Learn practical machine learning")
+        compose.onNode(SemanticsMatcher("additional context entry") { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("context-edit-") == true }).performScrollTo().performTextInput("Learn practical machine learning")
         compose.activityRule.scenario.recreate()
         waitForTag("context-name")
         compose.onNodeWithTag("context-name").assertTextContains("Alex")
         compose.onNodeWithTag("context-edit").assertTextContains(changedText)
-        compose.onNode(hasSetTextAction() and hasText(text(R.string.feed_context_entry, 2))).assertTextContains("Learn practical machine learning")
+        compose.onNode(SemanticsMatcher("additional context entry") { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("context-edit-") == true }).assertTextContains("Learn practical machine learning")
         compose.onNodeWithTag("context-name").performScrollTo()
         screenshot("28-mebot-context")
         compose.onNodeWithTag("context-save").performScrollTo().performClick()

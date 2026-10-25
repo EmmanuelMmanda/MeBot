@@ -307,7 +307,7 @@ class MeBotEditionUiTest {
                 "NASA shares a NOAA-21 satellite image of an extratropical cyclone over the North Atlantic.", sourceName = "NASA", sourceUrl = NASA_SOURCE,
                 publishedAtMillis = Instant.parse("2026-10-21T04:01:00Z").toEpochMilli(), fetchedAtMillis = now, kind = "science", relevance = 96,
                 media = FeedMedia(NASA_IMAGE, NASA_SOURCE, "NASA Earth Observatory / NOAA-21"))
-            return FeedState(onboardingComplete = true, name = "Alex", region = "Preview city", timezone = "UTC",
+            return FeedState(readingPreferences = ReadingPreferences(autoLoadMore = false), onboardingComplete = true, name = "Alex", region = "Preview city", timezone = "UTC",
                 modules = ModuleCatalog.defaults.map { it.copy(enabled = it.kind in setOf("technology", "science", "github", "learning", "scholarships", "weather")) },
                 items = listOf(google, nasa,
                     preview("github", "github", "Preview: A small toolkit for local AI", "repository", 50, "https://example.com/preview-project"),

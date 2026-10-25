@@ -13,7 +13,8 @@ import kotlinx.serialization.json.*
 /** Ephemeral, request-scoped activity. Never persists prompts, credentials or raw reasoning. */
 data class AiActivity(val id: String, val scope: String, val kind: String, val operation: String,
     val stage: String = "queued", val summary: String = "", val source: String = "", val startedAt: Long = System.currentTimeMillis(),
-    val steps: List<AiActivityStep> = emptyList(), val contextEntries: Int? = null)
+    val steps: List<AiActivityStep> = emptyList(), val contextEntries: Int? = null,
+    val receivedCharacters: Int = 0)
 
 /** Only observed events and validated result counts, never simulated model thoughts. */
 data class AiActivityStep(val stage: String, val source: String = "", val count: Int? = null,
@@ -64,7 +65,14 @@ object AiActivityRegistry {
             "response.created", "response.in_progress" -> update("working")
             "response.web_search_call.in_progress", "response.web_search_call.searching" -> update("searching")
             "response.web_search_call.completed" -> update("reading")
-            "response.output_text.delta" -> update("writing")
+            "response.output_text.delta" -> {
+                update("writing")
+                val delta = (event["delta"] as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
+                val id = local.get() ?: return
+                if (delta.isNotEmpty()) live.update { states -> states[id]?.let { activity ->
+                    states + (id to activity.copy(receivedCharacters = (activity.receivedCharacters.toLong() + delta.length).coerceAtMost(1_000_000).toInt()))
+                } ?: states }
+            }
             "response.reasoning_summary_text.delta" -> {
                 // Only provider-published summaries, never reasoning_text or encrypted content.
                 val delta = (event["delta"] as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()

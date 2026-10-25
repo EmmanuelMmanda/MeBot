@@ -406,7 +406,7 @@ class MeBotJourneyTest {
             !feed.refreshing && (feed.state?.lastRefreshMillis ?: 0L) > 0L
         }
         compose.waitForIdle()
-        if (compose.onAllNodesWithTag("quick-guide-done").fetchSemanticsNodes().isNotEmpty()) compose.onNodeWithTag("quick-guide-done").performScrollTo().performClick()
+        compose.onNodeWithTag("quick-guide").assertDoesNotExist() // Completed tour goes straight to useful content.
         waitForTransientMessages()
     }
     private fun openCheckIn() {

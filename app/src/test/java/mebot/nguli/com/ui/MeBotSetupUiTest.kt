@@ -98,10 +98,10 @@ class MeBotSetupUiTest {
                 ContextScreen(ui, vm, onDone = {})
             } }
         }
-        compose.onNodeWithTag("context-import").assertIsDisplayed()
+        compose.onNodeWithTag("context-import").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(compose.activity.getString(R.string.feed_advanced)).assertDoesNotExist()
         screenshot("60-mebot-context-v061")
-        compose.onNodeWithTag("context-paste").performClick()
+        compose.onNodeWithTag("context-paste").performScrollTo().performClick()
         compose.onNodeWithTag("context-paste-review").assertIsNotEnabled()
         compose.onNodeWithTag("context-paste-input").performTextInput("{ invalid JSON }")
         compose.onNodeWithTag("context-paste-review").performClick()

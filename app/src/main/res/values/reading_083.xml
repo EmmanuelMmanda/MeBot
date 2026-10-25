@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="reading_presentation_title">Reading &amp; progress</string>
+    <string name="reading_presentation_body">Choose how stories arrive and how much progress you see. These controls do not change your AI allowance.</string>
+    <string name="reading_auto_more">Load more as I scroll</string>
+    <string name="reading_activity_details">Show live progress details</string>
+    <string name="reading_notification_images">Include images in notifications</string>
+    <string name="reading_notification_preview">Show story titles in notifications</string>
+    <string name="reading_notification_privacy">Notifications remain optional, respect quiet hours and arrive at most once a day. Hide titles for more privacy.</string>
+    <string name="activity_received_chars">%1$d characters received</string>
+    <string name="activity_progress_private">Live status. Tap to see observed steps and sources.</string>
+    <string name="notification_ready_private">New stories are ready to read.</string>
+    <string name="notification_open">Read</string>
+</resources>

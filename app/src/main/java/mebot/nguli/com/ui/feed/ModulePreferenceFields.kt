@@ -27,7 +27,9 @@ internal fun ModulePreferenceFields(kind: String, preferences: Map<String, Strin
     val definitions = remember(kind) { ModulePreferences.definitions(kind) }
     if (definitions.isEmpty()) return
     AppCard {
-        Text(stringResource(R.string.modules_preferences), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.preferences_for_topic_083), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.preferences_topic_body_083), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         definitions.forEach { definition ->
             val value = preferences[definition.key] ?: definition.defaultValue
             val label = stringResource(preferenceLabel(definition.key))

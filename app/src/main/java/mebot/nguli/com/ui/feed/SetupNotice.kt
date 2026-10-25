@@ -50,7 +50,8 @@ internal fun QuickGuideSheet(onClose: () -> Unit) {
             listOf(
                 Triple(Icons.Outlined.GridView, R.string.quick_guide_topics, R.string.quick_guide_topics_body),
                 Triple(Icons.Outlined.ChatBubbleOutline, R.string.quick_guide_answers, R.string.quick_guide_answers_body),
-                Triple(Icons.Outlined.CheckCircleOutline, R.string.quick_guide_feedback, R.string.quick_guide_feedback_body),
+                Triple(Icons.Outlined.StarOutline, R.string.quick_guide_feedback, R.string.quick_guide_feedback_body),
+                Triple(Icons.Outlined.Fullscreen, R.string.guide_media_084, R.string.guide_media_body_084),
                 Triple(Icons.Outlined.SystemUpdate, R.string.software_updates, R.string.quick_guide_updates_body)
             ).forEach { (icon, title, body) ->
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
