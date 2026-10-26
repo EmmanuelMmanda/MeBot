@@ -249,6 +249,23 @@ class MeBotContextRestoreUiTest {
         assertEquals(entry, saved.context.single { it.id == entry.id })
     }
 
+    @Test fun blankOnboardingRetryAfterModelRecreationDoesNotDeleteOrRescopeExistingNote() {
+        val old = ContextEntry(id = "onboarding-interests", text = "Kilimo na biashara", scopes = setOf("learning"),
+            confirmed = true, origin = "onboarding", updatedAtMillis = 42L)
+        runBlocking { app.feedRepository.update { it.copy(context = listOf(entry, old)) } }
+        models.clear()
+        models = ViewModelStore()
+        selected.value = model(models)
+        compose.waitUntil(10_000) { selected.value!!.ui.value.state != null }
+        repeat(2) {
+            var completed: Boolean? = null
+            selected.value!!.configureOnboarding(setOf("news"), "", "") { completed = it }
+            compose.waitUntil(10_000) { completed != null }
+            assertEquals(true, completed)
+            assertEquals(listOf(entry, old), runBlocking { app.feedRepository.current().context })
+        }
+    }
+
     @Test fun customOnboardingInterestsCommitWithSelectedScopesAndKeepLegacyNotes() {
         var completed: Boolean? = null
         selected.value!!.configureOnboarding(setOf("learning"), "Example region", "Napenda kujifunza kilimo") { completed = it }

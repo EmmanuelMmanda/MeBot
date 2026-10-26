@@ -56,13 +56,16 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
     val state = ui.state ?: return
     var filter by rememberSaveable { mutableStateOf("all") }
     val enabled = remember(state.modules) { state.modules.filter { it.enabled } }
-    LaunchedEffect(enabled.map { it.id }) { if (filter != "all" && enabled.none { it.id == filter }) filter = "all" }
-    val refreshSelected: () -> Unit = { if (onRefreshModule == null) onRefresh() else onRefreshModule(filter.takeUnless { it == "all" }) }
+    LaunchedEffect(enabled.map { it.id }) { if (filter != "all" && filter != "today" && enabled.none { it.id == filter }) filter = "all" }
+    val refreshSelected: () -> Unit = { if (onRefreshModule == null) onRefresh() else onRefreshModule(filter.takeUnless { it == "all" || it == "today" }) }
     val now = LocalFeedClock.current
-    val edition = remember(state.items, state.modules, state.hiddenIds, state.savedIds, state.context, state.region, state.timezone, state.viewedAtMillis, state.readingHistoryEnabled, state.relevanceSignals, state.starredStories, state.editionSequence, now / 60_000) {
-        FeedLogic.edition(state, now)
+    val edition = remember(filter == "today", state.items, state.modules, state.hiddenIds, state.savedIds, state.context, state.region, state.timezone, state.viewedAtMillis, state.readingHistoryEnabled, state.relevanceSignals, state.starredStories, state.editionSequence, now / 60_000) {
+        if (filter == "today") emptyList() else FeedLogic.edition(state, now)
     }
-    val items = remember(edition, filter) { edition.filter { filter == "all" || it.moduleId == filter } }
+    val today = remember(state, now, filter == "today") { if (filter == "today") TodayFeed.edition(state, now) else emptyList() }
+    val items = remember(edition, today, filter) {
+        if (filter == "today") today.map { it.item } else edition.filter { filter == "all" || it.moduleId == filter }
+    }
     val weather = items.firstOrNull { it.weather != null }
     val stories = remember(items) { items.filter { it.weather == null } }
     val context = LocalContext.current
@@ -93,14 +96,14 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
         } }
         LaunchedEffect(nearEnd, hasScrolled, visibleCount, stories.size, ui.refreshing, state.readingPreferences.autoLoadMore) {
             // Only advance after the reader has scrolled. Keep the same viewport while adding rows.
-            if (state.readingPreferences.autoLoadMore && nearEnd && hasScrolled && !ui.refreshing) {
+            if (filter != "today" && state.readingPreferences.autoLoadMore && nearEnd && hasScrolled && !ui.refreshing) {
                 if (visibleCount < stories.size) {
                     listState.requestScrollToItem(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
                     visibleCount = (visibleCount + 5).coerceAtMost(stories.size)
                 } else if (!autoDiscoveryUsed && stories.isNotEmpty() && onLoadMore != null) {
                     // One automatic network batch per filter visit prevents a zero-result request loop.
                     autoDiscoveryUsed = true
-                    onLoadMore(filter.takeUnless { it == "all" })
+                    onLoadMore(filter.takeUnless { it == "all" || it == "today" })
                 }
             }
         }
@@ -109,7 +112,7 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                 consumedTopRequest = returnToTopRequest
                 visibleCount = 5
                 listState.scrollToItem(0)
-                refreshSelected()
+                if (filter != "today") refreshSelected()
             }
         }
         PullToRefreshBox(isRefreshing = ui.refreshing, onRefresh = refreshSelected,
@@ -157,11 +160,19 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                                 Text(stringResource(R.string.polish_all_modules))
                             }
                         }
-                        val choices = listOf("all" to stringResource(R.string.edition_for_you)) + enabled.map { it.id to moduleName(it) }
+                        val choices = listOf("all" to stringResource(R.string.edition_for_you), "today" to stringResource(R.string.today_090_title)) + enabled.map { it.id to moduleName(it) }
                         HorizontalRail(choices, itemKey = { it.first }, selectedKey = filter, modifier = Modifier.testTag("feed-filter-rail")) { (id, label) ->
                             FilterChip(filter == id, { filter = id }, label = { Text(label) }, shape = CircleShape,
                                 modifier = Modifier.heightIn(min = 48.dp).testTag("filter-$id"))
                         }
+                    }
+                }
+                if (filter == "today") item(key = "today-note", contentType = "notice") {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(stringResource(R.string.today_090_scope), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (state.lastRefreshMillis > 0) Text(stringResource(R.string.today_090_latest_refresh, relativeTime(state.lastRefreshMillis)),
+                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 if (newIds.isNotEmpty()) item(key="new-ready",contentType="notice") {
@@ -169,7 +180,7 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                         Text(stringResource(R.string.feed_new_items,newIds.size))
                     }
                 }
-                if (ui.refreshProgress.startedAt>0 && (filter=="all" || ui.refreshProgress.moduleId==null || ui.refreshProgress.moduleId==filter)) item(key="refresh-outcome",contentType="notice") {
+                if (ui.refreshProgress.startedAt>0 && (filter=="all" || filter=="today" || ui.refreshProgress.moduleId==null || ui.refreshProgress.moduleId==filter)) item(key="refresh-outcome",contentType="notice") {
                     val progress=ui.refreshProgress
                     val message=when{
                         progress.running && progress.newItems>0 -> stringResource(R.string.feed_progress_ready,progress.newItems)
@@ -190,6 +201,10 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                 }
 
                 when {
+                    filter == "today" && items.isEmpty() -> item(key = "today-empty", contentType = "empty") {
+                        EditionEmpty(R.string.today_090_empty, R.string.today_090_empty_body,
+                            R.string.today_090_regular_feed, { filter = "all" })
+                    }
                     ui.refreshing && items.isEmpty() -> Unit // Activity is rendered once, above the page.
                     enabled.isEmpty() -> item(key = "empty", contentType = "empty") {
                         EditionEmpty(R.string.feed_no_modules, R.string.feed_no_modules_body, R.string.feed_manage_modules, onModules)
@@ -201,6 +216,20 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                         }
                         if (!ui.connected) item(key = "public-updates", contentType = "action") {
                             TextButton(onClick = refreshSelected, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.edition_public_updates)) }
+                        }
+                    }
+                    filter == "today" -> {
+                        items(today.take(visibleCount), key = { "today-" + it.item.id }, contentType = { "story" }) { entry ->
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                TodayReasonLabel090(entry, state.timezone)
+                                if (entry.item.weather != null) WeatherStrip(entry.item) { onItem(entry.item.id) }
+                                else StoryRow(entry.item, entry.item.id in state.savedIds, onItem, onSave, onHide, timestampOverride = todayPublication090(entry, state.timezone))
+                            }
+                        }
+                        if (visibleCount < today.size) item(key = "today-more", contentType = "action") {
+                            TextButton(onClick = { visibleCount += 5 }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                                Text(stringResource(R.string.feed_show_more))
+                            }
                         }
                     }
                     else -> {
@@ -251,7 +280,7 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                         }
                     }
                 }
-                if (items.isEmpty() && ui.connected) item(key = "question", contentType = "question") { EditionQuestion(true, { onPrompt(null, askPrompt) }, onConnect) }
+                if (filter != "today" && items.isEmpty() && ui.connected) item(key = "question", contentType = "question") { EditionQuestion(true, { onPrompt(null, askPrompt) }, onConnect) }
                 item(key = "modules", contentType = "modules") { ModuleDiscoveryTile(onExploreModules) }
                 if (nextAlarm != null) item(key = "alarm", contentType = "alarm") {
                     Surface(onClick = onAlarms, color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(18.dp)) {
@@ -384,7 +413,7 @@ private fun CompactStory(item: FeedItem, modifier: Modifier, saved: Boolean, onS
 }
 
 @Composable
-internal fun StoryRow(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, onSave: (String) -> Unit, onHide: ((String) -> Unit)?) {
+internal fun StoryRow(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, onSave: (String) -> Unit, onHide: ((String) -> Unit)?, timestampOverride: String? = null) {
     val context = LocalContext.current
     Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface) {
         Column {
@@ -394,7 +423,8 @@ internal fun StoryRow(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
                         Text(item.sourceName.ifBlank { stringResource(moduleNameResource(item.kind)) }, style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(item.title, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                        if (item.deadline.isNotBlank()) Text(stringResource(R.string.feed_deadline, item.deadline), style = MaterialTheme.typography.labelMedium,
+                        if (timestampOverride != null) Text(timestampOverride, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else if (item.deadline.isNotBlank()) Text(stringResource(R.string.feed_deadline, item.deadline), style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary)
                         else Text(itemTimestamp(item), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -431,6 +461,7 @@ private fun StoryActions(item: FeedItem, saved: Boolean, onSave: (String) -> Uni
             Icon(Icons.Outlined.MoreHoriz, stringResource(R.string.feed_more), Modifier.size(21.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
             if (FeedLogic.safeUrl(item.sourceUrl)) {
                 DropdownMenuItem(text = { Text(stringResource(R.string.detail_share)) }, onClick = { menu = false; shareResource(context, item.title, item.sourceUrl) },
                     leadingIcon = { Icon(Icons.Outlined.Share, null) })

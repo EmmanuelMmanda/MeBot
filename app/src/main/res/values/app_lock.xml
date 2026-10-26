@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_lock_title">App lock</string>
+    <string name="app_lock_enter_pin">Enter your MeBot app PIN.</string>
+    <string name="app_lock_pin">App PIN</string>
+    <string name="app_lock_current_pin">Current app PIN</string>
+    <string name="app_lock_new_pin">New app PIN</string>
+    <string name="app_lock_confirm_pin">Confirm new app PIN</string>
+    <string name="app_lock_pin_rules">Choose 6–32 digits. This is a separate app PIN, not your device PIN.</string>
+    <string name="app_lock_unlock">Unlock MeBot</string>
+    <string name="app_lock_checking">Checking…</string>
+    <string name="app_lock_use_pin">Use app PIN</string>
+    <string name="app_lock_biometric">Use biometrics</string>
+    <string name="app_lock_forgot">Forgot app PIN?</string>
+    <string name="app_lock_recovery">Try previously enabled biometrics. There is no bypass. If neither works, Android Settings → Apps → MeBot → Storage → Clear storage is a destructive last resort: it deletes this app’s local notes, saved content, settings, alarms and credentials. Export first if you can unlock. Remote provider data is not deleted. MeBot never automatically erases data after failed attempts.</string>
+    <string name="app_lock_close">Close</string>
+    <string name="app_lock_back">Back</string>
+    <string name="app_lock_boundary">Hide personal screens when you leave MeBot or lock your device. App lock does not encrypt your feed database or protect exported files. Notifications and alarm labels stay generic while enabled; stop and snooze still work.</string>
+    <string name="app_lock_enabled">App lock is on</string>
+    <string name="app_lock_disabled">App lock is off</string>
+    <string name="app_lock_mismatch">The new PINs do not match.</string>
+    <string name="app_lock_saved">Saved</string>
+    <string name="app_lock_change">Change app PIN</string>
+    <string name="app_lock_enable">Enable app lock</string>
+    <string name="app_lock_disable">Disable app lock</string>
+    <string name="app_lock_biometric_help">Re-enter your current app PIN to change security settings. Strong enrolled biometrics are optional. Keep your PIN: enrollment changes or device lockouts can make biometrics unavailable.</string>
+    <string name="app_lock_biometric_enable">Enable biometrics</string>
+    <string name="app_lock_biometric_disable">Disable biometrics</string>
+    <string name="app_lock_wrong">Incorrect app PIN.</string>
+    <string name="app_lock_wait">Too many attempts. Try again in %1$d seconds.</string>
+    <string name="app_lock_storage">Protection could not be read or saved. MeBot stays locked. Restart and try again; do not clear storage unless you accept losing local data.</string>
+    <string name="app_lock_cancelled">Authentication expired when MeBot left the foreground. Try again.</string>
+    <string name="app_lock_biometric_error">Biometrics are unavailable or cancelled. Use your app PIN.</string>
+</resources>

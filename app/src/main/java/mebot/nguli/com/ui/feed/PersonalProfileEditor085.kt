@@ -38,14 +38,14 @@ internal fun PersonalProfileEditor085(text: String, enabled: Boolean, onChange: 
     }
     if (showExample) AlertDialog(onDismissRequest = { showExample = false },
         title = { Text(stringResource(R.string.profile_example_title_085)) }, text = { Text(example, modifier = Modifier.heightIn(max = 200.dp).verticalScroll(rememberScrollState()).testTag("$tag-example-text")) },
-        confirmButton = { TextButton(onClick = {
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = {
             showExample = false
             if (text.isNotBlank()) replace = true else onChange(example)
         }, enabled = enabled, modifier = Modifier.testTag("$tag-insert-example")) { Text(stringResource(R.string.profile_insert_example_085)) } },
         dismissButton = { TextButton(onClick = { showExample = false }, modifier = Modifier.testTag("$tag-dismiss-example")) { Text(stringResource(R.string.profile_cancel_085)) } })
     if (replace) AlertDialog(onDismissRequest = { replace = false },
         title = { Text(stringResource(R.string.profile_replace_title_085)) }, text = { Text(stringResource(R.string.profile_replace_body_085), modifier = Modifier.heightIn(max = 200.dp).verticalScroll(rememberScrollState())) },
-        confirmButton = { TextButton(onClick = { replace = false; onChange(example) }, enabled = enabled,
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { replace = false; onChange(example) }, enabled = enabled,
             modifier = Modifier.testTag("$tag-confirm-example")) { Text(stringResource(R.string.profile_replace_085)) } },
         dismissButton = { TextButton(onClick = { replace = false }, modifier = Modifier.testTag("$tag-cancel-example")) { Text(stringResource(R.string.profile_cancel_085)) } })
 }

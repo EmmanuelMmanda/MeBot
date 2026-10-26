@@ -97,7 +97,7 @@ internal fun ContextPromptActions(enabled: Boolean = true) {
         title = { Text(stringResource(R.string.setup_prompt_label)) },
         text = { SelectionContainer { Text(prompt, Modifier.heightIn(max = 200.dp).verticalScroll(rememberScrollState()),
             style = MaterialTheme.typography.bodySmall) } },
-        confirmButton = { TextButton(onClick = { copyPrompt(); viewPrompt = false }) { Text(stringResource(R.string.setup_copy_prompt)) } },
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { copyPrompt(); viewPrompt = false }) { Text(stringResource(R.string.setup_copy_prompt)) } },
         dismissButton = { TextButton(onClick = { viewPrompt = false }) { Text(stringResource(R.string.done)) } },
     )
 }
@@ -109,6 +109,7 @@ internal fun ContextPasteDialog(text: String, onTextChanged: (String) -> Unit, w
     var tooLarge by rememberSaveable { mutableStateOf(false) }
     val dialogTitle = stringResource(R.string.setup_paste_json)
     Dialog(onDismissRequest = { if (!working) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
         BoxWithConstraints(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
             Surface(Modifier.widthIn(max = 440.dp).fillMaxWidth().heightIn(max = maxHeight.coerceAtMost(460.dp))
                 .testTag("context-paste-dialog").semantics { paneTitle = dialogTitle },

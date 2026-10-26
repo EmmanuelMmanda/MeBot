@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.0 — local candidate, unreleased
+
+Measured Kotlin ranking snapshots; verified-date Today with source ownership and local-day boundaries; compact icon interests with preserved scoped custom notes; optional separate app PIN/strong biometrics and lifecycle protection. No database-encryption or phone-speed claim. Production signing, final release and device acceptance remain pending. [Candidate notes](docs/RELEASE-0.9.0.md). Earlier 0.8.3–0.8.5 candidate work remains included, without presenting it as a published release.
+
 ## 0.8.2 — 2026-10-25
 
 New `mebot.nguli.com` identity; provider choices; Software Updates; module-scoped feedback; progressive feed; clearer setup, background and detail UI; real sourced captures. [Release notes](docs/RELEASE-0.8.2.md).

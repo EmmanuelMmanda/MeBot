@@ -354,7 +354,7 @@ fun ModuleEditor(module: FeedModule, ui: FeedUiState, isNew: Boolean, onSave: (F
         }
     }
     if (showRemove) AlertDialog(onDismissRequest = { showRemove = false }, title = { Text(stringResource(R.string.feed_module_remove_title)) }, text = { Text(stringResource(R.string.feed_module_remove_body)) },
-        confirmButton = { TextButton(onClick = { showRemove = false; pendingRemoval = true; onRemove(module.id) }, enabled = !saving) { Text(stringResource(R.string.feed_module_remove), color = MaterialTheme.colorScheme.error) } },
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { showRemove = false; pendingRemoval = true; onRemove(module.id) }, enabled = !saving) { Text(stringResource(R.string.feed_module_remove), color = MaterialTheme.colorScheme.error) } },
         dismissButton = { TextButton(onClick = { showRemove = false }) { Text(stringResource(R.string.cancel)) } })
 }
 

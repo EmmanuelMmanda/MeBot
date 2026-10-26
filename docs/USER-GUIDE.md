@@ -42,3 +42,24 @@ Tap media to load it; provider permission/availability may prevent playback. Kee
 A failed connection does not block public-source reading or daily tools. Check provider credentials, capabilities and model access. A completed response is required to report a usable AI connection. If an update is not offered, it may be the same/older version or a different package/certificate. If no new stories appear, the source may have nothing new; MeBot must not manufacture freshness.
 
 Test alarm permissions, audio, lock-screen behavior and overnight delivery on your actual phone. Automated UI captures and controlled provider tests do not establish those properties.
+
+## 0.9.0 candidate additions
+
+These controls belong to the unreleased 0.9.0 candidate, not the official 0.8.2
+APK. See [candidate details and limitations](RELEASE-0.9.0.md).
+
+- **Feed → Today** shows only items with qualifying source dates for your selected
+  local day. Publication, forecast validity and event dates are labeled separately.
+  Older and unknown-date items remain in your regular feed and Saved. Opening Today
+  does not call AI; deliberate pull-to-refresh uses your usual connection/allowance.
+- Compact onboarding icons retain topic labels. Your optional typed interests are
+  saved as the existing module-scoped note. Revisiting with an empty draft preserves
+  it; edit/delete the note in your context editor when that is your intent.
+- **You → App lock** lets you choose and confirm a separate app PIN, then optionally
+  enable supported strong biometrics using the current app PIN. Never enter your
+  device PIN into an app-owned prompt. Locking hides personal screens, not encryption
+  of the feed database. Change/disable requires current authentication. Keep the PIN;
+  biometric enrollment changes or lockout may require it. Forgot-PIN guidance does
+  not bypass protection or erase data automatically.
+- **You → Your data** retains reading-history disable/clear controls. Clearing history
+  changes local ranking without deleting your notes or saved stories.

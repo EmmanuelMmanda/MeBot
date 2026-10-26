@@ -22,3 +22,12 @@ tasks.test {
 }
 
 tasks.withType<JavaCompile>().configureEach { sourceCompatibility = "17"; targetCompatibility = "17" }
+
+// Reproducible isolated host timing, never presented as phone latency.
+tasks.register<JavaExec>("rankingBenchmark") {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set(providers.gradleProperty("benchmarkMain").getOrElse("mebot.nguli.com.core.RankingBenchmark"))
+    args(providers.gradleProperty("benchmarkOutput").getOrElse("../benchmarks/results/run.csv"), providers.gradleProperty("benchmarkFork").getOrElse("0"))
+    maxHeapSize = "512m"
+}

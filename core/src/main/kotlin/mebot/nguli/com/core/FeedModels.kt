@@ -122,6 +122,7 @@ data class FeedItem(
     val keyPoints: List<String> = emptyList(),
     val nextStep: String = "",
     val caveat: String = "",
+    val temporal: FeedTemporal? = null,
 )
 
 @Serializable

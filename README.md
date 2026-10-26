@@ -1,6 +1,6 @@
-<!-- preview-085:start -->
-> **0.8.5 candidate:** Custom interests, a simpler About you screen and clearer navigation; 878 local automated tests passed. [Current candidate guide](docs/RELEASE-0.8.5.md). The official download remains **0.8.2**. Earlier candidate release notes are preserved as history.
-<!-- preview-085:end -->
+<!-- preview-090:start -->
+> **0.9.0 local candidate:** Measured Kotlin ranking improvements, verified-date Today, compact interests and optional app lock. [Candidate guide](docs/RELEASE-0.9.0.md) · [Earlier 0.8.5](docs/RELEASE-0.8.5.md). Final gates and signing remain pending; the official download is **0.8.2**.
+<!-- preview-090:end -->
 
 <div align="center">
 <img src="docs/assets/mebot.svg" width="64" height="64" alt="MeBot robot logo">

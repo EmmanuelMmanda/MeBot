@@ -102,7 +102,7 @@ fun SettingsScreen(state: AppState, vm: MeBotViewModel, onErase: () -> Unit = { 
                 }
             }
         },
-        confirmButton = {
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration();
             TextButton(onClick = {
                 if (panel == "profile") vm.saveProfile(name, intention, state.profile.onboardingComplete)
                 panel = null
@@ -113,13 +113,13 @@ fun SettingsScreen(state: AppState, vm: MeBotViewModel, onErase: () -> Unit = { 
     if (showImportConfirmation) AlertDialog(
         onDismissRequest = { showImportConfirmation = false }, title = { Text(stringResource(R.string.import_confirm_title)) },
         text = { Text(stringResource(R.string.import_confirm_body)) },
-        confirmButton = { TextButton(onClick = { showImportConfirmation = false; importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }) { Text(stringResource(R.string.import_confirm_action)) } },
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { showImportConfirmation = false; importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }) { Text(stringResource(R.string.import_confirm_action)) } },
         dismissButton = { TextButton(onClick = { showImportConfirmation = false }) { Text(stringResource(R.string.cancel)) } },
     )
     if (showEraseConfirmation) AlertDialog(
         onDismissRequest = { showEraseConfirmation = false }, title = { Text(stringResource(R.string.erase_title)) },
         text = { Text(stringResource(R.string.erase_body)) },
-        confirmButton = { TextButton(onClick = { showEraseConfirmation = false; onErase() }) { Text(stringResource(R.string.erase_action), color = MaterialTheme.colorScheme.error) } },
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { showEraseConfirmation = false; onErase() }) { Text(stringResource(R.string.erase_action), color = MaterialTheme.colorScheme.error) } },
         dismissButton = { TextButton(onClick = { showEraseConfirmation = false }) { Text(stringResource(R.string.cancel)) } },
     )
 }

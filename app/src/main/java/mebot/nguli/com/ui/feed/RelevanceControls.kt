@@ -55,6 +55,7 @@ internal fun StarManagement(item: FeedItem) {
         Box {
             TextButton(onClick = { menu = true }) { Text(stringResource(R.string.star_every_hours, star.checkEveryHours)) }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
                 StarredStories.cadences.forEach { hours -> DropdownMenuItem(
                     text = { Text(stringResource(R.string.star_every_hours, hours)) },
                     onClick = { menu = false; configure(item.id, star.paused, hours) }) }

@@ -60,6 +60,7 @@ internal fun FullscreenMediaPreview(url: String, title: String, onClose: () -> U
 @Composable
 internal fun FullscreenMediaShell(title: String, onClose: () -> Unit, screenTag: String = "media-fullscreen", closeTag: String = "media-fullscreen-close", body: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
         val view = LocalView.current
         DisposableEffect(view) {
             val window = (view.parent as? DialogWindowProvider)?.window

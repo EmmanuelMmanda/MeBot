@@ -164,7 +164,7 @@ fun DailyScreen(initial: DailyVisit, onSave: (DailyVisit) -> Unit, onComplete: (
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { showSuggestions = false }) { Text(stringResource(R.string.close)) } },
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { showSuggestions = false }) { Text(stringResource(R.string.close)) } },
     )
 }
 

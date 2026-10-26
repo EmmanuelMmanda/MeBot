@@ -31,7 +31,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 @Composable
-fun YouScreen(ui: FeedUiState, onContext: () -> Unit, onConnect: () -> Unit, onDelivery: () -> Unit, onSettings: () -> Unit, onData: () -> Unit, onSoftwareUpdates: (() -> Unit)? = null) {
+fun YouScreen(ui: FeedUiState, onContext: () -> Unit, onConnect: () -> Unit, onDelivery: () -> Unit, onSettings: () -> Unit, onData: () -> Unit, onSoftwareUpdates: (() -> Unit)? = null, onAppLock: () -> Unit = {}) {
     val state = ui.state ?: return
     ScreenContainer {
         ScreenTitle(stringResource(R.string.feed_you_title))
@@ -51,6 +51,7 @@ fun YouScreen(ui: FeedUiState, onContext: () -> Unit, onConnect: () -> Unit, onD
         FeedSettingsRow(Icons.Outlined.NotificationsNone, stringResource(R.string.feed_delivery),
             if (state.backgroundEnabled || state.notifications) stringResource(R.string.feed_delivery_on, state.refreshHours) else stringResource(R.string.feed_delivery_off), onDelivery)
         onSoftwareUpdates?.let { FeedSettingsRow(Icons.Outlined.SystemUpdate, stringResource(R.string.software_updates), stringResource(R.string.update_card_body), it) }
+        FeedSettingsRow(Icons.Outlined.Lock, stringResource(R.string.app_lock_title), onClick = onAppLock)
         FeedSettingsRow(Icons.Outlined.Palette, stringResource(R.string.mb_preferences), onClick = onSettings)
         FeedSettingsRow(Icons.Outlined.FolderOpen, stringResource(R.string.feed_data), onClick = onData)
         Text(stringResource(R.string.feed_about, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodySmall,
@@ -212,7 +213,7 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { scopeEntryId = null }) { Text(stringResource(R.string.done)) } })
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { scopeEntryId = null }) { Text(stringResource(R.string.done)) } })
     if (showPaste) ContextPasteDialog(
         text = pastedContext,
         onTextChanged = { pastedContext = it; vm.clearMessage() },

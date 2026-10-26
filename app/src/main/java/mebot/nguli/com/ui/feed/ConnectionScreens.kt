@@ -353,7 +353,7 @@ private fun ChatGptModelPicker(models: List<ChatGptModel>, selected: String, ena
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { choosing = false }) { Text(stringResource(R.string.cancel)) } },
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { choosing = false }) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -378,7 +378,7 @@ fun ChatGptPlanNotice(ui: FeedUiState, onAcknowledge: () -> Unit) {
             icon = { ChatGptMark(Modifier.size(32.dp)) },
             title = { Text(stringResource(R.string.chatgpt_welcome_title)) },
             text = { Text(stringResource(R.string.chatgpt_welcome_body)) },
-            confirmButton = { TextButton(onClick = onAcknowledge, modifier = Modifier.testTag("chatgpt-plan-got-it")) { Text(stringResource(R.string.chatgpt_got_it)) } })
+            confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = onAcknowledge, modifier = Modifier.testTag("chatgpt-plan-got-it")) { Text(stringResource(R.string.chatgpt_got_it)) } })
     }
 }
 

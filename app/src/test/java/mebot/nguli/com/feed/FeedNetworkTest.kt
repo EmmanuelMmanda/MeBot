@@ -42,7 +42,22 @@ class FeedNetworkTest {
             </feed>"""
         val item = RssSourceReader().parse(xml, source, module, now).single()
         assertEquals("https://example.com/release", item.sourceUrl)
-        assertEquals(Instant.parse("2026-10-22T12:00:00Z").toEpochMilli(), item.publishedAtMillis)
+        assertEquals(0L, item.publishedAtMillis)
+        assertNull(item.temporal) // Atom updated alone proves neither publication nor a substantive edit.
+    }
+
+    @Test fun publisherDateNotAtomMetadataUpdateQualifiesToday() {
+        val xml = """<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Source item</title>
+            <link href="https://example.com/source"/><updated>2026-10-23T07:00:00Z</updated>
+            <published>2026-10-22T12:00:00Z</published></entry></feed>"""
+        val item = RssSourceReader().parse(xml, source, module, now).single()
+        assertEquals(Instant.parse("2026-10-22T12:00:00Z").toEpochMilli(), item.temporal!!.publishedAtMillis)
+        assertNull(item.temporal!!.substantiveUpdatedAtMillis)
+        assertTrue(TodayFeed.edition(FeedState(modules = listOf(module), items = listOf(item)), now).isEmpty())
+        val today = RssSourceReader().parse(xml.replace("2026-10-22T12:00:00Z", "2026-10-23T06:00:00Z"), source, module, now).single()
+        assertEquals(TodayReason.PUBLISHED, TodayFeed.edition(FeedState(modules = listOf(module), items = listOf(today)), now).single().reason)
+        val future = RssSourceReader().parse(xml.replace("2026-10-22T12:00:00Z", "2026-10-23T12:00:00Z"), source, module, now).single()
+        assertNull(future.temporal)
     }
 
     @Test fun externalEntitiesAreRejectedBeforeParsing() {

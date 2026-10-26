@@ -56,9 +56,11 @@ class FeedWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                         FeedLogic.visible(latest).any { it.id == item.id } &&
                         latest.modules.any { it.id == item.moduleId && it.enabled && it.alerts }
                     if (stillAllowed) {
-                        manager.notify(300, FeedNotificationFactory.build(app, item, pending,
-                            showPreview = latest.readingPreferences.notificationPreview,
-                            image = image.takeIf { latest.readingPreferences.notificationImages }))
+                        mebot.nguli.com.security.AppLockPrivacy.withPolicy {
+                            manager.notify(300, FeedNotificationFactory.build(app, item, pending,
+                                showPreview = latest.readingPreferences.notificationPreview,
+                                image = image.takeIf { latest.readingPreferences.notificationImages }))
+                        }
                         app.feedRepository.update { current -> current.copy(lastNotificationDate = deliveryDate,
                             pendingNotificationIds = current.pendingNotificationIds - state.pendingNotificationIds) }
                     }

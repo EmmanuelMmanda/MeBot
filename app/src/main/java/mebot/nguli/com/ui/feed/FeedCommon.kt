@@ -1,5 +1,7 @@
 package mebot.nguli.com.ui.feed
 
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -13,6 +15,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -23,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -40,11 +47,29 @@ internal val LocalFeedClock = compositionLocalOf { System.currentTimeMillis() }
 
 /** One foreground clock keeps cached ages and the local date accurate without background wakeups. */
 @Composable
-fun FeedClock(content: @Composable () -> Unit) {
+fun FeedClock(timezone: String = "", content: @Composable () -> Unit) {
     val owner = LocalLifecycleOwner.current
-    val now by produceState(initialValue = System.currentTimeMillis(), key1 = owner) {
+    val context = LocalContext.current
+    var clockRevision by remember { mutableStateOf(0) }
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) { clockRevision++ }
+        }
+        ContextCompat.registerReceiver(context, receiver, IntentFilter().apply {
+            addAction(Intent.ACTION_TIME_CHANGED)
+            addAction(Intent.ACTION_TIMEZONE_CHANGED)
+            addAction(Intent.ACTION_DATE_CHANGED)
+        }, ContextCompat.RECEIVER_NOT_EXPORTED)
+        onDispose { context.unregisterReceiver(receiver) }
+    }
+    val now by produceState(initialValue = System.currentTimeMillis(), key1 = owner, key2 = clockRevision, key3 = timezone) {
         owner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            while (true) { value = System.currentTimeMillis(); delay(60_000) }
+            while (true) {
+                value = System.currentTimeMillis()
+                // Use the earlier minute or actual local midnight. ZoneId accepts second-level
+                // fixed offsets, whose midnight need not align with a UTC minute boundary.
+                delay(feedClockDelayMillis(value, timezone))
+            }
         }
     }
     CompositionLocalProvider(LocalFeedClock provides now, content = content)

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_lock_title">Kufuli ya programu</string>
+    <string name="app_lock_enter_pin">Weka PIN yako ya programu ya MeBot.</string>
+    <string name="app_lock_pin">PIN ya programu</string>
+    <string name="app_lock_current_pin">PIN ya sasa ya programu</string>
+    <string name="app_lock_new_pin">PIN mpya ya programu</string>
+    <string name="app_lock_confirm_pin">Thibitisha PIN mpya</string>
+    <string name="app_lock_pin_rules">Chagua tarakimu 6–32. Hii ni PIN tofauti ya programu, si PIN ya kifaa chako.</string>
+    <string name="app_lock_unlock">Fungua MeBot</string>
+    <string name="app_lock_checking">Inakagua…</string>
+    <string name="app_lock_use_pin">Tumia PIN ya programu</string>
+    <string name="app_lock_biometric">Tumia biometriki</string>
+    <string name="app_lock_forgot">Umesahau PIN ya programu?</string>
+    <string name="app_lock_recovery">Jaribu biometriki ulizowezesha awali. Hakuna njia ya kuruka kufuli. Zote zikishindwa, Mipangilio ya Android → Programu → MeBot → Hifadhi → Futa hifadhi ni hatua ya mwisho yenye kufuta data: huondoa maelezo, yaliyohifadhiwa, mipangilio, kengele na taarifa za kuingia za programu hii kwenye kifaa. Hamisha nakala kwanza ukiweza kufungua. Data ya mtoa huduma mtandaoni haifutwi. MeBot haifuti data kiotomatiki baada ya majaribio yaliyoshindwa.</string>
+    <string name="app_lock_close">Funga</string>
+    <string name="app_lock_back">Rudi</string>
+    <string name="app_lock_boundary">Ficha skrini binafsi unapoondoka MeBot au kufunga kifaa. Kufuli hii haisimbi hifadhidata ya habari wala kulinda faili zilizohamishwa. Arifa na majina ya kengele huwa ya jumla ikiwa imewashwa; kusimamisha na kusogeza kengele bado hufanya kazi.</string>
+    <string name="app_lock_enabled">Kufuli ya programu imewashwa</string>
+    <string name="app_lock_disabled">Kufuli ya programu imezimwa</string>
+    <string name="app_lock_mismatch">PIN mpya hazifanani.</string>
+    <string name="app_lock_saved">Imehifadhiwa</string>
+    <string name="app_lock_change">Badili PIN ya programu</string>
+    <string name="app_lock_enable">Washa kufuli ya programu</string>
+    <string name="app_lock_disable">Zima kufuli ya programu</string>
+    <string name="app_lock_biometric_help">Weka tena PIN ya sasa kubadili mipangilio ya usalama. Biometriki imara zilizosajiliwa ni hiari. Kumbuka PIN yako: mabadiliko ya usajili au kufungiwa kwa kifaa yanaweza kuzuia biometriki.</string>
+    <string name="app_lock_biometric_enable">Washa biometriki</string>
+    <string name="app_lock_biometric_disable">Zima biometriki</string>
+    <string name="app_lock_wrong">PIN ya programu si sahihi.</string>
+    <string name="app_lock_wait">Majaribio ni mengi. Jaribu tena baada ya sekunde %1$d.</string>
+    <string name="app_lock_storage">Ulinzi haukuweza kusomwa au kuhifadhiwa. MeBot inabaki imefungwa. Anzisha tena ujaribu; usifute hifadhi bila kukubali kupoteza data ya kifaa.</string>
+    <string name="app_lock_cancelled">Uthibitishaji umeisha baada ya kuondoka MeBot. Jaribu tena.</string>
+    <string name="app_lock_biometric_error">Biometriki haipatikani au imeghairiwa. Tumia PIN ya programu.</string>
+</resources>

@@ -78,7 +78,7 @@ fun FocusScreen(state: AppState, vm: MeBotViewModel, suggestedTitle: String? = n
     if (confirmEnd) AlertDialog(onDismissRequest = { confirmEnd = false },
         title = { Text(stringResource(R.string.focus_cancel_title)) },
         text = { Text(stringResource(R.string.mb_focus_end_body)) },
-        confirmButton = { TextButton(onClick = { confirmEnd = false; vm.endFocus() }) { Text(stringResource(R.string.end_session)) } },
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { confirmEnd = false; vm.endFocus() }) { Text(stringResource(R.string.end_session)) } },
         dismissButton = { TextButton(onClick = { confirmEnd = false }) { Text(stringResource(R.string.cancel)) } })
 }
 

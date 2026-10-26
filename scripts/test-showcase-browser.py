@@ -50,7 +50,7 @@ try:
                 page = context.new_page()
                 errors = []
                 page.on('pageerror', lambda e: errors.append(str(e)))
-                for name in ['index.html', 'screenshots.html', 'download.html', 'releases.html', 'tour.html', 'preview-083.html', 'preview-084.html', 'preview-085.html']:
+                for name in ['index.html', 'screenshots.html', 'download.html', 'releases.html', 'tour.html', 'preview-083.html', 'preview-084.html', 'preview-085.html', 'preview-090.html']:
                     load(page,name,wait_until='networkidle')
                     assert page.locator('h1').count() == 1, name
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), f'Overflow {width} {theme} {name}'
@@ -70,6 +70,12 @@ try:
                         assert '150 words and 1,000 characters' in page.locator('main').inner_text()
                         assert page.locator('a[href*="/releases/download/v0.8.5/"]').count() == 0
                         assert page.locator('main [lang="sw"]').count() == 1
+                    if name == 'preview-090.html':
+                        assert 'not a published official APK' in page.locator('main').inner_text()
+                        assert page.locator('a[href*="/releases/download/v0.9.0/"]').count() == 0
+                        assert page.locator('.shot img[src$="onboarding-en-chooser.png"]').count() == 1
+                        assert page.locator('.shot img[src$="onboarding-sw-chooser.png"]').count() == 1
+                        assert page.locator('.shot img[src*="small-sw-large"]').count() == 0
                     for link in page.locator('[data-release-apk]').all():
                         assert link.is_visible() and link.get_attribute('href') == apk
                     for im in page.locator('.shot:visible img').all():

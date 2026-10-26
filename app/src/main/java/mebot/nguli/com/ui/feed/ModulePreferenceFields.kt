@@ -75,6 +75,7 @@ private fun ModulePreferenceSelector(kind: String, definition: ModulePreferenceD
             Spacer(Modifier.width(4.dp)); Icon(Icons.Outlined.ExpandMore, null, Modifier.size(18.dp))
         }
         DropdownMenu(expanded = expanded && enabled, onDismissRequest = { expanded = false }) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
             definition.choices.forEach { option ->
                 DropdownMenuItem(text = { Text(stringResource(preferenceValue(option))) },
                     onClick = { expanded = false; onChange(definition.key, option) },

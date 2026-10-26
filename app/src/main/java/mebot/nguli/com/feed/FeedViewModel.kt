@@ -292,7 +292,10 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
             require(kinds.all { it in ModuleCatalog.kinds } && region.length <= 100 && PersonalProfile085.valid(interests))
             repository.update { s ->
                 val choices = kinds.ifEmpty { setOf("news") }
-                val notes = PersonalProfile085.onboarding(s.context, interests, kinds - "weather")
+                // An absent/empty restored onboarding draft must not erase an existing note.
+                // Deliberate removal remains an explicit action in the context editor.
+                val notes = if (interests.isBlank()) s.context
+                    else PersonalProfile085.onboarding(s.context, interests, kinds - "weather")
                 s.copy(interestsConfigured=true, region=region.trim(), timezone=s.timezone.ifBlank { java.time.ZoneId.systemDefault().id },
                     modules=s.modules.map { it.copy(enabled=it.kind in choices) }, context=notes, lastRefreshMillis=0)
             }

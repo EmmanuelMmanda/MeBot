@@ -179,7 +179,7 @@ fun AlarmsScreen(state: AppState, vm: MeBotViewModel, onEdit: (String?) -> Unit,
         AlertDialog(onDismissRequest = { deleting = null },
             title = { Text(stringResource(R.string.alarm_delete_title)) },
             text = { Text(stringResource(R.string.alarm_delete_body)) },
-            confirmButton = { TextButton(onClick = { deleting = null; vm.deleteAlarm(id) }) { Text(stringResource(R.string.delete)) } },
+            confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { deleting = null; vm.deleteAlarm(id) }) { Text(stringResource(R.string.delete)) } },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } })
     }
 }
@@ -221,6 +221,7 @@ private fun AlarmListCard(plan: AlarmPlan, prominent: Boolean, onEdit: () -> Uni
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreHoriz, stringResource(R.string.mebot_alarm_options), tint = ink) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
                     DropdownMenuItem(text = { Text(stringResource(R.string.mebot_remove_alarm)) },
                         leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null) }, onClick = { menu = false; onDelete() })
                 }
@@ -488,6 +489,7 @@ private fun AlarmAccessSheet(
     }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = MaterialTheme.colorScheme.surface) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(stringResource(R.string.mebot_alarm_access), style = MaterialTheme.typography.headlineSmall)

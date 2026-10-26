@@ -1,0 +1,18 @@
+<resources>
+    <string name="today_090_title">Today</string>
+    <string name="today_090_scope">Verified dates from your enabled sources. Coverage may be incomplete; cached items work offline.</string>
+    <string name="today_090_empty">No verified items for today yet</string>
+    <string name="today_090_empty_body">Older items and items without a verified date remain in your regular feed. Refresh when connected to check your sources.</string>
+    <string name="today_090_regular_feed">Open regular feed</string>
+    <string name="today_090_published">Published today</string>
+    <string name="today_090_updated">Updated today</string>
+    <string name="today_090_forecast">Forecast for today</string>
+    <string name="today_090_happening">Happening today</string>
+    <string name="today_090_due">Due today</string>
+    <string name="today_090_why">Why this?</string>
+    <string name="today_090_why_body">Its source date applies to today in your selected timezone. Ordering considers your selected interests, saved and hidden items, and optional local reading history while balancing sources. Manage or clear reading history in You → Data and backups. This view makes no extra AI request.</string>
+    <string name="today_090_original">Originally published %1$s</string>
+    <string name="today_090_validity">Valid %1$s – %2$s · Retrieved %3$s</string>
+    <string name="today_090_latest_refresh">Latest refresh: %1$s</string>
+    <string name="today_090_source_date">Source date: %1$s (%2$s)</string>
+</resources>

@@ -44,6 +44,7 @@ internal fun SetupNotice(state: FeedState, connected: Boolean, page: String,
 @Composable
 internal fun QuickGuideSheet(onClose: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp).testTag("quick-guide"),
             verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Text(stringResource(R.string.quick_guide_title), style = MaterialTheme.typography.headlineSmall)

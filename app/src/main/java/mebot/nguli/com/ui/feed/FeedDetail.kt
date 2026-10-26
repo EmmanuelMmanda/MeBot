@@ -102,6 +102,7 @@ fun FeedDetail(
                             Icon(Icons.Outlined.MoreHoriz, stringResource(R.string.detail_more_actions))
                         }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
                             if (originalAvailable) DropdownMenuItem(text = { Text(stringResource(R.string.detail_share)) },
                                 leadingIcon = { Icon(Icons.Outlined.Share, null) },
                                 onClick = { menu = false; shareResource(context, item.title, item.sourceUrl) })

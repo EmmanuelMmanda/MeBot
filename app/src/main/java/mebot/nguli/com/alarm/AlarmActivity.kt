@@ -192,7 +192,7 @@ class AlarmActivity : ComponentActivity() {
                                 else Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(time, fontSize = 48.sp, lineHeight = 54.sp, fontWeight = FontWeight.Medium, letterSpacing = (-1.5).sp)
-                                Text(current.plan.label.ifBlank { words(R.string.alarm_your_title) }, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                Text(if (mebot.nguli.com.security.AppLockPrivacy.enabled(this@AlarmActivity)) words(R.string.alarm_your_title) else current.plan.label.ifBlank { words(R.string.alarm_your_title) }, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                             }
                             val math = current.mathChallenge
                             if (current.audible && current.plan.effectiveDismissMode == AlarmDismissMode.MATH && math?.current != null) {
@@ -218,7 +218,7 @@ class AlarmActivity : ComponentActivity() {
                                     Icon(if (current.plan.effectiveDismissMode == AlarmDismissMode.QR) Icons.Outlined.QrCodeScanner else Icons.Outlined.WbSunny, null, Modifier.size(40.dp))
                                     Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
                                     if (current.plan.effectiveDismissMode == AlarmDismissMode.QR) {
-                                        Text(current.plan.checkpointLabel.ifBlank { words(R.string.alarm_checkpoint_generic) }, style = MaterialTheme.typography.bodyMedium)
+                                        Text(if (mebot.nguli.com.security.AppLockPrivacy.enabled(this@AlarmActivity)) words(R.string.alarm_checkpoint_generic) else current.plan.checkpointLabel.ifBlank { words(R.string.alarm_checkpoint_generic) }, style = MaterialTheme.typography.bodyMedium)
                                     }
                                     if (current.phase == AlarmPhase.WALKING) {
                                         Text(words(R.string.mebot_alarm_quiet_remaining, formatRemaining(remaining ?: 0)), style = MaterialTheme.typography.bodySmall)

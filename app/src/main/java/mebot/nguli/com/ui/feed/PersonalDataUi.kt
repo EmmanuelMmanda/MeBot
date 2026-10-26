@@ -82,7 +82,7 @@ internal fun FeedImportReview(ui: FeedUiState, onConfirm: () -> Unit, onCancel: 
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onConfirm, enabled = !ui.importWorking,
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = onConfirm, enabled = !ui.importWorking,
             modifier = Modifier.testTag("import-confirm")) { Text(stringResource(R.string.imports_confirm)) } },
         dismissButton = { TextButton(onClick = onCancel, enabled = !ui.importWorking,
             modifier = Modifier.testTag("import-cancel")) { Text(stringResource(R.string.cancel)) } },
@@ -136,7 +136,7 @@ internal fun FeedDataContent(
             }
         }
     }
-    if(confirmFeedbackReset)AlertDialog(onDismissRequest={confirmFeedbackReset=false},title={Text(stringResource(R.string.feedback_reset_title))},text={Text(stringResource(R.string.feedback_reset_body))},confirmButton={TextButton(onClick={confirmFeedbackReset=false;onResetFeedback?.invoke()},modifier=Modifier.testTag("feedback-reset-confirm")){Text(stringResource(R.string.feedback_reset))}},dismissButton={TextButton(onClick={confirmFeedbackReset=false}){Text(stringResource(R.string.cancel))}})
+    if(confirmFeedbackReset)AlertDialog(onDismissRequest={confirmFeedbackReset=false},title={Text(stringResource(R.string.feedback_reset_title))},text={Text(stringResource(R.string.feedback_reset_body))},confirmButton={ mebot.nguli.com.security.ProtectedWindowRegistration();TextButton(onClick={confirmFeedbackReset=false;onResetFeedback?.invoke()},modifier=Modifier.testTag("feedback-reset-confirm")){Text(stringResource(R.string.feedback_reset))}},dismissButton={TextButton(onClick={confirmFeedbackReset=false}){Text(stringResource(R.string.cancel))}})
     FeedImportReview(ui, onConfirmImport, onCancelImport)
 }
 
@@ -189,7 +189,7 @@ private fun ReadingHistoryCard(ui: FeedUiState, onChanged: (Boolean) -> Unit, on
     if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false },
         title = { Text(stringResource(R.string.history_clear_title)) },
         text = { Text(stringResource(R.string.history_clear_body)) },
-        confirmButton = { TextButton(onClick = { confirmClear = false; onDismissError(); pendingClear = true; onClear() },
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { confirmClear = false; onDismissError(); pendingClear = true; onClear() },
             modifier = Modifier.testTag("history-clear-confirm")) { Text(stringResource(R.string.imports_history_clear)) } },
         dismissButton = { TextButton(onClick = { confirmClear = false }, modifier = Modifier.testTag("history-clear-cancel")) { Text(stringResource(R.string.cancel)) } })
 }

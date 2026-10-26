@@ -38,8 +38,10 @@ class AlarmRingingService : Service() {
     private var playingSessionId: String? = null
     private var playbackStartedElapsed: Long = 0
     private var lastPhase: AlarmPhase? = null
+    private var lastProtected: Boolean? = null
     private val handler = Handler(Looper.getMainLooper())
     private var tickScheduled = false
+    private var removePrivacyListener: (() -> Unit)? = null
 
     private val tick = object : Runnable {
         override fun run() {
@@ -50,10 +52,15 @@ class AlarmRingingService : Service() {
             }
             if (session.id != playingSessionId) startPlayback(session)
             updateVolume(session)
-            if (lastPhase != session.phase) {
+            val protected = mebot.nguli.com.security.AppLockPrivacy.enabled(this@AlarmRingingService)
+            if (lastPhase != session.phase || lastProtected != protected) {
+                if (protected && lastProtected != true) speech?.stop()
+                lastProtected = protected
                 lastPhase = session.phase
                 if (session.phase == AlarmPhase.WALKING) speech?.stop()
-                getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(session))
+                mebot.nguli.com.security.AppLockPrivacy.withPolicy {
+                    getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(session))
+                }
             }
             // The scheduled callback owns expiry. This is a redundant in-process recovery path.
             session.deadlineAtMillis?.takeIf { it <= System.currentTimeMillis() }?.let {
@@ -65,6 +72,9 @@ class AlarmRingingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        removePrivacyListener = mebot.nguli.com.security.AppLockPrivacy.onProtectionChanged {
+            handler.post { if (mebot.nguli.com.security.AppLockPrivacy.enabled(this)) speech?.stop() }
+        }
         controller = AlarmController(this)
         audio = getSystemService(AudioManager::class.java)
         vibrator = if (Build.VERSION.SDK_INT >= 31) getSystemService(VibratorManager::class.java).defaultVibrator
@@ -85,8 +95,10 @@ class AlarmRingingService : Service() {
             return START_NOT_STICKY
         }
         try {
-            if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION_ID, notification(session), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-            else startForeground(NOTIFICATION_ID, notification(session))
+            mebot.nguli.com.security.AppLockPrivacy.withPolicy {
+                if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION_ID, notification(session), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+                else startForeground(NOTIFICATION_ID, notification(session))
+            }
         } catch (failure: RuntimeException) {
             controller.log("foreground_unavailable", session.plan.id, failure.javaClass.simpleName)
             stopSelf()
@@ -152,7 +164,7 @@ class AlarmRingingService : Service() {
                 val current = controller.session()
                 if (playingSessionId == session.id && current?.id == session.id && !focusPaused && !focusDucked &&
                     current.phase in setOf(AlarmPhase.RINGING, AlarmPhase.FOLLOWUP_RINGING))
-                    speech?.speak(session.plan.speechMessage.trim().ifBlank { alarmString(R.string.alarm_audio_default_message) }, controller.language())
+                    speech?.speak(if (mebot.nguli.com.security.AppLockPrivacy.enabled(this@AlarmRingingService)) alarmString(R.string.alarm_audio_default_message) else session.plan.speechMessage.trim().ifBlank { alarmString(R.string.alarm_audio_default_message) }, controller.language())
             }, maxOf(1_500L, session.plan.rampSeconds * 1_000L))
         }
         if (session.plan.vibrate) {
@@ -170,7 +182,7 @@ class AlarmRingingService : Service() {
     }
 
     private fun notification(session: AlarmSession): Notification {
-        val title = session.plan.label.ifBlank { alarmString(R.string.alarm_generic_title) }
+        val title = if (mebot.nguli.com.security.AppLockPrivacy.enabled(this)) alarmString(R.string.alarm_generic_title) else session.plan.label.ifBlank { alarmString(R.string.alarm_generic_title) }
         val text = when (session.phase) {
             AlarmPhase.WALKING -> alarmString(R.string.alarm_go_checkpoint)
             AlarmPhase.FOLLOWUP_RINGING -> alarmString(R.string.alarm_notification_followup)
@@ -223,6 +235,7 @@ class AlarmRingingService : Service() {
     }
 
     override fun onDestroy() {
+        removePrivacyListener?.invoke(); removePrivacyListener = null
         handler.removeCallbacksAndMessages(null)
         tickScheduled = false
         releasePlayback()
