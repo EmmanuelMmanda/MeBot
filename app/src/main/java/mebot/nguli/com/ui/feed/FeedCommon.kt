@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
@@ -29,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -78,6 +80,45 @@ fun FeedClock(timezone: String = "", noticeDismissals: Map<String, Long> = empty
 
 @Composable
 fun moduleName(module: FeedModule): String = module.title.ifBlank { stringResource(moduleNameResource(module.kind)) }
+
+/** A quiet, non-interactive category label grounded in the story's existing module taxonomy. */
+@Composable
+internal fun StoryCategoryTag(item: FeedItem, modifier: Modifier = Modifier) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        shape = CircleShape,
+        modifier = modifier,
+    ) {
+        Text(
+            stringResource(storyCategoryResource(item)),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+private val aiTopicEvidence = Regex(
+    "\\b(?:AI|artificial intelligence|machine learning|deep learning|akili bandia|kujifunza kwa mashine)\\b",
+    RegexOption.IGNORE_CASE,
+)
+
+/** Use a specific AI label only when the actual story text supports it, never from module alone. */
+internal fun storyCategoryResource(item: FeedItem): Int = when {
+    item.kind == "technology" && aiTopicEvidence.containsMatchIn(item.title + " " + item.summary) -> R.string.feed_category_ai
+    item.kind == "technology" -> R.string.feed_category_technology
+    else -> moduleNameResource(item.kind)
+}
+
+/** Prefer the supplied publisher attribution; use only the verified link host as a fallback. */
+internal fun publisherLabel(item: FeedItem): String = item.sourceName.trim().ifBlank {
+    runCatching {
+        URI(item.sourceUrl).takeIf { it.scheme == "https" || it.scheme == "http" }
+            ?.host?.removePrefix("www.").orEmpty()
+    }.getOrDefault("")
+}
 
 fun moduleNameResource(kind: String): Int = when (kind) {
     "food" -> R.string.interest_food

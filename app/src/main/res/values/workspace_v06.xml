@@ -20,6 +20,13 @@
     <string name="workspace_manage_context">Your preferences</string>
     <string name="workspace_attachment_help">This text is included when you send a message in this conversation. Remove it from the composer to stop including it in future messages.</string>
     <string name="workspace_start_title">What would you like to know?</string>
+    <string name="workspace_item_start_title">Explore this story</string>
+    <string name="workspace_item_draft_title">About this story</string>
+    <string name="workspace_item_draft_help">Review or edit the question before you send it.</string>
+    <string name="workspace_item_scope">This conversation stays with the story you opened.</string>
+    <string name="workspace_confirmed_about_you_available">Your confirmed About you note may be used where relevant.</string>
+    <string name="workspace_topic_scope">This conversation stays focused on this topic.</string>
+    <string name="workspace_story_suggestions">Questions from your feed</string>
     <string name="workspace_scoped_notes">This conversation can use %1$d approved module notes, plus your saved About you.</string>
     <string name="workspace_general_context">Ask about your topics or anything else.</string>
     <string name="workspace_research">Catch me up on a useful development</string>

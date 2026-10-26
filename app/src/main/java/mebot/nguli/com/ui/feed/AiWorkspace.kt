@@ -59,6 +59,8 @@ fun AiWorkspace(
     onSelectModel: (String) -> Unit = {},
     onDismissNotice: ((String) -> Unit)? = null,
     onSpeechPreferences: (Float, String) -> Unit = { _, _ -> },
+    onPrepareSuggestion: (String, String) -> Unit = { _, _ -> },
+    onSuggestionDraftApplied: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
@@ -69,17 +71,24 @@ fun AiWorkspace(
     val draftKey = ui.activeConversationId ?: "new"
     var drafts by rememberSaveable { mutableStateOf(hashMapOf<String, String>()) }
     var previousDraftKey by rememberSaveable { mutableStateOf(draftKey) }
-    LaunchedEffect(draftKey) {
+    val draft = drafts[draftKey].orEmpty()
+    fun setDraft(value: String) { drafts = HashMap(drafts).apply { if (value.isEmpty()) remove(draftKey) else put(draftKey, value.take(2000)) } }
+    LaunchedEffect(draftKey, ui.suggestionDraft?.id) {
+        val pendingSuggestion = ui.suggestionDraft
+        val suggestionTarget = pendingSuggestion?.conversationId == draftKey
         // A newly-created thread may arrive after the user starts typing.
-        if (previousDraftKey == "new" && draftKey != "new" && conversation?.turns.isNullOrEmpty() && drafts[draftKey].isNullOrBlank()) {
+        // A suggestion creates its own thread; keep any unsent "new" draft on the old key.
+        if (!suggestionTarget && previousDraftKey == "new" && draftKey != "new" && conversation?.turns.isNullOrEmpty() && drafts[draftKey].isNullOrBlank()) {
             drafts["new"]?.takeIf { it.isNotBlank() }?.let { pending ->
                 drafts = HashMap(drafts).apply { put(draftKey, pending); remove("new") }
             }
         }
         previousDraftKey = draftKey
+        if (suggestionTarget && pendingSuggestion != null) {
+            drafts = HashMap(drafts).apply { put(draftKey, pendingSuggestion.text.take(2000)) }
+            onSuggestionDraftApplied(pendingSuggestion.id)
+        }
     }
-    val draft = drafts[draftKey].orEmpty()
-    fun setDraft(value: String) { drafts = HashMap(drafts).apply { if (value.isEmpty()) remove(draftKey) else put(draftKey, value.take(2000)) } }
     var submittedKey by rememberSaveable { mutableStateOf<String?>(null) }
     var submittedText by rememberSaveable { mutableStateOf<String?>(null) }
     var previousTurnId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -146,8 +155,25 @@ fun AiWorkspace(
     val module = state?.modules?.find { it.id == conversation?.moduleId }
     val story = state?.items?.find { it.id == conversation?.itemId }
     val scopeKind = module?.kind ?: story?.kind
-    val noteCount = state?.context.orEmpty().count { it.confirmed && scopeKind != null && scopeKind in it.scopes }
+    val hasConfirmedAboutYou = state?.context.orEmpty().any {
+        PersonalProfile085.isGlobal(it) && it.confirmed && it.text.isNotBlank()
+    }
     val promptChoices = remember(scopeKind, state?.modules, locale.language) { PromptSuggestions.forModule(scopeKind, state, locale.language == "sw") }
+    val now = LocalFeedClock.current
+    val appLanguage = if (locale.language == "sw") "sw" else "en"
+    val currentStories = remember(state, now / 60_000) { state?.let { currentStoryCandidates095(it, now) }.orEmpty() }
+    val suggestionCandidates = story?.let { listOf(it) } ?: currentStories
+    val priorQuestions = turns.filter { it.role == "user" }.map { it.text }
+    val storySuggestionGroups = if (state == null || ui.asking || ui.importWorking || draft.isNotBlank()) emptyList() else suggestionCandidates.map { candidate ->
+        StorySuggestionGroup095(
+            candidate,
+            suggestionChips095(
+                ui, state, candidate, now, appLanguage,
+                if (candidate.id == story?.id) LocalSuggestionFallback095.CONTENT_AND_DETAIL else LocalSuggestionFallback095.CONTENT,
+                priorUserQuestions = priorQuestions,
+            ).take(if (story != null) 2 else 1),
+        )
+    }.filter { it.options.isNotEmpty() }
     val modelName = state?.connection?.let { connection ->
         if (connection.mode == "chatgpt") ui.chatGpt.accounts.find { it.id == connection.accountId }?.models?.find { it.slug == connection.model }?.displayName ?: connection.model
         else connection.model
@@ -191,15 +217,24 @@ fun AiWorkspace(
                 }
             }
             if (story != null) Text(story.title, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (turns.isNotEmpty() && draft.isBlank() && storySuggestionGroups.isNotEmpty()) {
+                WorkspaceStorySuggestions(storySuggestionGroups, "workspace-active-suggestions") { itemId, stableId ->
+                    onPrepareSuggestion(itemId, stableId)
+                }
+            }
             LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth().testTag("workspace-messages"),
                 contentPadding = PaddingValues(top = 14.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                 if (turns.isEmpty() && !ui.asking && state != null && onDismissNotice != null) item(key = "setup") {
                     SetupNotice(state, ui.connected, "mebot", onConnect, onContext, onDismissNotice)
                 }
                 if (turns.isEmpty()) item(key = "start") {
-                    WorkspaceStart(ui.connected, onConnect, onContext, noteCount, scopeKind != null, promptChoices) { prompt ->
-                        if (ui.connected) send(prompt)
-                    }
+                    WorkspaceStart(
+                        ui.connected, onConnect, onContext, scopeKind != null, story != null,
+                        hasConfirmedAboutYou, draft.isNotBlank(),
+                        if (draft.isBlank() && suggestionCandidates.isEmpty() && ui.connected && !ui.asking && !ui.importWorking) promptChoices else emptyList(),
+                        if (draft.isBlank()) storySuggestionGroups else emptyList(),
+                        onPrepareSuggestion,
+                    ) { prompt -> setDraft(prompt) }
                 }
                 items(turns, key = { it.id }, contentType = { it.role }) { turn -> WorkspaceTurn(turn, speech) }
                 if (ui.asking || (ui.answer?.isNotBlank() == true && turns.lastOrNull()?.text != ui.answer)) item(key = "pending") {
@@ -380,21 +415,73 @@ private fun WorkspaceScopeControl(label: String, enabled: Boolean, onClick: () -
 }
 
 @Composable
-private fun WorkspaceStart(connected: Boolean, onConnect: () -> Unit, onContext: () -> Unit, notes: Int, scoped: Boolean, prompts: List<String>, onPrompt: (String) -> Unit) {
+private fun WorkspaceStart(
+    connected: Boolean,
+    onConnect: () -> Unit,
+    onContext: () -> Unit,
+    scoped: Boolean,
+    itemScoped: Boolean,
+    hasConfirmedAboutYou: Boolean,
+    draftPrefilled: Boolean,
+    prompts: List<String>,
+    storySuggestions: List<StorySuggestionGroup095>,
+    onPrepareSuggestion: (String, String) -> Unit,
+    onPrompt: (String) -> Unit,
+) {
     Column(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(stringResource(R.string.workspace_start_title), style = MaterialTheme.typography.headlineMedium)
-        Text(stringResource(if (scoped) R.string.workspace_scoped_notes else R.string.workspace_general_context, notes),
+        Text(stringResource(when {
+            itemScoped && draftPrefilled -> R.string.workspace_item_draft_title
+            itemScoped -> R.string.workspace_item_start_title
+            else -> R.string.workspace_start_title
+        }), style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(when {
+            itemScoped && draftPrefilled -> R.string.workspace_item_draft_help
+            itemScoped -> R.string.workspace_item_scope
+            scoped -> R.string.workspace_topic_scope
+            else -> R.string.workspace_general_context
+        }),
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (itemScoped && hasConfirmedAboutYou) Text(stringResource(R.string.workspace_confirmed_about_you_available),
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (!connected) FilledTonalButton(onClick = onConnect, modifier = Modifier.testTag("workspace-connect")) {
             Icon(Icons.Outlined.Link, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.feed_connect))
-        } else {
+        }
+        if (storySuggestions.isNotEmpty()) {
+            WorkspaceStorySuggestions(storySuggestions, "workspace-start-suggestions", onPrepareSuggestion)
+        } else if (prompts.isNotEmpty()) {
             HorizontalRail(prompts.withIndex().toList(), itemKey = { it.index.toString() }) { (index, prompt) ->
-                SuggestionChip(onClick = { onPrompt(prompt) }, label = { Text(prompt, maxLines=2, modifier=Modifier.widthIn(max=220.dp)) },
+                SuggestionChip(onClick = { onPrompt(prompt) }, label = { Text(prompt, maxLines=2, overflow = TextOverflow.Ellipsis, modifier=Modifier.widthIn(max=220.dp)) },
                     modifier=Modifier.heightIn(min=48.dp).testTag("workspace-starter-$index"))
             }
         }
         TextButton(onClick = onContext, contentPadding = PaddingValues(0.dp)) {
             Text(stringResource(R.string.workspace_manage_context), style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+@Composable
+private fun WorkspaceStorySuggestions(
+    groups: List<StorySuggestionGroup095>,
+    tag: String,
+    onPrepareSuggestion: (String, String) -> Unit,
+) {
+    if (groups.isEmpty()) return
+    Column(Modifier.fillMaxWidth().testTag(tag), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(stringResource(R.string.workspace_story_suggestions), style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        groups.forEachIndexed { index, group ->
+            Column(Modifier.fillMaxWidth().testTag("$tag-story-$index"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(publisherLabel(group.item).ifBlank { stringResource(moduleNameResource(group.item.kind)) },
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(group.item.title, style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+                SuggestionRail095(group.options, "$tag-question-$index") { stableId ->
+                    onPrepareSuggestion(group.item.id, stableId)
+                }
+            }
+            if (index < groups.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
     }
 }

@@ -20,6 +20,13 @@
     <string name="workspace_manage_context">Unavyopenda</string>
     <string name="workspace_attachment_help">Maandishi haya hujumuishwa unapotuma ujumbe katika mazungumzo haya. Yaondoe kwenye sehemu ya kuandika ili yasijumuishwe kwenye ujumbe unaofuata.</string>
     <string name="workspace_start_title">Ungependa kujua nini?</string>
+    <string name="workspace_item_start_title">Chunguza taarifa hii</string>
+    <string name="workspace_item_draft_title">Kuhusu taarifa hii</string>
+    <string name="workspace_item_draft_help">Kagua au hariri swali kabla ya kulituma.</string>
+    <string name="workspace_item_scope">Mazungumzo haya yanahusu taarifa uliyochagua.</string>
+    <string name="workspace_confirmed_about_you_available">Dokezo lako la Kukuhusu lililothibitishwa linaweza kutumika inapofaa.</string>
+    <string name="workspace_topic_scope">Mazungumzo haya yanazingatia mada hii.</string>
+    <string name="workspace_story_suggestions">Maswali kutoka kwenye taarifa zako</string>
     <string name="workspace_scoped_notes">Mazungumzo haya yanaweza kutumia maelezo %1$d ya moduli yaliyoidhinishwa, pamoja na taarifa ulizohifadhi katika Kukuhusu.</string>
     <string name="workspace_general_context">Uliza kuhusu mada zako au jambo lingine.</string>
     <string name="workspace_research">Nipe maendeleo mapya yenye manufaa</string>

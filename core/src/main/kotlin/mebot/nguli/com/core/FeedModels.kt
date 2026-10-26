@@ -125,6 +125,22 @@ data class FeedItem(
     val temporal: FeedTemporal? = null,
     /** Bounded, provider-assisted interest fit for a verified public candidate; never a probability. */
     val aiRelevance: AiRelevanceEstimate? = null,
+    /** Optional, bounded question suggestions; local cache metadata is stripped from provider DTOs. */
+    val suggestedInteractions: List<AiSuggestedInteraction> = emptyList(),
+    val suggestedInteractionsContentDigest: String = "",
+    val suggestedInteractionsScopeProviderDigest: String = "",
+    val suggestedInteractionsGeneratedAtMillis: Long = 0,
+)
+
+/** The only model-generated action exposed by the feed is a user-initiated question about this item. */
+@Serializable
+enum class AiSuggestedInteractionIntent { ASK_ABOUT_ITEM }
+
+@Serializable
+data class AiSuggestedInteraction(
+    val intent: AiSuggestedInteractionIntent = AiSuggestedInteractionIntent.ASK_ABOUT_ITEM,
+    val label: String,
+    val prompt: String,
 )
 
 @Serializable

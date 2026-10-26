@@ -2,8 +2,8 @@
     <string name="edition_heading">Muhtasari wa siku yako</string>
     <string name="edition_for_you">Kwa ajili yako</string>
     <string name="edition_add">Ongeza</string>
-    <string name="edition_ask_today">Ni nini muhimu kwangu?</string>
-    <string name="edition_ask_today_body">Jibu fupi lenye vyanzo.</string>
+    <string name="edition_ask_today">Chunguza yaliyo muhimu</string>
+    <string name="edition_ask_today_body">Anza mazungumzo yenye vyanzo kuhusu unachotaka kuelewa.</string>
     <string name="edition_ask_today_prompt">Tafuta matukio matatu ya sasa yenye manufaa zaidi kwa mambo ninayoyapenda niliyothibitisha na eneo langu. Eleza kwa ufupi kwa nini kila moja ni muhimu na toa viungo vya moja kwa moja vya vyanzo. Usirudie taarifa za zamani isipokuwa kuna mabadiliko muhimu.</string>
     <string name="edition_connect_personal">Binafsisha taarifa zako</string>
     <string name="edition_connect_body">Unganisha AI kupata taarifa zinazokuhusu.</string>

@@ -32,6 +32,7 @@ import mebot.nguli.com.feed.FeedUiState
 import mebot.nguli.com.ui.feed.FeedDetail
 import mebot.nguli.com.ui.feed.FeedHome
 import mebot.nguli.com.ui.feed.LocalPublisherImageLoader
+import mebot.nguli.com.ui.feed.storyCategoryResource
 import java.io.File
 import java.time.Instant
 import org.junit.Assert.*
@@ -56,6 +57,7 @@ class MeBotEditionUiTest {
     private val restoration = StateRestorationTester(compose)
     private val ui = mutableStateOf(FeedUiState(state = fixtureState(), loading = false, connected = true))
     private val prompts = mutableListOf<Pair<String?, String>>()
+    private val preparedSuggestions = mutableListOf<Pair<String, String>>()
     private val selectedItems = mutableListOf<String>()
     private val saved = mutableListOf<String>()
     private val imageRequests = mutableListOf<String>()
@@ -63,22 +65,33 @@ class MeBotEditionUiTest {
     private var connectionsOpened = 0
     private var refreshed = 0
 
-    @Test fun visualEditionHasDirectResourcesAndGroundedAiFollowUps() {
+    @Test fun visualEditionKeepsSourcesSecondaryAndGroundedAiFollowUps() {
         show()
         compose.waitUntil { GOOGLE_IMAGE in imageRequests }
         screenshot("40-mebot-edition-v5")
-        feedNode("source-google").performClick()
+        compose.onNodeWithText(text(R.string.feed_category_ai)).assertExists()
+        compose.onNodeWithText("Google", substring = true).assertExists()
+        feedNode("item-google").performClick()
+        assertEquals(listOf("google"), selectedItems)
+        // Source access remains a single tap away from the overflow menu, not a card CTA.
+        compose.onNodeWithTag("source-google").assertDoesNotExist()
+        feedNode("story-menu-google").performClick()
+        compose.onNodeWithTag("source-google").assertIsDisplayed().performClick()
         val opened = shadowOf(compose.activity).nextStartedActivity
         assertEquals(Intent.ACTION_VIEW, opened.action)
         assertEquals(GOOGLE_SOURCE, opened.dataString)
+        compose.onNodeWithTag("source-google").assertDoesNotExist()
         feedNode("explain-google").performClick()
-        assertEquals("google", prompts.single().first)
-        assertEquals(text(R.string.feed_ask_explain), prompts.single().second)
+        assertEquals("google" to "local:explain", preparedSuggestions.last())
+        val expectedId = AiSuggestedInteractions095.suggestionId(
+            ui.value.state!!.items.single { it.id == "google" },
+            ui.value.state!!.items.single { it.id == "google" }.suggestedInteractions.single(),
+        )
+        feedNode("feed-story-suggestion-chip-0").assertTextContains("Ask about the AI details").performClick()
+        assertEquals("google" to expectedId, preparedSuggestions.last())
+        assertTrue("Suggestion selection only opens an editable draft", prompts.isEmpty())
         feedNode("save-google").performClick()
         assertEquals(listOf("google"), saved)
-        feedNode("edition-ask").performClick()
-        assertNull(prompts.last().first)
-        assertEquals(text(R.string.edition_ask_today_prompt), prompts.last().second)
         feedNode("item-nasa").assertIsDisplayed()
         screenshot("40b-mebot-edition-across-modules-v5")
         feedNode("edition-modules").performClick()
@@ -117,11 +130,14 @@ class MeBotEditionUiTest {
     @Test fun cachedEditionAndResourceLinksRemainUsableWhenAiIsDisconnectedOrRefreshFails() {
         ui.value = ui.value.copy(connected = false, error = "offline")
         show()
-        feedNode("source-google").performClick()
+        feedNode("story-menu-google").performClick()
+        compose.onNodeWithTag("source-google").assertIsDisplayed().performClick()
         assertEquals(GOOGLE_SOURCE, shadowOf(compose.activity).nextStartedActivity.dataString)
         feedNode("explain-google").performClick()
-        assertEquals(1, connectionsOpened)
+        assertEquals("google" to "local:explain", preparedSuggestions.single())
+        assertEquals(0, connectionsOpened)
         assertTrue(prompts.isEmpty())
+        feedNode("feed-story-suggestion-chip-0").assertTextEquals(text(R.string.feed_ask_explain))
         compose.runOnIdle { ui.value = ui.value.copy(refreshing = true, error = null) }
         feedNode("feed-refresh").assertIsNotEnabled()
         compose.onNodeWithTag("item-google").assertExists()
@@ -202,13 +218,25 @@ class MeBotEditionUiTest {
         }))
         show(Settings(language = "sw", theme = "dark"), 1.3f)
         screenshot("41-mebot-edition-small-swahili-v5")
-        feedNode("source-google").assertIsDisplayed().performClick()
+        feedNode("story-menu-google").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("source-google").assertIsDisplayed().performClick()
         assertEquals(GOOGLE_SOURCE, shadowOf(compose.activity).nextStartedActivity.dataString)
         feedNode("explain-google").assertIsDisplayed().performClick()
         feedNode("save-google").assertIsDisplayed().performClick()
         assertEquals(listOf("google"), saved)
-        assertEquals("google", prompts.single().first)
-        feedNode("source-github").assertIsDisplayed().performClick()
+        assertEquals("google" to "local:explain", preparedSuggestions.single())
+        val selectedStory = FeedLogic.edition(ui.value.state!!, System.currentTimeMillis()).first()
+        val storyQuestion = feedNode("feed-story-suggestion-chip-0").assertIsDisplayed()
+        compose.onNodeWithTag("feed-story-suggestion-title").assertTextEquals(selectedStory.title).assertIsDisplayed()
+        val storyQuestionBounds = storyQuestion.getUnclippedBoundsInRoot()
+        assertTrue("large-text suggestion remains a comfortable touch target",
+            storyQuestionBounds.bottom - storyQuestionBounds.top >= 48.dp)
+        storyQuestion.performClick()
+        assertEquals("A compact-feed story suggestion opens an item-grounded editable draft",
+            selectedStory.id to "local:explain", preparedSuggestions.last())
+        feedNode("category-github").assertIsDisplayed()
+        feedNode("story-menu-github").performClick()
+        compose.onNodeWithTag("source-github").assertIsDisplayed().performClick()
         assertEquals("https://example.com/preview-project", shadowOf(compose.activity).nextStartedActivity.dataString)
         screenshot("41b-mebot-edition-small-swahili-cards-v5")
         feedNode("edition-modules").assertIsDisplayed().performClick()
@@ -217,8 +245,21 @@ class MeBotEditionUiTest {
 
     @Test fun detailRetainsPublisherAttributionAndOriginalResource() {
         show(detail = true)
+        compose.onNodeWithText("Google").assertExists()
+        compose.onNodeWithTag("detail-source").assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.feed_open_source)).assertExists()
+        compose.onNodeWithTag("detail-source").performClick()
+        assertEquals(GOOGLE_SOURCE, shadowOf(compose.activity).nextStartedActivity.dataString)
         compose.onNodeWithTag("detail-story-notes").performScrollTo().performClick()
         compose.onNodeWithText(ui.value.state!!.items.first { it.id == "google" }.summary).performScrollTo().assertIsDisplayed()
+        val story = ui.value.state!!.items.single { it.id == "google" }
+        val expectedId = AiSuggestedInteractions095.suggestionId(story, story.suggestedInteractions.single())
+        compose.onNodeWithTag("detail-screen").performScrollToNode(hasTestTag("detail-question-0"))
+        compose.onNodeWithTag("detail-screen").performTouchInput { swipeUp() }
+        compose.onNodeWithTag("detail-question-0").assertIsDisplayed()
+        compose.onNodeWithTag("detail-question-0").assertTextContains("Ask about the AI details").performClick()
+        assertEquals("google" to expectedId, preparedSuggestions.last())
+        assertTrue("Suggestion selection only prepares a draft", selectedItems.isEmpty())
         compose.onNodeWithTag("detail-tab-sources").performScrollTo().performClick()
         compose.onNodeWithTag("detail-citation-0").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("detail-citation-0").performClick()
@@ -228,6 +269,26 @@ class MeBotEditionUiTest {
         assertEquals(listOf("google"), saved)
         compose.onNodeWithTag("detail-ask").performScrollTo().performClick()
         assertEquals(listOf("google"), selectedItems)
+    }
+
+    @Test fun technologyCategoryShowsAiOnlyWhenStoryTextSupportsIt() {
+        val software = FeedItem("software", "technology", "A local software release", "The release adds offline work support.", kind = "technology")
+        val artificialIntelligence = software.copy(title = "A new AI workflow", summary = "The tool uses machine learning.")
+        assertEquals(R.string.feed_category_technology, storyCategoryResource(software))
+        assertEquals(R.string.feed_category_ai, storyCategoryResource(artificialIntelligence))
+    }
+
+    @Test
+    @Config(qualifiers = "sw-rTZ-w320dp-h800dp-xhdpi")
+    fun detailPublisherAndSecondarySourceRemainReachableAtLargeSwahiliText() {
+        show(Settings(language = "sw", theme = "dark"), 1.3f, detail = true)
+        compose.onNodeWithText("Google").assertExists()
+        val source = compose.onNodeWithTag("detail-source").assertIsDisplayed()
+        val bounds = source.getUnclippedBoundsInRoot()
+        assertTrue("secondary source remains a comfortable touch target", bounds.bottom - bounds.top >= 48.dp)
+        screenshot("42-mebot-detail-small-swahili")
+        source.performClick()
+        assertEquals(GOOGLE_SOURCE, shadowOf(compose.activity).nextStartedActivity.dataString)
     }
 
     private fun show(settings: Settings = Settings(), fontScale: Float = 1f, detail: Boolean = false) {
@@ -248,10 +309,12 @@ class MeBotEditionUiTest {
                         bottomBar = { if (!detail) MeBotNavigation("feed") {} },
                     ) { padding ->
                         Box(Modifier.fillMaxSize().padding(padding)) {
-                            if (detail) FeedDetail(ui.value, "google", onSave = { saved += it }, onAsk = { selectedItems += "google" }, onFeed = {})
+                            if (detail) FeedDetail(ui.value, "google", onSave = { saved += it }, onAsk = { selectedItems += "google" }, onFeed = {},
+                                onPrepareSuggestion = { id, stableId -> preparedSuggestions += id to stableId })
                             else FeedHome(ui.value, onItem = { selectedItems += it }, onModules = { modulesOpened++ }, onYou = {},
                                 onConnect = { connectionsOpened++ }, onAsk = {}, onRefresh = { refreshed++ }, onSave = { saved += it },
-                                onHide = {}, onDismissError = {}, nextAlarm = null, onAlarms = {}, onPrompt = { id, question -> prompts += id to question })
+                                onHide = {}, onDismissError = {}, nextAlarm = null, onAlarms = {}, onPrompt = { id, question -> prompts += id to question },
+                                onPrepareSuggestion = { id, stableId -> preparedSuggestions += id to stableId })
                         }
                     }
                 }
@@ -307,8 +370,9 @@ class MeBotEditionUiTest {
                 "NASA shares a NOAA-21 satellite image of an extratropical cyclone over the North Atlantic.", sourceName = "NASA", sourceUrl = NASA_SOURCE,
                 publishedAtMillis = Instant.parse("2026-10-21T04:01:00Z").toEpochMilli(), fetchedAtMillis = now, kind = "science", relevance = 96,
                 media = FeedMedia(NASA_IMAGE, NASA_SOURCE, "NASA Earth Observatory / NOAA-21"))
-            return FeedState(readingPreferences = ReadingPreferences(autoLoadMore = false), onboardingComplete = true, name = "Alex", region = "Preview city", timezone = "UTC",
-                modules = ModuleCatalog.defaults.map { it.copy(enabled = it.kind in setOf("technology", "science", "github", "learning", "scholarships", "weather")) },
+            val modules = ModuleCatalog.defaults.map { it.copy(enabled = it.kind in setOf("technology", "science", "github", "learning", "scholarships", "weather")) }
+            val base = FeedState(readingPreferences = ReadingPreferences(autoLoadMore = false), onboardingComplete = true, name = "Alex", region = "Preview city", timezone = "UTC",
+                modules = modules,
                 items = listOf(google, nasa,
                     preview("github", "github", "Preview: A small toolkit for local AI", "repository", 50, "https://example.com/preview-project"),
                     preview("learning", "learning", "Preview: Build a reliable Android worker", "course", 46),
@@ -317,6 +381,17 @@ class MeBotEditionUiTest {
                     preview("learning-extra", "learning", "Preview: A guide to API observability", "course", 25),
                     preview("learning-extra-two", "learning", "Preview: Practice with a small project", "course", 20)),
                 lastRefreshMillis = now, connection = AiConnection(mode = "chatgpt", model = "preview-model", accountId = "preview-account"))
+            val suggestion = AiSuggestedInteraction(label = "Ask about the AI details", prompt = "What does AI change in this story?")
+            val unverifiedSuggestionItem = google.copy(
+                suggestedInteractions = listOf(suggestion),
+                suggestedInteractionsGeneratedAtMillis = now,
+            )
+            val module = modules.single { it.id == google.moduleId }
+            val suggested = unverifiedSuggestionItem.copy(
+                suggestedInteractionsContentDigest = AiSuggestedInteractions095.contentDigest(unverifiedSuggestionItem),
+                suggestedInteractionsScopeProviderDigest = AiSuggestedInteractions095.scopeProviderDigest(base, module, "en"),
+            )
+            return base.copy(items = base.items.map { if (it.id == google.id) suggested else it })
         }
 
         private fun pagedState(includeWeather: Boolean = false): FeedState {

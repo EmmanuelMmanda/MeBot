@@ -57,6 +57,7 @@ fun FeedDetail(
     onRetryBrief: () -> Unit = {},
     onFollowUp: ((String) -> Unit)? = null,
     onConnect: (() -> Unit)? = null,
+    onPrepareSuggestion: (String, String) -> Unit = { _, _ -> },
 ) {
     val state = ui.state
     val item = state?.items?.find { it.id == id }
@@ -89,13 +90,18 @@ fun FeedDetail(
                     .filter { FeedLogic.safeUrl(it.url) }.distinctBy { FeedLogic.canonicalUrl(it.url) }
             }
             val originalAvailable = FeedLogic.safeUrl(item.sourceUrl)
+            val appLanguage = if (LocalConfiguration.current.locales[0]?.language == "sw") "sw" else "en"
+            val suggestedQuestions = suggestionChips095(
+                ui, state, item, now, appLanguage, LocalSuggestionFallback095.DETAIL,
+                priorUserQuestions = ui.detailTurns.filter { it.role == "user" }.map { it.text },
+            )
             val related = remember(state.items, state.hiddenIds, state.modules, state.timezone, item.id, now / 60_000) {
                 FeedLogic.visible(state, now).filter { it.id != item.id && it.moduleId == item.moduleId }
                     .sortedByDescending { it.publishedAtMillis.takeIf { date -> date > 0 } ?: it.fetchedAtMillis }.take(6)
             }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(item.sourceName.ifBlank { stringResource(moduleNameResource(item.kind)) },
+                    Text(publisherLabel(item).ifBlank { stringResource(moduleNameResource(item.kind)) },
                         Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     if (onHide != null) Box {
                         IconButton(onClick = { menu = true }, modifier = Modifier.testTag("detail-menu")) {
@@ -141,9 +147,9 @@ fun FeedDetail(
                 }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (originalAvailable) Button(onClick = { openResource(item.sourceUrl) },
+                if (originalAvailable) OutlinedButton(onClick = { openResource(item.sourceUrl) },
                     modifier = Modifier.weight(1f).heightIn(min = 50.dp).testTag("detail-source"), shape = RoundedCornerShape(16.dp)) {
-                    Text(stringResource(resourceAction(item.contentType)), modifier = Modifier.weight(1f, fill = false))
+                    Text(stringResource(R.string.feed_open_source), modifier = Modifier.weight(1f, fill = false), maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.width(8.dp)); Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(18.dp))
                 } else Spacer(Modifier.weight(1f))
                 RelevanceControls(item)
@@ -231,12 +237,8 @@ fun FeedDetail(
                     OutlinedButton(onClick = onAsk, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp).testTag("detail-ask"), shape = RoundedCornerShape(16.dp)) {
                         Icon(Icons.Outlined.ChatBubbleOutline, null, Modifier.size(19.dp)); Spacer(Modifier.width(9.dp)); Text(stringResource(R.string.detail_discuss))
                     }
-                    if (onPrompt != null) HorizontalRail(detailQuestions(item.kind).withIndex().toList(),
-                        itemKey = { it.index.toString() }, modifier = Modifier.testTag("detail-question-rail")) { (index, pair) ->
-                        val prompt = stringResource(pair.second)
-                        AssistChip(onClick = { if (ui.connected) onPrompt(prompt) else onAsk() },
-                            label = { Text(stringResource(pair.first)) }, enabled = !ui.asking,
-                            modifier = Modifier.heightIn(min = 48.dp).testTag("detail-question-$index"))
+                    SuggestionRail095(suggestedQuestions, "detail-question") { stableId ->
+                        onPrepareSuggestion(item.id, stableId)
                     }
                 }
                 if (module != null && onModule != null) Surface(onClick = { onModule(module.id) },
@@ -421,15 +423,4 @@ internal fun shareResource(context: Context, title: String, url: String) {
     val intent = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "$title\n$url")
     runCatching { context.startActivity(Intent.createChooser(intent, context.getString(R.string.detail_share)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         .onFailure { Toast.makeText(context, R.string.feed_link_error, Toast.LENGTH_SHORT).show() }
-}
-
-private fun detailQuestions(kind: String): List<Pair<Int, Int>> = when (kind) {
-    "opportunities", "scholarships" -> listOf(R.string.detail_q_eligibility to R.string.detail_prompt_eligibility, R.string.detail_q_prepare to R.string.detail_prompt_prepare)
-    "security" -> listOf(R.string.detail_q_affected to R.string.detail_prompt_affected, R.string.detail_q_fix to R.string.detail_prompt_fix)
-    "learning", "github" -> listOf(R.string.detail_q_start to R.string.detail_prompt_start, R.string.detail_q_compare to R.string.detail_prompt_compare)
-    "entertainment", "music", "media" -> listOf(R.string.detail_q_match to R.string.detail_prompt_match, R.string.detail_q_more to R.string.detail_prompt_more)
-    "events", "travel" -> listOf(R.string.detail_q_plan to R.string.detail_prompt_plan, R.string.detail_q_verify to R.string.detail_prompt_verify)
-    "horoscope" -> listOf(R.string.detail_q_reflect to R.string.detail_prompt_reflect)
-    "weather" -> listOf(R.string.detail_q_plan_day to R.string.detail_prompt_plan_day)
-    else -> listOf(R.string.detail_q_explain to R.string.detail_prompt_explain, R.string.detail_q_implications to R.string.detail_prompt_implications)
 }

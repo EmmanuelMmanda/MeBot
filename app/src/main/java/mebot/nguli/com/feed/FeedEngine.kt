@@ -62,7 +62,8 @@ open class FeedEngine(
             try {
                 vault.write(secret)
                 repository.update { state -> state.copy(connection = connection, aiPauseCode = "",
-                    items = state.items.map { if (it.aiRelevance == null) it else it.copy(aiRelevance = null) }) }
+                    items = state.items.map { item -> AiSuggestedInteractions095.clear(
+                        if (item.aiRelevance == null) item else item.copy(aiRelevance = null)) }) }
             } catch (error: Exception) {
                 if (previous == null) vault.clear() else vault.write(previous)
                 throw error
@@ -92,7 +93,8 @@ open class FeedEngine(
             currentCoroutineContext().ensureActive()
             withContext(NonCancellable) {
                 repository.update { state -> state.copy(connection = connection, aiPauseCode = "",
-                    items = state.items.map { if (it.aiRelevance == null) it else it.copy(aiRelevance = null) }) }
+                    items = state.items.map { item -> AiSuggestedInteractions095.clear(
+                        if (item.aiRelevance == null) item else item.copy(aiRelevance = null)) }) }
             }
         } catch (error: ChatGptAuthException) { throw FeedFailure(error.code) }
     }
@@ -103,7 +105,8 @@ open class FeedEngine(
         val connection = repository.current().connection
         if (connection.mode == "chatgpt" && connection.accountId.isNotBlank()) chatGpt?.signOut(connection.accountId)
         else vault.clear()
-        repository.update { state -> state.copy(aiPauseCode = "", items = state.items.map { if (it.aiRelevance == null) it else it.copy(aiRelevance = null) }) }
+        repository.update { state -> state.copy(aiPauseCode = "", items = state.items.map { item -> AiSuggestedInteractions095.clear(
+            if (item.aiRelevance == null) item else item.copy(aiRelevance = null)) }) }
         Unit
     }
 
@@ -111,7 +114,8 @@ open class FeedEngine(
         if (repository.current().connection.accountId == accountId) credentialGeneration.incrementAndGet()
         val revoked = chatGpt?.signOut(accountId) ?: true
         repository.update { state -> if (state.connection.accountId == accountId)
-            state.copy(aiPauseCode = "", items = state.items.map { if (it.aiRelevance == null) it else it.copy(aiRelevance = null) }) else state }
+            state.copy(aiPauseCode = "", items = state.items.map { item -> AiSuggestedInteractions095.clear(
+                if (item.aiRelevance == null) item else item.copy(aiRelevance = null)) }) else state }
         revoked
     }
 
@@ -124,7 +128,8 @@ open class FeedEngine(
         repository.update { state ->
             if (state.connection.mode == "chatgpt" && state.connection.accountId == accountId)
                 state.copy(connection = state.connection.copy(accountId = ""), aiPauseCode = "",
-                    items = state.items.map { if (it.aiRelevance == null) it else it.copy(aiRelevance = null) })
+                    items = state.items.map { item -> AiSuggestedInteractions095.clear(
+                        if (item.aiRelevance == null) item else item.copy(aiRelevance = null)) })
             else state
         }
         Unit
@@ -135,7 +140,8 @@ open class FeedEngine(
         withContext(NonCancellable) {
             vault.clear()
             chatGpt?.clearAll()
-            repository.update { state -> state.copy(items = state.items.map { if (it.aiRelevance == null) it else it.copy(aiRelevance = null) }) }
+            repository.update { state -> state.copy(items = state.items.map { item -> AiSuggestedInteractions095.clear(
+                if (item.aiRelevance == null) item else item.copy(aiRelevance = null)) }) }
         }
     }
 
@@ -171,6 +177,18 @@ open class FeedEngine(
         if (expected.size != candidates.size || fits.map { it.itemId }.distinct().size != fits.size ||
             fits.any { it.itemId !in expected || it.fitEstimate !in 0..100 } || fits.map { it.itemId }.toSet() != expected) return emptyMap()
         return fits.associate { it.itemId to it.fitEstimate }
+    }
+
+    private fun validatedCandidateInteractions(
+        candidates: List<FeedItem>,
+        interactions: List<FeedCandidateInteractions>,
+    ): Map<String, List<AiSuggestedInteraction>> {
+        if (candidates.isEmpty() || interactions.size != candidates.size) return emptyMap()
+        val expected = candidates.map { it.id }.toSet()
+        if (expected.size != candidates.size || interactions.map { it.itemId }.distinct().size != interactions.size ||
+            interactions.any { it.itemId !in expected || !AiSuggestedInteractions095.areValid(it.interactions) } ||
+            interactions.map { it.itemId }.toSet() != expected) return emptyMap()
+        return interactions.associate { it.itemId to it.interactions }
     }
 
     /** Explicit searches share one request budget, regardless of the number of selected modules. */
@@ -347,12 +365,14 @@ open class FeedEngine(
                     val discoveryModule = StarredStories.query(reserved, module, now)
                     val stateBeforeDiscovery = repository.current()
                     val candidateScope = AiRelevance094.scopeProviderDigest(reserved, module)
+                    val candidateInteractionScope = AiSuggestedInteractions095.scopeProviderDigest(reserved, module, languageCode)
                     val protectedIds = stateBeforeDiscovery.savedIds + stateBeforeDiscovery.hiddenIds + stateBeforeDiscovery.starredStories.map { it.itemId }
                     val candidateItems = if (discoveryModule == module) stateBeforeDiscovery.items.asSequence()
                         .filter { item -> item.id in fetchedIds && item.moduleId == module.id && item.kind == module.kind &&
                             !item.aiGenerated && item.weather == null && item.kind !in setOf("weather", "horoscope") &&
                             item.id !in protectedIds && FeedLogic.safeUrl(item.sourceUrl) &&
-                            !AiRelevance094.isApplicable(stateBeforeDiscovery, item, now, candidateScope) }
+                            (!AiRelevance094.isApplicable(stateBeforeDiscovery, item, now, candidateScope) ||
+                                !AiSuggestedInteractions095.isApplicable(stateBeforeDiscovery, item, now, languageCode)) }
                         .sortedByDescending { it.fetchedAtMillis }.take(8).toList() else emptyList()
                     val result = AiActivityRegistry.run(module.id, module.kind, "discovery") {
                         AiActivityRegistry.report("preparing", contextEntries = FeedLogic.scopedContext(reserved, module).size)
@@ -364,6 +384,7 @@ open class FeedEngine(
                     }
                     val items = result.items
                     val candidateFits = validatedCandidateFits(candidateItems, result.candidateFits)
+                    val candidateInteractions = validatedCandidateInteractions(candidateItems, result.candidateInteractions)
                     repository.update { latest ->
                         if (credentialGeneration.get() != generation || !samePersonalization(latest, initial) || latest.modules != initial.modules || latest.connection != initial.connection) latest
                         else {
@@ -373,11 +394,25 @@ open class FeedEngine(
                             val submitted = candidateItems.associateBy { it.id }
                             val enriched = checked.items.map { current ->
                                 val fit = candidateFits[current.id]
+                                val suggestions = candidateInteractions[current.id]
                                 val sent = submitted[current.id]
-                                if (fit == null || sent == null || current.id in protectedNow || current.aiGenerated || current.weather != null ||
-                                    AiRelevance094.contentDigest(sent) != AiRelevance094.contentDigest(current)) current
-                                else current.copy(aiRelevance = AiRelevanceEstimate(fit, System.currentTimeMillis(),
-                                    AiRelevance094.contentDigest(current), candidateScope))
+                                if (sent == null || current.id in protectedNow || current.aiGenerated || current.weather != null ||
+                                    AiRelevance094.contentDigest(sent) != AiRelevance094.contentDigest(current) ||
+                                    AiSuggestedInteractions095.contentDigest(sent) != AiSuggestedInteractions095.contentDigest(current)) current
+                                else {
+                                    val nowCached = System.currentTimeMillis()
+                                    val ranked = if (fit == null) current else current.copy(aiRelevance = AiRelevanceEstimate(fit, nowCached,
+                                        AiRelevance094.contentDigest(current), candidateScope))
+                                    if (suggestions == null) {
+                                        if (AiSuggestedInteractions095.isApplicable(checked, current, nowCached, languageCode)) ranked
+                                        else AiSuggestedInteractions095.clear(ranked)
+                                    }
+                                    else if (suggestions.isEmpty()) AiSuggestedInteractions095.clear(ranked)
+                                    else ranked.copy(suggestedInteractions = suggestions,
+                                        suggestedInteractionsContentDigest = AiSuggestedInteractions095.contentDigest(current),
+                                        suggestedInteractionsScopeProviderDigest = candidateInteractionScope,
+                                        suggestedInteractionsGeneratedAtMillis = nowCached)
+                                }
                             }
                             checked.copy(items = enriched)
                                 .copy(lastAiRefreshMillis = System.currentTimeMillis(), aiPauseCode = "")
