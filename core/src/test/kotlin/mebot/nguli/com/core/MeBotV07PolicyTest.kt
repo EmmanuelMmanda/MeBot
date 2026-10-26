@@ -16,7 +16,7 @@ class MeBotV07PolicyTest {
             ContextEntry(text="Private work",category="private",scopes=setOf("music")),
             ContextEntry(text="Hidden",confirmed=false,scopes=setOf("music")),
             ContextEntry(text="Career",scopes=setOf("opportunities"))))
-        assertEquals(listOf("Piano"),RecommendationPolicy.generalContext(s).map{it.text})
+        assertTrue(RecommendationPolicy.generalContext(s).isEmpty())
     }
     @Test fun savesAreRelevantOnlyWithinTheirModule() {
         val a=item("a");val b=item("b");val s=FeedState(items=listOf(a,b),savedIds=setOf("a"))

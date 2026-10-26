@@ -1,4 +1,5 @@
 name: Publish MeBot documentation
+run-name: Publish MeBot site from ${{ github.ref_name }}
 
 on:
   push:
@@ -30,8 +31,13 @@ jobs:
     steps:
       - name: Check out the validated documentation
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Validate local documentation links and release metadata
-        run: python3 scripts/check-docs.py
+      - name: Validate current site, links and release metadata
+        run: |
+          test -s docs/index.html
+          test -s docs/download.html
+          test -s docs/releases.html
+          test -f docs/.nojekyll
+          python3 scripts/check-docs.py
       - name: Configure GitHub Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - name: Upload the static site

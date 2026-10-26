@@ -289,11 +289,10 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     fun configureOnboarding(kinds: Set<String>, region: String, interests: String, onDone: (Boolean) -> Unit) = work {
         var succeeded = false
         try {
-            require(kinds.all { it in ModuleCatalog.kinds } && region.length <= 100 && interests.length <= 500)
+            require(kinds.all { it in ModuleCatalog.kinds } && region.length <= 100 && PersonalProfile085.valid(interests))
             repository.update { s ->
                 val choices = kinds.ifEmpty { setOf("news") }
-                val notes = s.context.filterNot { it.id == "onboarding-interests" } + if(interests.isBlank()) emptyList() else listOf(
-                    ContextEntry(id="onboarding-interests", text=interests.trim(), category="interest", scopes=choices, origin="onboarding"))
+                val notes = PersonalProfile085.onboarding(s.context, interests, kinds - "weather")
                 s.copy(interestsConfigured=true, region=region.trim(), timezone=s.timezone.ifBlank { java.time.ZoneId.systemDefault().id },
                     modules=s.modules.map { it.copy(enabled=it.kind in choices) }, context=notes, lastRefreshMillis=0)
             }
@@ -388,9 +387,9 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun saveModule(module: FeedModule, sharedContextIds: Set<String>? = null) = changeModule(module.id) { s ->
         FeedLogic.validateModule(module)
-        if (sharedContextIds != null) require(sharedContextIds.all { id -> s.context.any { it.id == id && it.confirmed } })
+        if (sharedContextIds != null) require(sharedContextIds.all { id -> s.context.any { it.id == id && it.confirmed && !PersonalProfile085.isGlobal(it) } })
         val context = if (sharedContextIds == null) s.context else s.context.map { entry ->
-            if (!entry.confirmed) entry else entry.copy(scopes = if (entry.id in sharedContextIds) entry.scopes + module.kind else entry.scopes - module.kind)
+            if (!entry.confirmed || PersonalProfile085.isGlobal(entry)) entry else entry.copy(scopes = if (entry.id in sharedContextIds) entry.scopes + module.kind else entry.scopes - module.kind)
         }
         s.copy(modules = if (s.modules.any { it.id == module.id }) s.modules.map { if (it.id == module.id) module else it } else s.modules + module,
             context = context, lastRefreshMillis = 0,
@@ -723,7 +722,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun applyContext(imported: PersonalContextImport) {
         cancelRefresh(); cancelAiWork(); lastAutomaticAttemptMillis = 0L
         repository.update { s -> s.copy(name = imported.name, region = imported.region, timezone = imported.timezone,
-            context = imported.entries.map { it.copy(origin = "imported") },
+            context = imported.entries.map { it.copy(origin = "imported", global = false) },
             modules = ModuleCatalog.mergeCatalog(imported.modules.ifEmpty { s.modules }), items = s.items.map { it.copy(why = "", relevance = 0) },
             briefs = emptyList(), lastAiRefreshMillis = 0, lastRefreshMillis = 0) }
         _ui.update { it.copy(notice = "imported", error = null) }

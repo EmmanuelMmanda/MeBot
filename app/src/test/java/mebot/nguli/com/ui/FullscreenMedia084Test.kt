@@ -1,5 +1,8 @@
 package mebot.nguli.com.ui
 
+import android.widget.VideoView
+import org.robolectric.Shadows.shadowOf
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import android.webkit.WebView
 import android.webkit.WebChromeClient
 import android.view.View
@@ -109,6 +112,29 @@ class FullscreenMedia084Test {
             assertSame(original, findPlayer(compose.activity.window.decorView))
             assertEquals(1, hidden)
         }
+    }
+    @Test fun hlsFullscreenRetainsRealSeekPositionAcrossCloseAndRecreation() {
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent { MeBotTheme { OfficialMediaPlayer("https://example.org/live/channel.m3u8") } }
+        fun findVideo(view: View): VideoView? = when (view) {
+            is VideoView -> view
+            is ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { findVideo(view.getChildAt(it)) }
+            else -> null
+        }
+        fun prepared(root: View): VideoView = checkNotNull(findVideo(root)).also { shadowOf(it).onPreparedListener.onPrepared(null) }
+        compose.runOnIdle { prepared(compose.activity.window.decorView).seekTo(32_100) }
+        compose.onNodeWithTag("media-open-fullscreen").performClick()
+        compose.onNodeWithText(compose.activity.getString(R.string.media_stream_quality)).assertExists()
+        compose.runOnIdle {
+            val video = prepared(checkNotNull(ShadowDialog.getLatestDialog().window).decorView)
+            assertEquals(32_100, video.currentPosition)
+            assertEquals("https://example.org/live/channel.m3u8", shadowOf(video).videoURIString)
+            video.seekTo(45_200)
+        }
+        compose.onNodeWithTag("media-fullscreen-close").performClick()
+        compose.runOnIdle { assertEquals(45_200, prepared(compose.activity.window.decorView).currentPosition) }
+        restoration.emulateSavedInstanceStateRestore()
+        compose.runOnIdle { assertEquals(45_200, prepared(compose.activity.window.decorView).currentPosition) }
     }
     @Test fun directVideoShowsHonestSingleSourceQuality() {
         compose.setContent { MeBotTheme {

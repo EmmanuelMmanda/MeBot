@@ -16,11 +16,11 @@
     <string name="workspace_delete_title">Futa mazungumzo haya?</string>
     <string name="workspace_delete_body">Ujumbe na maandishi yaliyoambatishwa yataondolewa kwenye programu hii.</string>
     <string name="workspace_choose_context">Anza na sehemu</string>
-    <string name="workspace_context_help">Mazungumzo mapya yanaweza kutumia maelezo yaliyoidhinishwa kwa sehemu moja. Mazungumzo ya jumla hutumia ujumbe na faili zake tu.</string>
+    <string name="workspace_context_help">Taarifa ulizohifadhi katika Kukuhusu hutumika katika mazungumzo yote. Chagua moduli kuongeza tu maelezo uliyoidhinisha kwa moduli hiyo.</string>
     <string name="workspace_manage_context">Unavyopenda</string>
     <string name="workspace_attachment_help">Maandishi haya hujumuishwa unapotuma ujumbe katika mazungumzo haya. Yaondoe kwenye sehemu ya kuandika ili yasijumuishwe kwenye ujumbe unaofuata.</string>
     <string name="workspace_start_title">Ungependa kujua nini?</string>
-    <string name="workspace_scoped_notes">Mazungumzo haya yanaweza kutumia maelezo %1$d yaliyoidhinishwa.</string>
+    <string name="workspace_scoped_notes">Mazungumzo haya yanaweza kutumia maelezo %1$d ya moduli yaliyoidhinishwa, pamoja na taarifa ulizohifadhi katika Kukuhusu.</string>
     <string name="workspace_general_context">Uliza kuhusu mada zako au jambo lingine.</string>
     <string name="workspace_research">Nipe maendeleo mapya yenye manufaa</string>
     <string name="workspace_compare">Linganisha chaguo mbili zinazofaa</string>

@@ -62,7 +62,7 @@ for im in p.images:
         assert im.get('alt') and im.get('width') and im.get('height')
 for page in [*DOCS.glob('*.html'), *(DOCS / 'guides').glob('*.html')]:
     if page.name != 'preview-083.html':
-        assert 'preview-084.html' in page.read_text() or page.name == 'preview-084.html', f'Missing preview navigation: {page}'
+        assert 'preview-085.html' in page.read_text() or page.name == 'preview-085.html', f'Missing preview navigation: {page}'
 assert readme.count('<img ') >= len(screens)
 assert '/releases/latest' not in readme
 assert 'The current application version is **0.6.1**' not in readme
@@ -74,3 +74,12 @@ assert 'Preview, not a published APK' in next_preview
 assert 'lang="sw"' in next_preview and '817 automated tests' in next_preview
 assert '/releases/download/v0.8.4/' not in next_preview
 assert 'preview-083.html' in next_preview and 'Saved → Following' in next_preview
+
+current_preview = (DOCS / 'preview-085.html').read_text()
+assert 'Preview, not a published APK' in current_preview
+assert '150 words and 1,000 characters' in current_preview
+assert '/releases/download/v0.8.5/' not in current_preview
+assert 'lang="sw"' in current_preview
+assert 'preview-084.html' in current_preview and 'preview-083.html' in current_preview
+for current in (ROOT/'README.md', ROOT/'START-HERE.md', DOCS/'USER-GUIDE.md'):
+    assert 'offline price comparison tool' not in current.read_text()

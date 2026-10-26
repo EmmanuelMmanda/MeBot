@@ -4,6 +4,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RichContent083Test {
+    @Test fun recognizesOnlyExplicitSafeHlsStreamsWithoutClaimingDashSupport() {
+        assertEquals("video", RichContent.type("https://example.org/live/channel.m3u8?session=sample"))
+        assertTrue(RichContent.isHls("https://example.org/live/channel.m3u8"))
+        assertEquals("link", RichContent.type("https://example.org/stream.mpd"))
+        assertFalse(RichContent.isHls("https://127.0.0.1/live.m3u8"))
+        assertEquals("link", RichContent.type("https://example.org/article-about-streaming"))
+    }
+
     @Test fun extractsMarkdownBareUrlsAndDeduplicatesWithReadableTitle() {
         val links = RichContent.links("Watch [the lesson](https://youtu.be/dQw4w9WgXcQ). Also https://youtu.be/dQw4w9WgXcQ and https://example.com/file.pdf.")
         assertEquals(2, links.size)

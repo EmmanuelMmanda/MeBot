@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -117,7 +118,11 @@ internal fun RichSourcePreview(source: FeedCitation, modifier: Modifier = Modifi
     }
 }
 
-internal class MediaPlaybackPosition(var millis: Int = 0)
+internal class MediaPlaybackPosition(var millis: Int = 0) {
+    var readPosition: (() -> Int)? = null
+    fun snapshot(): Int = (readPosition?.invoke() ?: millis).coerceAtLeast(0)
+}
+private val MediaPlaybackSaver = Saver<MediaPlaybackPosition, Int>(save = { it.snapshot() }, restore = { MediaPlaybackPosition(it) })
 
 /** Player resources are allocated only after an explicit tap, never on an AI token. */
 @SuppressLint("SetJavaScriptEnabled")
@@ -126,7 +131,7 @@ internal fun OfficialMediaPlayer(url: String, expanded: Boolean = false, playbac
     if (!FeedLogic.safeUrl(url, true)) return
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
-    val position = playback ?: remember(url) { MediaPlaybackPosition() }
+    val position = playback ?: rememberSaveable(url, saver = MediaPlaybackSaver) { MediaPlaybackPosition() }
     val youtube = remember(url) { RichContent.youtubeId(url) }
     var failed by remember(url) { mutableStateOf(false) }
     var fullscreen by rememberSaveable(url) { mutableStateOf(false) }
@@ -139,16 +144,20 @@ internal fun OfficialMediaPlayer(url: String, expanded: Boolean = false, playbac
         }
     }
     if (fullscreen) {
-        FullscreenMediaPreview(url, stringResource(R.string.media_fullscreen), onClose = { fullscreen = false }, playback = position)
+        FullscreenMediaPreview(url, stringResource(R.string.media_fullscreen), onClose = { position.millis = position.snapshot(); fullscreen = false }, playback = position)
         return
     }
-    if (!expanded && youtube == null) TextButton(onClick = { fullscreen = true }, modifier = Modifier.testTag("media-open-fullscreen")) {
+    if (!expanded && youtube == null) TextButton(onClick = { position.millis = position.snapshot(); fullscreen = true }, modifier = Modifier.testTag("media-open-fullscreen")) {
         Icon(Icons.Outlined.Fullscreen, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.media_fullscreen))
     }
     val playerModifier = if (expanded) Modifier.fillMaxSize() else Modifier.fillMaxWidth().height(if (RichContent.type(url) == "audio") 110.dp else 220.dp).clip(RoundedCornerShape(12.dp))
     if (failed) {
-        Text(stringResource(R.string.resource_preview_failed), style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("resource-preview-error"))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.resource_preview_failed), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("resource-preview-error"))
+            TextButton(onClick = { failed = false }) { Text(stringResource(R.string.feed_retry)) }
+            TextButton(onClick = { openSource(context, url) }) { Text(stringResource(R.string.resource_open)) }
+        }
         return
     }
     if (youtube != null) {
@@ -203,18 +212,21 @@ internal fun OfficialMediaPlayer(url: String, expanded: Boolean = false, playbac
     } else {
         val type = remember(url) { RichContent.type(url) }
         if (type !in setOf("audio", "video")) return
+        var prepared by remember(url) { mutableStateOf(false) }
         val view = remember(url) {
             VideoView(context).apply {
                 setMediaController(MediaController(context).also { it.setAnchorView(this) })
                 setOnErrorListener { _, _, _ -> failed = true; true }
                 setVideoURI(Uri.parse(url))
-                setOnPreparedListener { seekTo(position.millis.coerceAtLeast(1)) }
+                setOnPreparedListener { seekTo(position.millis.coerceAtLeast(1)); prepared = true }
             }
         }
         DisposableEffect(view, owner) {
-            val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) view.pause() }
+            val readPosition = { if (prepared) view.currentPosition.coerceAtLeast(0) else position.millis }
+            position.readPosition = readPosition
+            val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) { position.millis = readPosition(); view.pause() } }
             owner.lifecycle.addObserver(observer)
-            onDispose { position.millis = view.currentPosition.coerceAtLeast(0); owner.lifecycle.removeObserver(observer); view.stopPlayback() }
+            onDispose { position.millis = readPosition(); if (position.readPosition === readPosition) position.readPosition = null; owner.lifecycle.removeObserver(observer); view.stopPlayback() }
         }
         AndroidView(factory = { view }, modifier = playerModifier)
     }

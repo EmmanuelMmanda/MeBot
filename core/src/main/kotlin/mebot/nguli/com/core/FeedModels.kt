@@ -95,6 +95,7 @@ data class ContextEntry(
     val confirmed: Boolean = true,
     val origin: String = "manual",
     val updatedAtMillis: Long = System.currentTimeMillis(),
+    val global: Boolean = false,
 )
 
 @Serializable

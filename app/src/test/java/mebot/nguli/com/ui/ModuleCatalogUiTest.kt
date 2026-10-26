@@ -70,6 +70,18 @@ class ModuleCatalogUiTest {
         }
     }
 
+    @Test fun globalAboutYouIsNotASelectablePerModuleNote() {
+        val profile = mebot.nguli.com.core.ContextEntry(id = mebot.nguli.com.core.PersonalProfile085.PROFILE_ID,
+            text = "I own several small businesses in Tanzania.", category = "profile", scopes = emptySet(), global = true)
+        ui.value = ui.value.copy(state = ui.value.state!!.copy(context = listOf(profile, note)))
+        showEditor()
+        compose.onNodeWithTag("module-personalization").performScrollTo().performClick()
+        compose.onNodeWithTag("module-note-${profile.id}").assertDoesNotExist()
+        compose.onNodeWithTag("module-note-systems").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("module-save").performScrollTo().performClick()
+        assertEquals(emptySet<String>(), saves.single().second)
+    }
+
     @Test fun failedSaveKeepsFocusAndChosenNotesForRetry() {
         showEditor()
         compose.onNodeWithTag("module-topic").performScrollTo().performTextInput("Linux and database advisories")

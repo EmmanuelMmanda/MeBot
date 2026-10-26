@@ -7,4 +7,9 @@
     <string name="media_reset">Weka upya</string>
     <string name="media_loading">Inapakia picha…</string>
     <string name="media_youtube_controls">Tumia vidhibiti vya YouTube kwa skrini nzima na mipangilio inapopatikana.</string>
+    <string name="media_stream_quality">Ubora wa mtiririko huchaguliwa kiotomatiki na chanzo na kichezaji cha Android. Huwezi kuchagua ubora mwenyewe hapa. Uchezaji hutegemea aina ya mtiririko na kifaa chako.</string>
+    <string name="media_zoom_in">Kuza</string>
+    <string name="media_zoom_out">Punguza</string>
+    <string name="media_zoom_fit">Tosheleza skrini</string>
+    <string name="media_zoom_percent">%1$d%%</string>
 </resources>

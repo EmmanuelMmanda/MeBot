@@ -41,6 +41,9 @@ object RichContent {
         }
         id?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{11}")) }
     }.getOrNull()
+    fun isHls(url: String): Boolean = FeedLogic.safeUrl(url, true) &&
+        runCatching { URI(url).path.lowercase().endsWith(".m3u8") }.getOrDefault(false)
+
     fun type(url: String): String {
         if (!FeedLogic.safeUrl(url, true)) return "link"
         if (youtubeId(url) != null) return "youtube"
@@ -49,7 +52,7 @@ object RichContent {
             listOf(".pdf", ".docx", ".xlsx", ".pptx", ".txt", ".csv").any(path::endsWith) -> "document"
             listOf(".jpg", ".jpeg", ".png", ".webp").any(path::endsWith) -> "image"
             listOf(".mp3", ".m4a", ".ogg", ".wav").any(path::endsWith) -> "audio"
-            listOf(".mp4", ".webm").any(path::endsWith) -> "video"
+            listOf(".mp4", ".webm", ".m3u8").any(path::endsWith) -> "video"
             else -> "link"
         }
     }

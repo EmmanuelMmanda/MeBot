@@ -6,6 +6,9 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
 import java.net.Socket
+import java.net.ConnectException
+import java.net.InetSocketAddress
+import java.net.URLEncoder
 import java.net.URI
 import java.security.MessageDigest
 import java.util.Base64
@@ -127,14 +130,54 @@ class ChatGptAuthManagerTest {
     }
 
     @Test fun cancelClosesSocketAndNextAttemptUsesFreshSecretsButSameHost() = runBlocking {
+        cancelAndStartFresh()
+    }
+
+    @Test fun repeatedCancellationRejectsOldCallbacksAndKeepsFreshSecrets() = runBlocking {
+        repeat(25) { cancelAndStartFresh(); fixture.manager.cancelSignIn() }
+    }
+
+    private suspend fun cancelAndStartFresh() {
         val old = AuthFixture.query(fixture.manager.beginSignIn())
         val port = URI(old.getValue("redirect_uri")).port
         fixture.manager.cancelSignIn()
-        assertTrue(runCatching { Socket("127.0.0.1", port).close() }.isFailure)
+        assertEquals("idle", fixture.manager.state.value.phase)
         assertFailure("chatgpt_cancelled") { fixture.manager.awaitSignIn() }
+        assertStaleCallbackRejected(old)
+        assertEventuallyClosed(port)
+        assertEquals(0, fixture.tokenCalls.get())
         val next = AuthFixture.query(fixture.manager.beginSignIn())
+        assertEquals("waiting", fixture.manager.state.value.phase)
         assertEquals(old["ext_agent_host_id"], next["ext_agent_host_id"])
         listOf("state", "nonce", "code_challenge").forEach { assertNotEquals(old[it], next[it]) }
+    }
+
+    private fun assertStaleCallbackRejected(request: Map<String, String>) {
+        val uri = URI(request.getValue("redirect_uri"))
+        val response = runCatching {
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress("127.0.0.1", uri.port), 50)
+                socket.soTimeout = 100
+                val query = mapOf("state" to request.getValue("state"), "code" to "stale-code", "client_id" to fixture.client)
+                    .entries.joinToString("&") { URLEncoder.encode(it.key, "UTF-8") + "=" + URLEncoder.encode(it.value, "UTF-8") }
+                socket.getOutputStream().write("GET ${uri.path}?$query HTTP/1.1\r\nHost: 127.0.0.1:${uri.port}\r\nConnection: close\r\n\r\n".toByteArray())
+                socket.getInputStream().bufferedReader().readText()
+            }
+        }.getOrDefault("")
+        assertFalse("A canceled callback must never be acknowledged", response.startsWith("HTTP/1.1 200"))
+    }
+
+    private suspend fun assertEventuallyClosed(port: Int) {
+        // JDK/OS accept-close handoff can briefly complete a TCP handshake after close().
+        // Require refusal within a fixed budget, not an instantaneous kernel transition.
+        withTimeout(2_000) {
+            while (true) {
+                try { Socket().use { it.connect(InetSocketAddress("127.0.0.1", port), 50) } }
+                catch (_: ConnectException) { return@withTimeout }
+                catch (_: java.net.SocketTimeoutException) { /* Not proof of closure; retry within the same budget. */ }
+                delay(5)
+            }
+        }
     }
 
     @Test fun expiredBrowserAttemptClosesListenerAndExposesRetryState() = runBlocking {
@@ -144,7 +187,9 @@ class ChatGptAuthManagerTest {
         assertFailure("chatgpt_timeout") { manager.awaitSignIn() }
         assertEquals("idle", manager.state.value.phase)
         assertEquals("chatgpt_timeout", manager.state.value.errorCode)
-        assertTrue(runCatching { Socket("127.0.0.1", URI(request.getValue("redirect_uri")).port).close() }.isFailure)
+        assertStaleCallbackRejected(request)
+        assertEventuallyClosed(URI(request.getValue("redirect_uri")).port)
+        assertEquals(0, fixture.tokenCalls.get())
     }
 
     @Test fun callbackCopyIsResolvedForEachAttemptAndEscaped() = runBlocking {

@@ -38,9 +38,13 @@ object RecommendationPolicy {
         val exploration = if (state.editionSequence > 0 && item.relevance >= 40 && viewed == null) (mixed % 7).toInt() else 0
         return Score(item.relevance.coerceIn(0, 100), interest, feedback, freshness, novelty, deadline, exploration)
     }
-    /** Route a general question before sharing notes. Ambiguous questions receive no private context. */
-    fun contextForQuestion(state: FeedState, question: String): List<ContextEntry> {
-        if (question.lowercase().contains("what matters for me") || question.lowercase().contains("leo kuna nini kinachonihusu")) return generalContext(state)
+    /** Global About-you is explicitly shared with every question; other notes still require topic routing. */
+    fun contextForQuestion(state: FeedState, question: String): List<ContextEntry> =
+        FeedLogic.contextForKinds(state, questionKinds(state, question), 24)
+
+    /** Shared native/service routing metadata; this is not permission to expand any note's scopes. */
+    fun questionKinds(state: FeedState, question: String): Set<String> {
+        if (question.lowercase().contains("what matters for me") || question.lowercase().contains("leo kuna nini kinachonihusu")) return emptySet()
         val q = terms(question)
         val aliases = mapOf(
             "music" to setOf("music", "song", "songs", "piano", "muziki", "nyimbo", "wimbo"),
@@ -51,16 +55,11 @@ object RecommendationPolicy {
             "learning" to setOf("learn", "lesson", "course", "learning", "jifunze", "somo", "kujifunza"),
             "security" to setOf("security", "vulnerability", "vulnerabilities", "usalama"),
             "scholarships" to setOf("scholarship", "scholarships", "ufadhili"))
-        val selected = state.modules.filter { it.enabled && (aliases[it.kind].orEmpty().any(q::contains) || it.kind in q) }.map { it.kind }.toSet()
-        if(selected.isEmpty()) return emptyList()
-        return generalContext(state).filter { it.scopes.any(selected::contains) }
+        return state.modules.filter { it.enabled && (aliases[it.kind].orEmpty().any(q::contains) || it.kind in q) }.map { it.kind }.toSet()
     }
 
-    fun generalContext(state: FeedState): List<ContextEntry> {
-        val allowed = state.modules.filter { it.enabled }.map { it.kind }.toSet()
-        // General chat sees preference/interest/goal notes only, never private module-only notes.
-        return state.context.filter { it.confirmed && it.category in setOf("interest", "preference", "goal") && it.scopes.any(allowed::contains) }.take(24)
-    }
+    fun generalContext(state: FeedState): List<ContextEntry> = FeedLogic.contextForKinds(state, emptySet(), 24)
+
 }
 
 object LanguagePolicy {

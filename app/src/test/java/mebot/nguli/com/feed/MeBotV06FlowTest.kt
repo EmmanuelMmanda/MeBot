@@ -241,6 +241,27 @@ class MeBotV06FlowTest {
         assertEquals(context, vm.ui.value.state?.context)
     }
 
+    @Test fun moduleNoteSelectionNeverChangesGlobalProfileOrUnconfirmedConsent() = runBlocking {
+        val profile = ContextEntry(id = PersonalProfile085.PROFILE_ID, text = "I own several small businesses in Tanzania.",
+            category = "profile", scopes = emptySet(), global = true)
+        val note = ContextEntry(id = "news-note", text = "Follow local business news", scopes = setOf("news"))
+        val pending = ContextEntry(id = "pending-note", text = "Not approved", scopes = setOf("news"), confirmed = false)
+        vm.saveContext("Reader", "Tanzania", "UTC", listOf(profile, note, pending))?.join()
+        awaitUi { !it.contextSaving && it.state?.context?.size == 3 }
+        vm.saveModule(news, emptySet())?.join()
+        awaitUi { it.moduleSavingId == null }
+        val persisted = app.feedRepository.current().context
+        assertEquals(profile, persisted.single { it.id == profile.id })
+        assertEquals(pending, persisted.single { it.id == pending.id })
+        assertTrue(persisted.single { it.id == note.id }.scopes.isEmpty())
+        assertEquals(listOf(profile), FeedLogic.scopedContext(app.feedRepository.current(), news))
+
+        // Per-module UI cannot turn global profile sharing into an ordinary selected note.
+        vm.saveModule(news, setOf(profile.id))?.join()
+        awaitUi { it.moduleSavingId == null && it.error != null }
+        assertEquals(persisted, app.feedRepository.current().context)
+    }
+
     @Test fun moduleSaveFailureIsRecoverableAndRemovalPublishesOnlyDurableState() = runBlocking {
         val before = app.feedRepository.current()
         vm.saveModule(news.copy(preferences = mapOf("unsupported" to "value")))?.join()
