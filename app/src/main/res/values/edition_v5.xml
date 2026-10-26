@@ -2,8 +2,8 @@
     <string name="edition_heading">Today</string>
     <string name="edition_for_you">For you</string>
     <string name="edition_add">Add</string>
-    <string name="edition_ask_today">What matters for me?</string>
-    <string name="edition_ask_today_body">A short answer, with sources.</string>
+    <string name="edition_ask_today">Explore what matters</string>
+    <string name="edition_ask_today_body">Start a sourced conversation about what you want to understand.</string>
     <string name="edition_ask_today_prompt">Search for the three most useful current developments for my confirmed interests and region. Explain briefly why each matters and give direct source links. Do not repeat older items unless there is a material update.</string>
     <string name="edition_connect_personal">Make this feed personal</string>
     <string name="edition_connect_body">Connect AI to discover updates for your interests.</string>

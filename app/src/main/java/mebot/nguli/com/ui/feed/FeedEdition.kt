@@ -52,7 +52,8 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
     returnToTopRequest: Int = 0, onExploreModules: () -> Unit = onModules,
     onRefreshModule: ((String?) -> Unit)? = null,
     onContext: (() -> Unit)? = null, onDismissNotice: ((String) -> Unit)? = null,
-    onLoadMore: ((String?) -> Unit)? = null) {
+    onLoadMore: ((String?) -> Unit)? = null,
+    onPrepareSuggestion: (String, String) -> Unit = { _, _ -> }) {
     val state = ui.state ?: return
     var filter by rememberSaveable { mutableStateOf("all") }
     val enabled = remember(state.modules) { state.modules.filter { it.enabled } }
@@ -68,10 +69,9 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
     }
     val weather = items.firstOrNull { it.weather != null }
     val stories = remember(items) { items.filter { it.weather == null } }
-    val context = LocalContext.current
-    val askPrompt = stringResource(R.string.edition_ask_today_prompt)
     val youLabel = stringResource(R.string.feed_you_title)
     val layout = LocalConfiguration.current
+    val appLanguage = if (layout.locales[0]?.language == "sw") "sw" else "en"
     val compact = layout.screenWidthDp < 360 || layout.fontScale > 1.15f
     // Each filter keeps its own page and position through navigation and rotation.
     // Rendering stays bounded to the viewport even after several pages are opened.
@@ -89,6 +89,10 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
         // While reading, retain current card order. New results are appended until the reader opts in.
         val presented=remember(stories,acceptedIds){FeedPaging.ordered(stories, acceptedIds)}
         val visible=remember(presented,visibleCount){presented.take(visibleCount)}
+        val suggestionItem = visible.firstOrNull() ?: weather
+        val contentSuggestions = suggestionItem?.let {
+            suggestionChips095(ui, state, it, now, appLanguage, LocalSuggestionFallback095.CONTENT)
+        }.orEmpty()
         var autoDiscoveryUsed by rememberSaveable { mutableStateOf(false) }
         val nearEnd by remember { derivedStateOf {
             val info = listState.layoutInfo
@@ -233,12 +237,17 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                     else -> {
                         if (visible.isNotEmpty()) item(key = "story-" + visible.first().id, contentType = "lead") {
                             LeadStory(visible.first(), visible.first().id in state.savedIds, onItem, onSave, onHide,
-                                onExplain = { id, prompt -> if (ui.connected) onPrompt(id, prompt) else onConnect() })
+                                onExplain = { id, _ -> onPrepareSuggestion(id, "local:explain") },
+                                onExplainEnabled = !ui.asking && !ui.importWorking)
                         }
                         if (weather != null) item(key = "weather-" + weather.id, contentType = "weather") {
                             WeatherStrip(weather, state.timezone) { onItem(weather.id) }
                         }
-                        item(key = "question", contentType = "question") { EditionQuestion(ui.connected, { onPrompt(null, askPrompt) }, onConnect) }
+                        suggestionItem?.takeIf { contentSuggestions.isNotEmpty() }?.let { story ->
+                            item(key = "feed-story-suggestion-" + story.id, contentType = "question") {
+                                FeedStorySuggestionPanel(story, contentSuggestions) { stableId -> onPrepareSuggestion(story.id, stableId) }
+                            }
+                        }
                         if (visible.size > 1) item(key = "closer-look", contentType = "closer-look") {
                             Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
                                 SectionHeader(stringResource(R.string.edition_across_modules))
@@ -246,7 +255,7 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                                     visible.subList(1, 3).forEach { item -> key(item.id) { StoryRow(item, item.id in state.savedIds, onItem, onSave, onHide) } }
                                 } else if (visible.size >= 3) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     visible.subList(1, 3).forEach { item ->
-                                        key(item.id) { CompactStory(item, Modifier.weight(1f), item.id in state.savedIds, onSave, onItem) { openSource(context, item.sourceUrl) } }
+                                        key(item.id) { CompactStory(item, Modifier.weight(1f), item.id in state.savedIds, onSave, onItem) }
                                     }
                                 } else key(visible[1].id) { StoryRow(visible[1], visible[1].id in state.savedIds, onItem, onSave, onHide) }
                             }
@@ -278,7 +287,7 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                         }
                     }
                 }
-                if (filter != "today" && items.isEmpty() && ui.connected) item(key = "question", contentType = "question") { EditionQuestion(true, { onPrompt(null, askPrompt) }, onConnect) }
+                if (filter != "today" && items.isEmpty() && ui.connected) item(key = "question", contentType = "question") { EditionQuestion(true, onAsk, onConnect) }
                 item(key = "modules", contentType = "modules") { ModuleDiscoveryTile(onExploreModules) }
                 if (nextAlarm != null) item(key = "alarm", contentType = "alarm") {
                     Surface(onClick = onAlarms, color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(18.dp)) {
@@ -314,9 +323,28 @@ private fun EditionQuestion(connected: Boolean, onAsk: () -> Unit, onConnect: ()
 }
 
 @Composable
+private fun FeedStorySuggestionPanel(item: FeedItem, suggestions: List<SuggestionChip095>, onPrepare: (String) -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.fillMaxWidth().testTag("feed-story-suggestion"),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                Icon(Icons.Outlined.ChatBubbleOutline, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.feed_story_question_title), style = MaterialTheme.typography.titleSmall)
+            }
+            Text(item.title, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("feed-story-suggestion-title"))
+            SuggestionRail095(suggestions, "feed-story-suggestion-chip", onPrepare)
+        }
+    }
+}
+
+@Composable
 private fun LeadStory(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, onSave: (String) -> Unit,
-    onHide: (String) -> Unit, onExplain: (String, String) -> Unit) {
-    val context = LocalContext.current
+    onHide: (String) -> Unit, onExplain: (String, String) -> Unit, onExplainEnabled: Boolean) {
     val explain = stringResource(R.string.feed_ask_explain)
     val hasMedia = item.media != null
     val configuration = LocalConfiguration.current
@@ -330,10 +358,10 @@ private fun LeadStory(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
                         PublisherImage(item, Modifier.fillMaxSize(), large = true)
                         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .02f), Color.Transparent, Color.Black.copy(alpha = .68f)))))
                         Row(Modifier.align(Alignment.TopStart).padding(18.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                            Surface(color = Color(0xD923242C), shape = CircleShape) {
+                            Surface(color = Color(0xD923242C), shape = CircleShape, modifier = Modifier.testTag("category-${item.id}")) {
                                 Row(Modifier.padding(horizontal = 11.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Icon(moduleIcon(item.kind), null, Modifier.size(14.dp), tint = Color.White)
-                                    Text(stringResource(moduleNameResource(item.kind)), style = MaterialTheme.typography.labelSmall, color = Color.White)
+                                    Text(stringResource(storyCategoryResource(item)), style = MaterialTheme.typography.labelSmall, color = Color.White)
                                 }
                             }
                             if (item.contentType == "video" || item.contentType == "podcast") Surface(color = Color.White, shape = CircleShape) {
@@ -341,7 +369,7 @@ private fun LeadStory(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
                             }
                         }
                         Column(Modifier.align(Alignment.BottomStart).padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(item.sourceName.ifBlank { stringResource(R.string.feed_entertainment) } + " · " + itemTimestamp(item),
+                            Text(publisherLabel(item).ifBlank { stringResource(moduleNameResource(item.kind)) } + " · " + itemTimestamp(item),
                                 style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = .88f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
@@ -357,20 +385,17 @@ private fun LeadStory(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
             }
             Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 7.dp, bottom = 8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                if (item.sourceUrl.isNotBlank()) TextButton(onClick = { openSource(context, item.sourceUrl) }, modifier = Modifier.weight(1f).testTag("source-" + item.id)) {
-                    Text(stringResource(resourceAction(item.contentType)), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)); Spacer(Modifier.width(5.dp))
-                    Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(15.dp))
-                }
-                else Spacer(Modifier.weight(1f))
+                // The story itself is the primary tap target; source access is in detail and overflow.
+                Spacer(Modifier.weight(1f))
                 if (!compact) {
-                IconButton(onClick = { onExplain(item.id, explain) }, modifier = Modifier.testTag("explain-" + item.id)) {
+                IconButton(onClick = { onExplain(item.id, explain) }, enabled = onExplainEnabled, modifier = Modifier.testTag("explain-" + item.id)) {
                     Icon(Icons.Outlined.ChatBubbleOutline, stringResource(R.string.edition_explain), Modifier.size(21.dp))
                 }
                 StoryActions(item, saved, onSave, onHide)
                 }
             }
             if (compact) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { onExplain(item.id, explain) }, modifier = Modifier.testTag("explain-" + item.id)) {
+                IconButton(onClick = { onExplain(item.id, explain) }, enabled = onExplainEnabled, modifier = Modifier.testTag("explain-" + item.id)) {
                     Icon(Icons.Outlined.ChatBubbleOutline, stringResource(R.string.edition_explain), Modifier.size(21.dp))
                 }
                 StoryActions(item, saved, onSave, onHide)
@@ -381,7 +406,7 @@ private fun LeadStory(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
 }
 
 @Composable
-private fun CompactStory(item: FeedItem, modifier: Modifier, saved: Boolean, onSave: (String) -> Unit, onItem: (String) -> Unit, onOpen: () -> Unit) {
+private fun CompactStory(item: FeedItem, modifier: Modifier, saved: Boolean, onSave: (String) -> Unit, onItem: (String) -> Unit) {
     Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface, modifier = modifier) {
         Column {
             Surface(onClick = { onItem(item.id) }, color = Color.Transparent, modifier = Modifier.testTag("item-" + item.id)) {
@@ -393,32 +418,26 @@ private fun CompactStory(item: FeedItem, modifier: Modifier, saved: Boolean, onS
                         }
                     }
                     Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 13.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(stringResource(moduleNameResource(item.kind)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        StoryCategoryTag(item, Modifier.testTag("category-${item.id}"))
                         Text(item.title, style = MaterialTheme.typography.titleMedium, maxLines = 4, overflow = TextOverflow.Ellipsis)
-                        Text(item.sourceName.ifBlank { itemTimestamp(item) }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Text(publisherLabel(item).ifBlank { stringResource(moduleNameResource(item.kind)) }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { StoryActions(item, saved, onSave, null) }
-            if (item.sourceUrl.isNotBlank()) TextButton(onClick = onOpen, modifier = Modifier.padding(start = 6.dp, end = 6.dp, bottom = 5.dp).testTag("source-" + item.id)) {
-                Text(stringResource(resourceAction(item.contentType)), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
-                Spacer(Modifier.width(4.dp)); Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(14.dp))
-            }
         }
     }
 }
 
 @Composable
 internal fun StoryRow(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, onSave: (String) -> Unit, onHide: ((String) -> Unit)?, timestampOverride: String? = null) {
-    val context = LocalContext.current
     Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface) {
         Column {
             Surface(onClick = { onItem(item.id) }, color = Color.Transparent, modifier = Modifier.fillMaxWidth().testTag("item-" + item.id)) {
                 Row(Modifier.padding(start = 18.dp, end = 18.dp, top = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        Text(item.sourceName.ifBlank { stringResource(moduleNameResource(item.kind)) }, style = MaterialTheme.typography.labelMedium,
+                        Text(publisherLabel(item).ifBlank { stringResource(moduleNameResource(item.kind)) }, style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(item.title, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
                         if (timestampOverride != null && timestampOverride.isNotBlank()) Text(timestampOverride, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -430,11 +449,7 @@ internal fun StoryRow(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
                 }
             }
             Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 8.dp, top = 2.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (item.sourceUrl.isNotBlank()) TextButton(onClick = { openSource(context, item.sourceUrl) }, modifier = Modifier.testTag("source-" + item.id)) {
-                    Text(stringResource(resourceAction(item.contentType)), style = MaterialTheme.typography.labelMedium)
-                    Spacer(Modifier.width(4.dp)); Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(14.dp))
-                }
-                else Text(stringResource(R.string.feed_entertainment), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 8.dp))
+                StoryCategoryTag(item, Modifier.testTag("category-${item.id}"))
                 Spacer(Modifier.weight(1f))
                 StoryActions(item, saved, onSave, onHide)
             }
@@ -464,7 +479,7 @@ private fun StoryActions(item: FeedItem, saved: Boolean, onSave: (String) -> Uni
                 DropdownMenuItem(text = { Text(stringResource(R.string.detail_share)) }, onClick = { menu = false; shareResource(context, item.title, item.sourceUrl) },
                     leadingIcon = { Icon(Icons.Outlined.Share, null) })
                 DropdownMenuItem(text = { Text(stringResource(R.string.feed_open_source)) }, onClick = { menu = false; openSource(context, item.sourceUrl) },
-                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) })
+                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) }, modifier = Modifier.testTag("source-${item.id}"))
             }
             ctx.onStar?.let { toggle -> DropdownMenuItem(text = { Text(stringResource(if (star) R.string.star_following else R.string.star_follow)) },
                 onClick = { menu = false; toggle(item.id) }, leadingIcon = { Icon(Icons.Outlined.StarOutline, null) }) }

@@ -103,9 +103,13 @@ class ChatGptConnectedJourneyTest {
         waitForText(text(R.string.feed_you_title))
         compose.onNodeWithTag("nav-feed").performClick()
         waitForTag("feed-screen")
+        val requestsBeforeEmptyFeedPrompt = state().requestsToday
         compose.onNodeWithTag("edition-ask").performScrollTo().performClick()
         waitForTag("workspace-question")
         compose.onNodeWithTag("workspace-model").assertTextContains("Fixture quick model")
+        assertEquals("Opening the empty-feed prompt must not infer", requestsBeforeEmptyFeedPrompt, state().requestsToday)
+        compose.onNodeWithTag("workspace-question").performTextInput(text(R.string.edition_ask_today_prompt))
+        compose.onNodeWithTag("workspace-send").performClick()
         compose.waitUntil(15_000) { state().conversations.any { it.turns.lastOrNull()?.role == "assistant" } }
         val conversation = state().conversations.single()
         assertEquals(text(R.string.edition_ask_today_prompt), conversation.turns.first().text)

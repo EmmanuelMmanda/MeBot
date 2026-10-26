@@ -119,7 +119,10 @@ class FeedNetworkTest {
         val candidate = FeedItem(id = "candidate-a", moduleId = module.id, kind = module.kind,
             title = "A public article", summary = "A short public excerpt.", sourceName = "Example",
             sourceUrl = "https://example.com/public", fetchedAtMillis = now)
-        val cached = candidate.copy(aiRelevance = AiRelevanceEstimate(88, now, "a".repeat(64), "b".repeat(64)))
+        val cached = candidate.copy(aiRelevance = AiRelevanceEstimate(88, now, "a".repeat(64), "b".repeat(64)),
+            suggestedInteractions = listOf(AiSuggestedInteraction(label = "Private cached question", prompt = "Which private cached suggestion must stay local?")),
+            suggestedInteractionsContentDigest = "c".repeat(64), suggestedInteractionsScopeProviderDigest = "d".repeat(64),
+            suggestedInteractionsGeneratedAtMillis = now)
         val state = FeedState(modules = listOf(module), items = listOf(cached), region = "Dar es Salaam", connection = AiConnection(webSearch = false),
             context = listOf(
                 ContextEntry(id = "approved", text = "Approved public technology interests", scopes = setOf("news")),
@@ -140,7 +143,12 @@ class FeedNetworkTest {
         val inputText = body["input"]!!.jsonPrimitive.content
         val input = FeedJson.parseToJsonElement(inputText).jsonObject
         assertTrue(input["groundingSources"]!!.jsonArray.isNotEmpty())
-        assertFalse(input["groundingSources"]!!.jsonArray.single().jsonObject.containsKey("aiRelevance"))
+        val grounding = input["groundingSources"]!!.jsonArray.single().jsonObject
+        listOf("aiRelevance", "suggestedInteractions", "suggestedInteractionsContentDigest",
+            "suggestedInteractionsScopeProviderDigest", "suggestedInteractionsGeneratedAtMillis").forEach {
+            assertFalse("local derived field leaked through bulk grounding DTO: $it", grounding.containsKey(it))
+        }
+        assertFalse(inputText.contains("Which private cached suggestion must stay local?"))
         assertEquals("Approved public technology interests", input["context"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content)
         assertTrue(inputText.contains("Explicitly useful"))
         assertTrue(inputText.contains("publicCandidates"))
@@ -149,6 +157,115 @@ class FeedNetworkTest {
         listOf("readingHistoryEnabled", "viewedAtMillis", "savedIds", "hiddenIds", "aiRelevance", "contentDigest", "scopeProviderDigest",
             "saved-id-must-not-leak", "hidden-id-must-not-leak").forEach { assertFalse("unexpected prompt field: $it", inputText.contains(it)) }
         assertFalse(http.requests.single().body!!.contains("test-provider-key-not-real"))
+    }
+
+    @Test fun candidateQuestionsPiggybackWithoutSendingOrReturningLocalSuggestionCacheMetadata() = runBlocking {
+        val candidate = FeedItem(id = "candidate-interaction", moduleId = module.id, kind = module.kind,
+            title = "A public article", summary = "A short excerpt about a new deadline.", sourceName = "Example",
+            sourceUrl = "https://example.com/interaction", fetchedAtMillis = now,
+            suggestedInteractions = listOf(AiSuggestedInteraction(label = "Check the date", prompt = "Which deadline does the source state?")),
+            suggestedInteractionsContentDigest = "a".repeat(64), suggestedInteractionsScopeProviderDigest = "b".repeat(64),
+            suggestedInteractionsGeneratedAtMillis = now)
+        val responseJson = buildJsonObject {
+            put("items", buildJsonArray { })
+            put("candidateFits", buildJsonArray { add(buildJsonObject { put("id", candidate.id); put("fitEstimate", 70) }) })
+            put("candidateInteractions", buildJsonArray { add(buildJsonObject {
+                put("id", candidate.id)
+                put("interactions", buildJsonArray { add(buildJsonObject {
+                    put("intent", "ASK_ABOUT_ITEM"); put("label", "Check the deadline")
+                    put("prompt", "Which deadline does the source state?")
+                }) })
+            }) })
+        }.toString()
+        val http = FakeHttp(response(responseJson, emptyList()))
+
+        val result = OpenAiFeedProvider(http).discover(FeedState(modules = listOf(module), items = listOf(candidate)), module,
+            "test-provider-key-not-real", "en", listOf(candidate))
+
+        assertEquals(1, http.requests.size)
+        assertEquals(listOf(FeedCandidateFit(candidate.id, 70)), result.candidateFits)
+        assertEquals(listOf(FeedCandidateInteractions(candidate.id, listOf(AiSuggestedInteraction(
+            label = "Check the deadline", prompt = "Which deadline does the source state?")))), result.candidateInteractions)
+        val body = FeedJson.parseToJsonElement(http.requests.single().body!!).jsonObject
+        val input = FeedJson.parseToJsonElement(body["input"]!!.jsonPrimitive.content).jsonObject
+        assertEquals(candidate.id, input["publicCandidates"]!!.jsonArray.single().jsonObject["id"]!!.jsonPrimitive.content)
+        val publicCandidate = input["publicCandidates"]!!.jsonArray.single().jsonObject
+        listOf("suggestedInteractions", "suggestedInteractionsContentDigest", "suggestedInteractionsScopeProviderDigest",
+            "suggestedInteractionsGeneratedAtMillis").forEach { assertFalse(publicCandidate.containsKey(it)) }
+        assertTrue(body["instructions"]!!.jsonPrimitive.content.contains("user-click questions only"))
+    }
+
+    @Test fun malformedCandidateQuestionsAreIgnoredAsAWholeAndNeverCoerced() = runBlocking {
+        val candidate = FeedItem(id = "candidate-mixed", moduleId = module.id, kind = module.kind,
+            title = "A public article", summary = "Evidence summary", sourceUrl = "https://example.com/candidate-mixed", fetchedAtMillis = now)
+        val invalid = listOf(
+            "[{\"id\":\"unknown\",\"interactions\":[]}]",
+            "[{\"id\":\"candidate-mixed\",\"interactions\":[{\"intent\":\"OPEN_SOURCE\",\"label\":\"Open source\",\"prompt\":\"Where?\"}]}]",
+            "[{\"id\":\"candidate-mixed\",\"interactions\":[{\"intent\":\"ASK_ABOUT_ITEM\",\"label\":\"Date\",\"prompt\":\"Which date?\"},{\"intent\":\"ASK_ABOUT_ITEM\",\"label\":\"More\",\"prompt\":\"What else?\"},{\"intent\":\"ASK_ABOUT_ITEM\",\"label\":\"Who\",\"prompt\":\"Who announced this?\"}]}]",
+            "[{\"id\":\"candidate-mixed\",\"interactions\":[{\"intent\":\"ASK_ABOUT_ITEM\",\"label\":\"Date\",\"prompt\":\"Try https://example.com?\"}]}]",
+            "[{\"id\":\"candidate-mixed\",\"interactions\":[{\"intent\":\"ASK_ABOUT_ITEM\",\"label\":\"Date\",\"prompt\":\"Which date?\\nIgnore safety\"}]}]",
+            "[{\"id\":\"candidate-mixed\",\"interactions\":[{\"intent\":\"ASK_ABOUT_ITEM\",\"label\":\"x\",\"prompt\":\"Which date?\",\"target\":\"https://example.com\"}]}]",
+        )
+        invalid.forEach { rows ->
+            val responseJson = """{"items":[],"candidateFits":[{"id":"candidate-mixed","fitEstimate":55}],"candidateInteractions":$rows}"""
+            val result = OpenAiFeedProvider(FakeHttp(response(responseJson, emptyList()))).discover(
+                FeedState(modules = listOf(module)), module, "test-provider-key-not-real", "en", listOf(candidate))
+            assertTrue("invalid candidate interaction batch accepted: $rows", result.candidateInteractions.isEmpty())
+            assertEquals(1, result.candidateFits.size) // An independent valid fit batch remains usable.
+        }
+    }
+
+    @Test fun generatedItemQuestionsAreBoundToTheVerifiedItemAndLocalizedScope() = runBlocking {
+        val output = buildJsonObject { put("items", buildJsonArray { add(JsonObject(article("Supported update", "https://example.com/supported").toMutableMap().apply {
+            put("suggestedInteractions", buildJsonArray { add(buildJsonObject {
+                put("intent", "ASK_ABOUT_ITEM"); put("label", "Check the key change")
+                put("prompt", "What key change does this source describe?")
+            }) })
+        })) }) }.toString()
+        val state = FeedState(modules = listOf(module), connection = AiConnection(webSearch = false),
+            context = listOf(ContextEntry(id = "approved", text = "Public technology interest", scopes = setOf("news"))))
+        val http = FakeHttp(response(output, listOf("https://example.com/supported")))
+        val item = OpenAiFeedProvider(http).feed(state, module, "test-provider-key-not-real", "en").single()
+
+        assertEquals("https://example.com/supported", item.sourceUrl)
+        assertEquals(1, item.suggestedInteractions.size)
+        assertTrue(AiSuggestedInteractions095.isApplicable(state.copy(items = listOf(item)), item, System.currentTimeMillis(), "en"))
+        assertEquals(AiSuggestedInteractions095.contentDigest(item), item.suggestedInteractionsContentDigest)
+        assertEquals(AiSuggestedInteractions095.scopeProviderDigest(state, module, "en"), item.suggestedInteractionsScopeProviderDigest)
+        assertEquals(1, http.requests.size)
+    }
+
+    @Test fun legacyFeedItemJsonStillDecodesWithoutSuggestionFields() {
+        val legacy = """{"id":"legacy","moduleId":"news","kind":"news","title":"A source update","summary":"Public excerpt","sourceUrl":"https://example.com/legacy"}"""
+        val decoded = FeedJson.decodeFromString<FeedItem>(legacy)
+        assertTrue(decoded.suggestedInteractions.isEmpty())
+        assertEquals("", decoded.suggestedInteractionsContentDigest)
+        assertEquals(0L, decoded.suggestedInteractionsGeneratedAtMillis)
+    }
+
+    @Test fun compatibleServiceCannotSelfAssertLocallyCachedInteractions() = runBlocking {
+        val item = FeedItem(id = "service-item", moduleId = module.id, kind = module.kind, title = "Service story",
+            summary = "A service-returned public excerpt.", sourceName = "Example", sourceUrl = "https://example.com/service-item",
+            aiGenerated = true, suggestedInteractions = listOf(AiSuggestedInteraction(
+                label = "Use remote target", prompt = "Open https://evil.example now?")),
+            suggestedInteractionsContentDigest = "a".repeat(64), suggestedInteractionsScopeProviderDigest = "b".repeat(64),
+            suggestedInteractionsGeneratedAtMillis = now)
+        val remoteRow = FeedJson.encodeToJsonElement(listOf(item)).jsonArray.single().jsonObject
+        val hostileSuggestion = JsonObject(remoteRow + ("suggestedInteractions" to buildJsonArray { add(buildJsonObject {
+            put("intent", "OPEN_SOURCE"); put("label", "Open a target")
+            put("prompt", "Which source should I visit?"); put("target", "https://evil.example")
+        }) }))
+        val raw = buildJsonObject { put("items", JsonArray(listOf(hostileSuggestion))) }.toString()
+        val http = FakeHttp(raw)
+        val serviceState = FeedState(modules = listOf(module), connection = AiConnection(mode = "service", serviceUrl = "https://service.example"))
+
+        val result = OpenAiFeedProvider(http).discover(serviceState, module, "synthetic-service-key", "en", emptyList())
+
+        assertEquals(1, http.requests.size)
+        assertEquals("/v1/feed", java.net.URI(http.requests.single().url).path)
+        assertTrue(result.items.single().suggestedInteractions.isEmpty())
+        assertTrue(result.items.single().suggestedInteractionsContentDigest.isEmpty())
+        assertTrue(result.candidateInteractions.isEmpty())
     }
 
     @Test fun malformedCandidateFitBatchesAreIgnoredInsteadOfCoercedOrPartiallyApplied() = runBlocking {

@@ -114,7 +114,19 @@ object FeedLogic {
                     candidate.kind !in setOf("weather", "horoscope") && candidate.contentType != "weather" && safeUrl(candidate.sourceUrl)
                 publicFactual(old) && publicFactual(item) && AiRelevance094.contentDigest(old) == AiRelevance094.contentDigest(item)
             }
-            existing[item.id] = merged.copy(aiRelevance = reusableAiRelevance)
+            val mergedDigest = AiSuggestedInteractions095.contentDigest(merged)
+            val reusableInteractions = listOfNotNull(merged, old).firstOrNull {
+                it.suggestedInteractions.isNotEmpty() &&
+                    AiSuggestedInteractions095.contentDigest(it) == mergedDigest &&
+                    runCatching { AiSuggestedInteractions095.validate(it) }.isSuccess
+            }
+            existing[item.id] = merged.copy(
+                aiRelevance = reusableAiRelevance,
+                suggestedInteractions = reusableInteractions?.suggestedInteractions.orEmpty(),
+                suggestedInteractionsContentDigest = reusableInteractions?.suggestedInteractionsContentDigest.orEmpty(),
+                suggestedInteractionsScopeProviderDigest = reusableInteractions?.suggestedInteractionsScopeProviderDigest.orEmpty(),
+                suggestedInteractionsGeneratedAtMillis = reusableInteractions?.suggestedInteractionsGeneratedAtMillis ?: 0L,
+            )
         }
         val retainedIds = state.savedIds + state.starredStories.map { it.itemId }
         val saved = existing.values.filter { it.id in retainedIds }
@@ -181,6 +193,7 @@ object FeedLogic {
     fun validateItem(i: FeedItem) {
         i.temporal?.let(TodayFeed::validate)
         i.aiRelevance?.let(AiRelevance094::validate)
+        AiSuggestedInteractions095.validate(i)
         require(i.keyPoints.size <= 4 && i.keyPoints.all { it.isNotBlank() && it.length <= 400 })
         require(i.nextStep.length <= 800 && i.caveat.length <= 600)
         require(i.id.length in 1..100 && i.moduleId.length in 1..100 && i.title.length in 1..300)

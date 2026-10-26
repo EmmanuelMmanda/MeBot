@@ -280,6 +280,184 @@ class MeBotFeedJourneyTest {
         assertEquals(requestsBeforeQuestion + 2, state().requestsToday)
     }
 
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-xhdpi")
+    fun englishFullShellSuggestionsAreStoryGroundedAndOnlyPrefill() =
+        runSuggestionJourney("en", "095-full-shell-en")
+
+    @Test
+    @Config(qualifiers = "sw-rTZ-w411dp-h891dp-xhdpi")
+    fun swahiliFullShellSuggestionsAreStoryGroundedAndOnlyPrefill() =
+        runSuggestionJourney("sw", "095-full-shell-sw")
+
+    /**
+     * Full-shell journey uses only the deterministic test provider and a clearly
+     * synthetic cached suggestion. Selecting it must create an editable draft,
+     * never a hidden inference; publisher/source access stays available.
+     */
+    private fun runSuggestionJourney(language: String, capturePrefix: String) {
+        app.sourceItems = stories()
+        if (language == "sw") {
+            runBlocking {
+                app.repository.update { it.copy(settings = it.settings.copy(language = "sw")) }
+            }
+        }
+        start()
+        waitForState { it.items.size == 3 && it.lastRefreshMillis > 0 }
+        connectTestProvider()
+        cacheGroundedSuggestion("toolkit", language)
+
+        tab("feed")
+        waitForTag("feed-screen")
+        val feedViewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[mebot.nguli.com.feed.FeedViewModel::class.java]
+        compose.waitUntil(15_000) { feedViewModel.ui.value.state?.items?.find { it.id == "toolkit" }?.suggestedInteractions?.isNotEmpty() == true }
+        screenshot("$capturePrefix-feed-top")
+        compose.onNodeWithTag("feed-screen").performScrollToNode(hasTestTag("feed-story-suggestion-chip-0"))
+        compose.onNodeWithTag("feed-screen").performTouchInput { swipeUp() }
+        compose.waitForIdle()
+        compose.onNodeWithTag("feed-story-suggestion-chip-0").assertIsDisplayed()
+        compose.onNodeWithText(if (language == "sw") "Uliza kinachobadilika" else "Ask what changes").assertExists()
+        compose.onNodeWithText("Example Research", substring = true).assertExists()
+        screenshot("$capturePrefix-feed")
+        val requestsBeforeFeedSuggestion = state().requestsToday
+        compose.onNodeWithTag("feed-story-suggestion-chip-0").performClick()
+        waitForTag("workspace-question")
+        val expectedPrompt = if (language == "sw")
+            "Ni mabadiliko gani yanayoletwa na taarifa hii kwa watu wanaotumia zana?"
+        else "What changes does this update bring for people using the toolkit?"
+        awaitPreparedDraft(feedViewModel, "toolkit", expectedPrompt, "$capturePrefix-feed-draft-not-ready")
+        compose.onNodeWithTag("workspace-question").assertTextContains(expectedPrompt)
+        assertEquals("Choosing a feed suggestion must not send an AI request", requestsBeforeFeedSuggestion, state().requestsToday)
+        screenshot("$capturePrefix-mebot-prefilled")
+
+        tab("feed")
+        compose.onNodeWithTag("item-toolkit").performScrollTo().performClick()
+        waitForTag("detail-save")
+        waitForState { it.briefs.any { brief -> brief.itemId == "toolkit" } }
+        assertTrue(compose.onAllNodesWithText("Example Research", substring = true).fetchSemanticsNodes().isNotEmpty())
+        compose.onNodeWithTag("detail-source").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        compose.onNodeWithTag("detail-screen").performScrollToNode(hasTestTag("detail-question-0"))
+        compose.onNodeWithTag("detail-screen").performTouchInput { swipeUp() }
+        compose.waitForIdle()
+        compose.onNodeWithTag("detail-question-0").assertIsDisplayed()
+        screenshot("$capturePrefix-detail")
+        val requestsBeforeDetailSuggestion = state().requestsToday
+        compose.onNodeWithTag("detail-question-0").performClick()
+        waitForTag("workspace-question")
+        awaitPreparedDraft(feedViewModel, "toolkit", expectedPrompt, "$capturePrefix-detail-draft-not-ready")
+        compose.onNodeWithTag("workspace-question").assertTextContains(expectedPrompt)
+        assertEquals("Choosing a detail suggestion must not send an AI request", requestsBeforeDetailSuggestion, state().requestsToday)
+
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        waitForTag("detail-screen")
+        compose.onNodeWithTag("detail-source").assertIsDisplayed()
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        waitForTag("feed-screen")
+
+        // A fresh general MeBot thread has its own current-story rail rather than
+        // stale module-wide starters. Selecting there also only prepares text.
+        tab("ai")
+        waitForTag("workspace-new")
+        compose.onNodeWithTag("workspace-new").performClick()
+        waitForTag("workspace-start-suggestions")
+        val rootSuggestionStory = FeedLogic.edition(state(), System.currentTimeMillis())
+            .first { it.weather == null && it.kind !in setOf("weather", "horoscope") }
+        val expectedRootPrompt = if (language == "sw")
+            "Nieleze “${rootSuggestionStory.title}” kwa lugha rahisi, kwa kutumia chanzo chake."
+        else "Explain “${rootSuggestionStory.title}” in simple terms, using its source."
+        compose.onNodeWithTag("workspace-messages").performScrollToNode(hasTestTag("workspace-start-suggestions"))
+        compose.onNodeWithTag("workspace-start-suggestions-story-0").assertIsDisplayed()
+        // Bind the expectation to the actual visible first story, before selecting
+        // its chip, so an ordering/routing bug cannot pass by inspecting the result.
+        compose.onNodeWithText(rootSuggestionStory.title).assertIsDisplayed()
+        compose.onNodeWithTag("workspace-start-suggestions-question-0-0").assertIsDisplayed()
+        screenshot("$capturePrefix-mebot-story-rail")
+        val requestsBeforeWorkspaceSuggestion = state().requestsToday
+        compose.onNodeWithTag("workspace-start-suggestions-question-0-0").performClick()
+        waitForTag("workspace-question")
+        awaitPreparedDraft(feedViewModel, rootSuggestionStory.id, expectedRootPrompt, "$capturePrefix-root-draft-not-ready")
+        compose.onNodeWithTag("workspace-question").assertTextContains(expectedRootPrompt)
+        assertEquals(rootSuggestionStory.id, feedViewModel.ui.value.state?.conversations
+            ?.find { it.id == feedViewModel.ui.value.activeConversationId }?.itemId)
+        assertEquals("Choosing a MeBot suggestion must not send an AI request", requestsBeforeWorkspaceSuggestion, state().requestsToday)
+    }
+
+    /** Wait for both the durable item-scoped thread and the composer application event. */
+    private fun awaitPreparedDraft(
+        feedViewModel: mebot.nguli.com.feed.FeedViewModel,
+        itemId: String,
+        expected: String,
+        failureScreenshot: String,
+    ) {
+        try {
+            compose.waitUntil(15_000) {
+                val latest = feedViewModel.ui.value
+                val activeId = latest.activeConversationId
+                val thread = latest.state?.conversations?.find { it.id == activeId }
+                val editable = runCatching {
+                    compose.onNodeWithTag("workspace-question").fetchSemanticsNode().config
+                        .getOrNull(androidx.compose.ui.semantics.SemanticsProperties.EditableText)?.text
+                }.getOrNull()
+                thread?.itemId == itemId && thread.turns.isEmpty() && editable == expected
+            }
+        } catch (failure: Throwable) {
+            screenshot(failureScreenshot)
+            val latest = feedViewModel.ui.value
+            val activeId = latest.activeConversationId
+            val active = latest.state?.conversations?.find { it.id == activeId }
+            val editable = runCatching {
+                compose.onNodeWithTag("workspace-question").fetchSemanticsNode().config
+                    .getOrNull(androidx.compose.ui.semantics.SemanticsProperties.EditableText)?.text
+            }.getOrNull()
+            throw AssertionError(
+                "Prepared suggestion was not applied: expectedItem=$itemId active=$activeId " +
+                    "activeItem=${active?.itemId} turns=${active?.turns?.size} " +
+                    "pendingDraft=${latest.suggestionDraft} editable=$editable error=${latest.error}", failure,
+            )
+        }
+    }
+
+    private fun connectTestProvider() {
+        tab("you")
+        clickText(R.string.feed_connection)
+        waitForTag("chatgpt-sign-in")
+        compose.onNodeWithTag("connection-api-alternative").performScrollTo().performClick()
+        waitForTag("connection-key")
+        compose.onNodeWithTag("connection-key").performTextInput("valid-test-credential")
+        compose.onNodeWithTag("connection-connect").performScrollTo().performClick()
+        compose.waitUntil(15_000) { app.feedSecrets.read() == "valid-test-credential" }
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("connection-key").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(15_000) {
+            androidx.lifecycle.ViewModelProvider(compose.activity)[mebot.nguli.com.feed.FeedViewModel::class.java].ui.value.connected
+        }
+        compose.onNodeWithTag("connection-continue").performScrollTo().performClick()
+        waitForText(text(R.string.feed_you_title))
+    }
+
+    private fun cacheGroundedSuggestion(itemId: String, language: String) {
+        val now = System.currentTimeMillis()
+        val label = if (language == "sw") "Uliza kinachobadilika" else "Ask what changes"
+        val prompt = if (language == "sw")
+            "Ni mabadiliko gani yanayoletwa na taarifa hii kwa watu wanaotumia zana?"
+        else "What changes does this update bring for people using the toolkit?"
+        runBlocking {
+            app.feedRepository.update { current ->
+                val item = current.items.single { it.id == itemId }
+                val module = current.modules.single { it.id == item.moduleId }
+                require(module.enabled)
+                val unverified = item.copy(
+                    suggestedInteractions = listOf(AiSuggestedInteraction(label = label, prompt = prompt)),
+                    suggestedInteractionsGeneratedAtMillis = now,
+                )
+                val cached = unverified.copy(
+                    suggestedInteractionsContentDigest = AiSuggestedInteractions095.contentDigest(unverified),
+                    suggestedInteractionsScopeProviderDigest = AiSuggestedInteractions095.scopeProviderDigest(current, module, language),
+                )
+                current.copy(items = current.items.map { if (it.id == itemId) cached else it })
+            }
+        }
+    }
+
     @Test fun replacingAKeyDoesNotSaveTheTypedSecretAcrossRotation() {
         start()
         tab("you")

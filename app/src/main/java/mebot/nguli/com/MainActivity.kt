@@ -238,6 +238,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
     var alarmId by rememberSaveable { mutableStateOf<String?>(null) }
     var itemId by rememberSaveable { mutableStateOf<String?>(null) }
     var detailReturn by rememberSaveable { mutableStateOf("feed") }
+    var aiReturn by rememberSaveable { mutableStateOf("feed") }
     var connectionReturn by rememberSaveable { mutableStateOf("you") }
     var contextReturn by rememberSaveable { mutableStateOf("you") }
     var contextImportRefreshRequest by rememberSaveable { mutableIntStateOf(0) }
@@ -256,6 +257,11 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
     val owner = LocalLifecycleOwner.current
     val context = LocalContext.current
     val resources = LocalResources.current
+    val suggestionLanguage = LocalConfiguration.current.locales[0].language
+    val prepareSuggestion: (String, String) -> Unit = { id, suggestion ->
+        if (page != "ai") aiReturn = if (page == "item") "item" else "feed"
+        feedVm.prepareSuggestion(id, suggestion, suggestionLanguage); page = "ai"
+    }
     val snackbars = remember { SnackbarHostState() }
     val documents = LocalDocumentActions.current
     val message by vm.message.collectAsStateWithLifecycle()
@@ -337,6 +343,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
             "alarm-edit" -> "alarms"
             "alarms", "focus", "history", "daily", "module-edit" -> "modules"
             "item" -> detailReturn
+            "ai" -> if (aiReturn == "item" && feedUi.state?.items?.any { it.id == itemId } == true) "item" else "feed"
             "ask" -> if (itemId != null) "item" else "feed"
             "connect" -> if (onboarded) connectionReturn else "feed"
             "context-import" -> "context"
@@ -403,6 +410,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
           }
         },
         bottomBar = { if (onboarded && page in basePages) MeBotNavigation(page) { destination ->
+            if (destination == "ai") aiReturn = "feed"
             if (destination == "feed" && page == "feed") {
                 feedTopRequest++
             } else page = destination
@@ -422,14 +430,14 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                             val now = ZonedDateTime.now()
                             val nextAlarm = if ("alarms" in state.settings.enabledModules) state.alarms.filter { it.enabled }.minByOrNull { nextAlarmOccurrence(it, now).toInstant() } else null
                             FeedHome(feedUi, ::openItem, { openModuleCatalog(ModuleDiscovery.ALL) }, { page = "you" }, ::openConnection,
-                                { feedVm.clearMessage(); page = "ai" }, feedVm::refresh, feedVm::toggleSaved,
+                                { aiReturn = "feed"; feedVm.clearMessage(); page = "ai" }, feedVm::refresh, feedVm::toggleSaved,
                                 feedVm::hideItem, feedVm::clearMessage, nextAlarm, { page = "alarms" },
                                 onPrompt = { id, prompt ->
-                                    feedVm.openConversation(id, prompt); page = "ai"
+                                    aiReturn = "feed"; feedVm.openConversation(id, prompt); page = "ai"
                                 }, onSearch = { page = "search" }, returnToTopRequest = feedTopRequest, onRefreshModule = feedVm::refreshModule,
                                 onExploreModules = { openModuleCatalog(ModuleDiscovery.DISABLED) },
                                 onContext = { contextReturn = "feed"; page = "context" }, onDismissNotice = feedVm::dismissSetupNotice,
-                                onLoadMore = feedVm::loadMore)
+                                onLoadMore = feedVm::loadMore, onPrepareSuggestion = prepareSuggestion)
                         }
                         "modules" -> ModulesScreen(feed, state,
                             onEdit = ::openModule, onToggle = feedVm::setModuleEnabled,
@@ -489,16 +497,18 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                             { language -> vm.saveSettings { it.copy(language = language) } }, { page = "faq" },
                             { connectionReturn = "faq"; feedVm.clearMessage(); screenStates.removeState("connect"); page = "connect" })
                         "item" -> FeedDetail(feedUi, itemId, feedVm::toggleSaved,
-                            { feedVm.openConversation(itemId); page = "ai" }, { page = detailReturn },
+                            { aiReturn = "item"; feedVm.openConversation(itemId); page = "ai" }, { page = detailReturn },
                             onPrompt = { prompt -> itemId?.let { feedVm.followUpDetail(it, prompt) } },
                             onItem = ::openItem, onModule = ::openModule, onHide = feedVm::hideItem,
                             onLoadBrief = { itemId?.let { feedVm.loadDetail(it) } }, onCancelBrief = feedVm::cancelDetail,
                             onRetryBrief = { itemId?.let { feedVm.retryDetail(it) } },
-                            onFollowUp = { prompt -> itemId?.let { feedVm.followUpDetail(it, prompt) } }, onConnect = ::openConnection)
+                            onFollowUp = { prompt -> itemId?.let { feedVm.followUpDetail(it, prompt) } }, onConnect = ::openConnection,
+                            onPrepareSuggestion = prepareSuggestion)
                         "ai" -> AiWorkspace(feedUi, feedVm::newConversation, feedVm::selectConversation, feedVm::deleteConversation,
                             feedVm::sendConversation, feedVm::clearAnswer, ::openConnection,
                             { contextReturn = "ai"; feedVm.clearMessage(); page = "context" },
-                            feedVm::importTextAttachment, feedVm::removeAttachment, onSelectModel = feedVm::switchModel, onDismissNotice = feedVm::dismissSetupNotice, onSpeechPreferences = feedVm::updateSpeechPreferences)
+                            feedVm::importTextAttachment, feedVm::removeAttachment, onSelectModel = feedVm::switchModel, onDismissNotice = feedVm::dismissSetupNotice, onSpeechPreferences = feedVm::updateSpeechPreferences,
+                            onPrepareSuggestion = prepareSuggestion, onSuggestionDraftApplied = feedVm::suggestionDraftApplied)
                         "search" -> SearchScreen(feedUi, feedVm::search, ::openItem, feedVm::toggleSaved, ::openConnection, feedVm::cancelSearch)
                         "ask" -> AskScreen(feedUi, itemId, { question -> feedVm.ask(itemId, question) }, ::openConnection)
                         "daily" -> {

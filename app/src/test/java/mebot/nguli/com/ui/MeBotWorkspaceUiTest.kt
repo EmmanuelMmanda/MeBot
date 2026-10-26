@@ -29,6 +29,7 @@ import mebot.nguli.com.MeBotNavigation
 import mebot.nguli.com.R
 import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.FeedUiState
+import mebot.nguli.com.feed.SuggestedConversationDraft
 import mebot.nguli.com.ui.feed.AiWorkspace
 import mebot.nguli.com.ui.feed.FeedDetail
 import java.io.File
@@ -68,6 +69,8 @@ class MeBotWorkspaceUiTest {
     private val deleted = mutableListOf<String>()
     private val scopes = mutableListOf<String?>()
     private val removedAttachments = mutableListOf<String>()
+    private val preparedSuggestions = mutableListOf<Pair<String, String>>()
+    private val appliedSuggestionDrafts = mutableListOf<String>()
     private var loaded = 0
     private var cancelled = 0
     private var retry = 0
@@ -145,6 +148,63 @@ class MeBotWorkspaceUiTest {
         assertTrue(deleted.isEmpty())
         compose.onNodeWithTag("conversation-delete-confirm").performClick()
         assertEquals(listOf("preview"), deleted)
+    }
+
+    @Test fun rootMeBotOffersCurrentStoryQuestionsThatOnlyPrepareAnEditableDraft() {
+        ui.value = ui.value.copy(activeConversationId = null)
+        show()
+        compose.onNodeWithTag("workspace-start-suggestions").assertIsDisplayed()
+        compose.onNodeWithTag("workspace-start-suggestions-story-0").assertIsDisplayed()
+        compose.onNodeWithText(story.title).assertIsDisplayed()
+        compose.onNodeWithTag("workspace-start-suggestions-question-0-0").assertIsDisplayed().performClick()
+        assertTrue(preparedSuggestions.single().first in setOf("guide", "related"))
+        assertEquals("local:explain", preparedSuggestions.single().second)
+        assertTrue("Selecting a story suggestion must not send or infer", questions.isEmpty())
+    }
+
+    @Test fun genericWorkspaceStarterPrefillsInsteadOfSending() {
+        ui.value = ui.value.copy(activeConversationId = null, state = state.copy(items = emptyList(), conversations = emptyList()))
+        show()
+        compose.onNodeWithTag("workspace-starter-0").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("workspace-question").assertTextContains("What matters for me today?")
+        assertTrue("Static starter chips must remain editable", questions.isEmpty())
+    }
+
+    @Test fun suggestionDraftUsesItsNewThreadAndKeepsThePreviousUnsentDraft() {
+        ui.value = ui.value.copy(activeConversationId = null, state = state.copy(conversations = emptyList()))
+        show()
+        compose.onNodeWithTag("workspace-question").performTextInput("Keep this unsent note")
+        val target = AiConversation(id = "suggestion-thread", title = "", moduleId = "technology", itemId = story.id)
+        ui.value = ui.value.copy(
+            activeConversationId = target.id,
+            state = state.copy(conversations = listOf(target)),
+            suggestionDraft = SuggestedConversationDraft("draft-event", target.id, "Explain this current update in simple terms."),
+        )
+        compose.waitForIdle()
+        compose.onNodeWithTag("workspace-question").assert(SemanticsMatcher.expectValue(
+            SemanticsProperties.EditableText, AnnotatedString("Explain this current update in simple terms."),
+        ))
+        compose.onNodeWithText(text(R.string.workspace_item_draft_title)).assertExists()
+        compose.onNodeWithText(text(R.string.workspace_item_draft_help)).assertExists()
+        compose.onNodeWithText(text(R.string.workspace_confirmed_about_you_available)).assertDoesNotExist()
+        assertEquals(listOf("draft-event"), appliedSuggestionDrafts)
+        assertTrue(questions.isEmpty())
+
+        val confirmedProfile = ContextEntry(
+            id = PersonalProfile085.PROFILE_ID, text = "Synthetic saved About you context.",
+            category = PersonalProfile085.PROFILE_CATEGORY, scopes = emptySet(), global = true, confirmed = true,
+        )
+        val withConfirmedProfile = ui.value.state!!
+        assertTrue(PersonalProfile085.isGlobal(confirmedProfile))
+        ui.value = ui.value.copy(state = withConfirmedProfile.copy(context = withConfirmedProfile.context + confirmedProfile))
+        compose.waitForIdle()
+        compose.onNodeWithText(text(R.string.workspace_confirmed_about_you_available)).assertExists()
+
+        val withProfileAndSuggestionThread = ui.value.state!!
+        ui.value = ui.value.copy(activeConversationId = null, suggestionDraft = null,
+            state = withProfileAndSuggestionThread.copy(conversations = withProfileAndSuggestionThread.conversations.filterNot { it.id == target.id }))
+        compose.waitForIdle()
+        compose.onNodeWithTag("workspace-question").assertTextContains("Keep this unsent note")
     }
 
     @Test fun workspaceStreamsTruthfullyKeepsCompletedTurnsAndStopsWithoutFakeAnswers() {
@@ -228,7 +288,9 @@ class MeBotWorkspaceUiTest {
                                 onLoadBrief = { loaded++ }, onCancelBrief = { cancelled++ }, onRetryBrief = { retry++ }, onFollowUp = { questions += it }, onConnect = { connected++ })
                             else AiWorkspace(ui.value, onNew = { scopes += it }, onSelect = { selected += it }, onDelete = { deleted += it },
                                 onAsk = { questions += it }, onCancel = { cancelled++ }, onConnect = { connected++ }, onContext = {},
-                                onImportText = {}, onRemoveAttachment = { removedAttachments += it })
+                                onImportText = {}, onRemoveAttachment = { removedAttachments += it },
+                                onPrepareSuggestion = { id, stableId -> preparedSuggestions += id to stableId },
+                                onSuggestionDraftApplied = { appliedSuggestionDrafts += it })
                         }
                     }
                 }
