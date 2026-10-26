@@ -1,0 +1,22 @@
+{
+  "version": "0.9.3",
+  "status": "published",
+  "private_candidate": false,
+  "apk_file": "mebot-0.9.3.apk",
+  "apk_sha256": "2268874208a354b3dab5d41a4d675cc7832206e5f6b19403c49a22716735f74e",
+  "apk_size_bytes": 17510568,
+  "application_id": "mebot.nguli.com",
+  "version_code": 20,
+  "expected_signer_certificate_sha256": "c665c578ecf64f33541670d94f099ee435db1e55790395ff0339f2bdf231d007",
+  "personal_profile_asset_present": false,
+  "source_code_commit": "a95e6c55209445894b6eb81ed1993c8b25e6fb66",
+  "source_tree": "e4621929b381763679bbda7184159c364356f60d",
+  "source_ref": "v0.9.3",
+  "source_integrity_file": "SHA256SUMS.txt",
+  "archive_source_commit": "8fb19e4492bdc4dab52bd395375d955d16a10221",
+  "source_zip_sha256": "e1f93244c604705640a33118be74ee5513607f1c31719217aadb10d4076d0f2f",
+  "source_zip_size_bytes": 20054268,
+  "signer_certificate_sha256": "c665c578ecf64f33541670d94f099ee435db1e55790395ff0339f2bdf231d007",
+  "local_artifacts_verified": true,
+  "published_at": "2026-10-26T17:53:07Z"
+}

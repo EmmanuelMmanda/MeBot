@@ -144,10 +144,13 @@ def check_catalog():
                 error(path, f'invalid version/tag {version!r}')
             if entry['status'] not in {'pending', 'published'}:
                 error(path, f'unknown publication state for {version}')
-            if not re.fullmatch(r'[0-9a-f]{40}', entry.get('sourceCommit') or ''):
+            private_pending = entry.get('status') == 'pending' and entry.get('privateCandidate') is True
+            if private_pending and not entry.get('localArtifactsVerified') and any(entry.get(k) is not None for k in ('sourceCommit', 'sourceTree', 'filename', 'sha256', 'sizeBytes')):
+                error(path, f'private candidate {version} contains unverified release identity')
+            if (not private_pending or entry.get('localArtifactsVerified')) and not re.fullmatch(r'[0-9a-f]{40}', entry.get('sourceCommit') or ''):
                 error(path, f'missing authentic source commit for {version}')
             if entry.get('apk', True):
-                if entry.get('filename') != f'mebot-{version}.apk':
+                if entry.get('filename') not in {f'mebot-{version}.apk', f'MeBot-{version}.apk'}:
                     error(path, f'invalid APK filename for {version}')
                 if not re.fullmatch(r'[0-9a-f]{64}', entry.get('sha256') or ''):
                     error(path, f'missing APK checksum for {version}')

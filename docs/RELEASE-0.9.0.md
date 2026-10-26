@@ -1,3 +1,7 @@
+> **Superseded — known issue:** This version can close when choosing or exporting a file, or turning on notifications. Use the [published 0.9.3 update](RELEASE-0.9.3.md) instead. Do not uninstall or clear your data.
+
+> **Publication archive:** Historical signed release, superseded by published 0.9.3. [Versioned files](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.0) · [Published 0.9.3 corrective release](RELEASE-0.9.3.md). The verification-stage status below is retained as a dated record, not the current publication state.
+
 # MeBot 0.9.0 candidate
 
 This is a local candidate, not a published official release. Package

@@ -1,5 +1,68 @@
 [
   {
+    "file": "screenshots/v090/onboarding-en-chooser.png",
+    "title": "Choose your interests",
+    "alt": "Compact icon interest selection in the full English onboarding screen.",
+    "caption": "Normal phone width and default text size; synthetic setup.",
+    "group": "start",
+    "version": "0.9.0",
+    "captureDate": "2026-10-25"
+  },
+  {
+    "file": "screenshots/v090/onboarding-sw-chooser.png",
+    "title": "Chagua unavyopenda",
+    "alt": "Compact icon interest selection in the full Kiswahili onboarding screen.",
+    "caption": "Normal phone width and default text size; synthetic setup.",
+    "group": "start",
+    "version": "0.9.0",
+    "captureDate": "2026-10-25"
+  },
+  {
+    "file": "screenshots/v092/context-import-sw.png",
+    "title": "Bring your context",
+    "alt": "Full-screen Kiswahili context import with prompt, paste and file actions.",
+    "caption": "Copy a prompt, paste JSON or choose a file, then review before saving.",
+    "group": "start",
+    "version": "0.9.2",
+    "captureDate": "2026-10-26"
+  },
+  {
+    "file": "screenshots/v092/connection-sw.png",
+    "title": "Your AI connection",
+    "alt": "AI connection settings with provider and account controls.",
+    "caption": "Native host render with synthetic account state, not a live login.",
+    "group": "organize",
+    "version": "0.9.2",
+    "captureDate": "2026-10-26"
+  },
+  {
+    "file": "screenshots/v092/starred-sw.png",
+    "title": "Follow what matters",
+    "alt": "Kiswahili starred follow-up settings.",
+    "caption": "Control existing follow-up frequency and background settings.",
+    "group": "organize",
+    "version": "0.9.2",
+    "captureDate": "2026-10-26"
+  },
+  {
+    "file": "screenshots/v092/personalization-sw.png",
+    "title": "Make it yours",
+    "alt": "Personalization settings with app lock.",
+    "caption": "Appearance, language and optional app lock in one place.",
+    "group": "organize",
+    "version": "0.9.2",
+    "captureDate": "2026-10-26"
+  },
+  {
+    "file": "screenshots/v092/lock-setup-sw.png",
+    "title": "Optional app lock",
+    "alt": "Kiswahili app PIN and biometric setup.",
+    "caption": "Protects app access, not an encrypted feed database. No real PIN is shown.",
+    "group": "organize",
+    "version": "0.9.2",
+    "captureDate": "2026-10-26"
+  },
+  {
     "file": "screenshots/v082/feed.png",
     "title": "Your first edition",
     "alt": "Personalized feed containing dated public reporting and source links.",

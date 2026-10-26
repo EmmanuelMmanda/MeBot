@@ -10,7 +10,8 @@ DOCS = ROOT / 'docs'
 r = json.loads((DOCS / 'assets/release.json').read_text())
 screens = json.loads((DOCS / 'assets/screens.json').read_text())
 base = f"https://github.com/EmmanuelMmanda/MeBot/releases/download/{r['tag']}/"
-expected = base + r['filename']
+published = r['status'] == 'published'
+expected = base + (r['filename'] or '')
 assert len({s['file'] for s in screens}) == len(screens), 'Duplicate screenshots'
 assert len(screens) >= 12, 'Incomplete gallery'
 for s in screens:
@@ -38,7 +39,7 @@ for name in ('index.html', 'screenshots.html', 'download.html', 'releases.html',
     assert '/releases/latest' not in text, 'GitHub latest omits prereleases'
     assert '/blob/master/' not in text, 'Wrong branch link'
     assert r['version'] in text
-    if name not in ('screenshots.html','tour.html'):
+    if published and name not in ('screenshots.html','tour.html'):
         assert p.downloads, f'Missing direct download: {name}'
     for a in p.downloads:
         assert a.get('href') == expected and 'hidden' not in a, name
@@ -60,14 +61,13 @@ p = Inspect(); p.feed(preview)
 for im in p.images:
     if im.get('src', '').startswith('screenshots/v083/'):
         assert im.get('alt') and im.get('width') and im.get('height')
-for page in [*DOCS.glob('*.html'), *(DOCS / 'guides').glob('*.html')]:
-    if page.name not in ('preview-083.html', 'preview-084.html', 'preview-085.html'):
-        assert 'preview-090.html' in page.read_text() or page.name == 'preview-090.html', f'Missing preview navigation: {page}'
+for page in DOCS.rglob('*.html'):
+    assert 'preview-banner' not in page.read_text(), f'Stale candidate banner: {page}'
 assert readme.count('<img ') >= len(screens)
 assert '/releases/latest' not in readme
 assert 'The current application version is **0.6.1**' not in readme
 assert 'Official' in readme or 'official' in readme
-print(f'Showcase checks passed: {len(screens)} screenshots, direct APK links, version labels and accessible image descriptions.')
+print(f'Showcase checks passed: {len(screens)} screenshots, publication-aware download controls, version labels and accessible image descriptions.')
 
 next_preview = (DOCS / 'preview-084.html').read_text()
 assert 'Preview, not a published APK' in next_preview
@@ -94,3 +94,28 @@ p = Inspect(); p.feed(engine_preview)
 for im in p.images:
     if im.get('src', '').startswith('screenshots/v090/'):
         assert im.get('alt') and im.get('width') and im.get('height')
+
+# Publication catchup must preserve source-only history and exact asset casing.
+assert r['version'] == '0.9.3'
+if not published:
+    assert r['privateCandidate'] and r['localArtifactsVerified']
+    assert r['filename'] == 'mebot-0.9.3.apk'
+    assert r['sha256'] == '2268874208a354b3dab5d41a4d675cc7832206e5f6b19403c49a22716735f74e'
+    assert r['sourceCommit'] == 'a95e6c55209445894b6eb81ed1993c8b25e6fb66'
+    for name in ('index.html','download.html','releases.html','tour.html'):
+        assert 'data-release-apk' not in (DOCS/name).read_text()
+        assert '/releases/download/v0.9.' not in (DOCS/name).read_text()
+assert r['certificateSha256'] == 'c665c578ecf64f33541670d94f099ee435db1e55790395ff0339f2bdf231d007'
+for version in ('0.8.3', '0.8.4', '0.8.5'):
+    entry = next(e for e in r['releases'] if e['version'] == version)
+    assert entry['apk'] is False and entry['filename'] is None and entry['sha256'] is None
+    assert 'no production' in entry['notes'].lower()
+for version in ('0.9.0', '0.9.1', '0.9.2'):
+    entry = next(e for e in r['releases'] if e['version'] == version)
+    assert entry['filename'] == f'MeBot-{version}.apk'
+    assert entry['sourceFilename'] == f'MeBot-{version}-source.zip'
+    assert entry['sourceTree'] and entry['certificateSha256'] == r['certificateSha256']
+assert 'Do not uninstall' in (DOCS/'download.html').read_text()
+for name in ('preview-083.html', 'preview-084.html', 'preview-085.html', 'preview-090.html'):
+    assert (DOCS/name).read_text().count('<aside class="release-archive wrap">') == 1
+print('Release catchup checks passed: source-only history, exact filenames, signing lineage and archived previews.')
