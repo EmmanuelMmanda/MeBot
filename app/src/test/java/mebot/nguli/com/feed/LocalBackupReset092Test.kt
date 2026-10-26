@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -31,11 +32,13 @@ class LocalBackupReset092Test {
     private lateinit var app:V06FlowTestApplication
     private lateinit var vm:MeBotViewModel
     private val models=ViewModelStore()
+    private val readerTimedOut=java.util.concurrent.atomic.AtomicBoolean(false)
     @Before fun setup():Unit=runBlocking {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         app=ApplicationProvider.getApplicationContext()
         app.repository.update { AppState(profile=Profile(name="Original")) }
         vm=ViewModelProvider(models,ViewModelProvider.AndroidViewModelFactory(app))[MeBotViewModel::class.java]
+        assertSame(app,vm.getApplication<V06FlowTestApplication>())
         withTimeout(5000) { vm.ui.first { it.state!=null } }
     }
     @After fun close() { models.clear();app.alarms.clearAll();Dispatchers.resetMain() }
@@ -46,7 +49,11 @@ class LocalBackupReset092Test {
         val text=BackupCodec.encode(AppState(profile=Profile(name="Old backup must not return")))
         shadowOf(app.contentResolver).registerInputStream(uri,object:ByteArrayInputStream(text.toByteArray()) {
             override fun read(bytes:ByteArray,off:Int,len:Int):Int {
-                entered.countDown();check(release.await(5,TimeUnit.SECONDS));return super.read(bytes,off,len)
+                entered.countDown()
+                val released=release.await(5,TimeUnit.SECONDS)
+                if (!released) readerTimedOut.set(true)
+                check(released) { "Test provider release latch timed out" }
+                return super.read(bytes,off,len)
             }
         })
         val job=vm.importBackup(uri)
@@ -58,7 +65,23 @@ class LocalBackupReset092Test {
         var erased:AppState?=null
         blockedOldImport {
             vm.erase()
-            erased=withTimeout(5000) { app.repository.state.first { it.profile.name.isEmpty() } }
+            try {
+                erased=withTimeout(5000) {
+                    combine(app.repository.state, vm.message) { state, message ->
+                        check(message == null) {
+                            "Erase reported ${app.getString(message!!)}; synthetic profile=${state.profile.name}; uiFailed=${vm.ui.value.failed}"
+                        }
+                        state
+                    }.first { it.profile.name.isEmpty() }
+                }
+            } catch (timeout: TimeoutCancellationException) {
+                val stacks = Thread.getAllStackTraces().entries
+                    .filter { (thread, _) -> thread.name.contains("DefaultDispatcher") || thread.name.contains("Test worker") }
+                    .joinToString("\n") { (thread, frames) -> "${thread.name}: ${frames.joinToString(" <- ")}" }
+                throw AssertionError("Erase did not publish within 5 seconds; message=${vm.message.value}; " +
+                    "readerTimedOut=${readerTimedOut.get()}; uiFailed=${vm.ui.value.failed}; " +
+                    "synthetic profile=${vm.ui.value.state?.profile?.name}\n$stacks", timeout)
+            }
         }
         assertEquals(erased,app.repository.current())
     }
