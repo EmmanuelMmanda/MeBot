@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.5 — 2026-10-26
+
+- Open stories in MeBot first, keeping the publisher visible and using a compact story-grounded category label.
+- Keep item-grounded question suggestions alongside the story in Feed, story details and MeBot.
+- Prepare an editable, item-scoped question for review; never send a suggestion automatically.
+- Keep the original source readily available as a secondary action, whether or not AI is connected.
+- Retain local question suggestions for offline use; connected-AI suggestions are reused only when suitable for the current story and approved context.
+
+MeBot 0.9.5 is the current official release. See the [experience-first release notes](docs/RELEASE-0.9.5.md) and [illustrated story-flow guide](docs/preview-095.html); technical verification is recorded separately.
+
 ## 0.9.2 — document and settings repair candidate
 
 - Guard existing document-picker launches, preserve pending operation identity across lifecycle changes, and defer protected results until the app is resumed and unlocked.

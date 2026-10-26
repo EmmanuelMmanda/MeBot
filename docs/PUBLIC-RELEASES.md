@@ -1,10 +1,18 @@
 # Public releases and artifact verification
 
-**MeBot 0.9.4 is the recommended current release.** It is published for package `mebot.nguli.com` and can update production 0.9.0–0.9.3 installations in place. Versions 0.9.0–0.9.2 are superseded due to a known external-picker and permission-launch crash. Version 0.9.3 fixed that crash but could remain on the context-import screen after a successful import; 0.9.4 corrects the return and visible-note flow. The [release catalog](assets/release.json) and [release directory](releases.html) distinguish signed APK releases from historical source-only checkpoints.
+**MeBot 0.9.5 is the recommended current release**, published for package `mebot.nguli.com` and signed with the established 0.9.x production certificate. It updates production 0.9.0–0.9.4 installations in place. MeBot 0.9.4 is superseded but its verified historical release remains available. Versions 0.9.0–0.9.2 had an external-launch defect; 0.9.3 corrected those crashes, and 0.9.4 improved the return after context import. The [release catalog](assets/release.json) and [release directory](releases.html) distinguish signed APK releases from historical source-only checkpoints.
+
+## Current 0.9.5 release
+
+MeBot 0.9.5 was published on 26 October 2026 at 23:35:05 UTC. Stories open in MeBot first; compact category labels and item-grounded questions keep the next step close. Suggested questions are editable and never send automatically. The original source remains available, and local questions work offline.
+
+The public source is commit `eb6d2a12815cbf68decb2996eed9c1f0e0581e41`, tree `aa67a099156d52cce6677fedf9d01bad36878237`. The signed APK retains package `mebot.nguli.com` and the current production certificate. See the [official release](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.5), [experience-first notes](RELEASE-0.9.5.md), and [integrity record](releases/v0.9.5.json). All public release assets were anonymously downloaded and matched to their verified bytes and digests before the site switch.
+
+The technical verification report records automated checks and explicitly separates host-test evidence from physical-device, OEM, live-account/provider and overnight-alarm acceptance. Story screenshots use synthetic story/provider fixtures, not live response evidence.
 
 ## Release history
 
-- **0.9.4:** published 26 October 2026, version code 21; 1,051 automated tests passed across core, Android host and optional-service suites. Public files, APK signature and matching source were verified; physical-device acceptance remains separate.
+- **0.9.4:** historical signed release, superseded by 0.9.5. It corrected the context-import return/visible-note flow; its original verification and artifact record remain unchanged.
 - **0.9.3:** superseded, version code 20; corrected external file selection and notification-permission launch crashes. A context import could still leave the user on the import screen after confirmation.
 - **0.9.2:** historical signed build, version code 19; external-launch defect, superseded.
 - **0.9.1 / 0.9.0:** historical signed artifacts, superseded due to the same external-launch defect. Their pending catalog entries are not public release claims.
@@ -14,9 +22,9 @@
 
 Source tags identify the actual version tree. Historical verification notes describe the checks performed then; they are not retroactive claims that old code passed the newest suite. Source archives exclude private profiles, credentials, signing keys, local SDK paths and generated build outputs. Archive `gradlew.bat` may use CRLF while Git stores LF, as declared in `.gitattributes`.
 
-## Verified 0.9.4 release
+## Verified historical 0.9.4 release (superseded)
 
-The public filename is `mebot-0.9.4.apk` (lowercase, required by the installed updater). Size: 17,543,336 bytes. SHA-256: `d0479d41d9971fb27e7dfc1067aa1c2565276f2f78d7698e517c5be7a1d99084`. Package: `mebot.nguli.com`; version code 21; minimum Android 8.0 (API 26), target API 36. All six public release assets were checked against the local bundle before publication and anonymously downloaded hashes match.
+The previous public filename is `mebot-0.9.4.apk` (lowercase, required by the installed updater). Size: 17,543,336 bytes. SHA-256: `d0479d41d9971fb27e7dfc1067aa1c2565276f2f78d7698e517c5be7a1d99084`. Package: `mebot.nguli.com`; version code 21; minimum Android 8.0 (API 26), target API 36. All six public release assets were checked against the local bundle before publication and anonymously downloaded hashes match.
 
 Exact audited source: public commit `54ca9e0f86f5616f7f5a8138bec4ea1e97f2fa8e`, tree `6c51dc2758c89fb93830169c535a2993b72ec700`. The downloadable source archive retains original local build commit `dd1b5b97a2954b5d5e10012f91f37a5a8796a757`; the archive and GitHub source tree were compared. [Official files and release notes](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.4) · [Exact source and technical report](RELEASE-0.9.4.md).
 
@@ -60,7 +68,7 @@ apksigner verify --verbose --print-certs MeBot-0.9.2.apk
 
 ## Signing lineages and updates
 
-**0.9.0, 0.9.1, 0.9.2, 0.9.3 and 0.9.4** use package `mebot.nguli.com` and the same production certificate shown above. MeBot 0.9.4 can update 0.9.0–0.9.3 in place. **Do not uninstall or clear data to update.**
+**0.9.0 through 0.9.5** use package `mebot.nguli.com` and the same production certificate shown above. MeBot 0.9.5 can update 0.9.0–0.9.4 in place. **Do not uninstall or clear data to update.**
 
 Earlier public releases used certificate SHA-256:
 

@@ -1,6 +1,6 @@
-# Start here — MeBot 0.9.4
+# Start here — MeBot 0.9.5
 
-[Download Android APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.4/mebot-0.9.4.apk) · [Release files](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.4) · [Full user guide](docs/USER-GUIDE.md)
+[Download Android APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.5/mebot-0.9.5.apk) · [Release files](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.5) · [Full user guide](docs/USER-GUIDE.md)
 
 ## 1. Choose interests
 Pick topics and, optionally, a city. The app does not require an imported context file.
@@ -15,7 +15,7 @@ If you import context JSON, review the replacement first. After confirming, MeBo
 This example uses synthetic notes, not personal account data. See the [context guide](docs/guides/personal-context.html#after-import) for the review flow.
 
 ## 3. Read, ask and refine
-Open an item for the introduction and an automatic explanation when AI is connected. Sources remain accessible. Relevant / Not relevant tunes that module; Undo changes your choice.
+Stories open in MeBot first, with the publisher visible. Choose an item-grounded question, review or edit its draft before you send, and open the original source whenever you want. Local questions remain available offline. Relevant / Not relevant still tunes that module; Undo changes your choice.
 
 ![A sourced item and its explanation](docs/screenshots/v082/detail-answer.png)
 
