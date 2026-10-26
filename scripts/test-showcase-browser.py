@@ -85,8 +85,17 @@ try:
                         assert page.locator('#screen-gallery .shot img[src*="320dp-130percent"]').count() == 0
                         assert 'Accessibility stress evidence' in page.locator('#image-notes').inner_text()
                     if name == 'download.html':
-                        for field in [r['filename'],r['sourceFilename'],r['verificationFilename'],r['sourceCommit'],r['sourceTree'],r['certificateSha256']]:
-                            assert field in page.locator('.release-metadata').inner_text()
+                        # Technical identity is deliberately collapsed; verify the real user interaction.
+                        details = page.locator('.release-metadata')
+                        details.locator('summary').click()
+                        assert details.evaluate('node => node.open')
+                        identity = details.inner_text()
+                        for field in [r['filename'],r['sourceCommit'],r['sourceTree'],r['certificateSha256'],r['sha256']]:
+                            assert field in identity, f'Missing expanded identity: {field}'
+                        # Source/report filenames belong to resource links, not the APK identity panel.
+                        for filename in [r['sourceFilename'],r['verificationFilename']]:
+                            resource = page.locator(f'#resources a[href="https://github.com/EmmanuelMmanda/MeBot/releases/download/{r["tag"]}/{filename}"]')
+                            assert resource.count() == 1 and resource.is_visible(), f'Missing accessible resource: {filename}'
                     for link in page.locator('[data-release-apk]').all():
                         assert link.is_visible() and link.get_attribute('href') == apk
                     for im in page.locator('.shot:visible img').all():
