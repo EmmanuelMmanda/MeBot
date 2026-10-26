@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="profile_label_085">Kukuhusu</string>
+    <string name="profile_guide_085">Unafanya nini, unapenda nini na una malengo gani? Shiriki tu taarifa unazotaka MeBot itumie katika moduli zote.</string>
+    <string name="profile_example_help_085">Ona mfano</string>
+    <string name="profile_example_title_085">Huu ni mfano, si taarifa zako</string>
+    <string name="profile_example_085">Mimi ni mjasiriamali wa Tanzania mwenye biashara ndogo kadhaa: duka la mtaani, biashara ya chakula na huduma ya usafirishaji. Nataka mawazo ya vitendo ya kupanga bidhaa, kuwahudumia wateja na kuweka kumbukumbu sahihi. Nafuatilia habari za biashara za ndani na teknolojia yenye manufaa. Napendelea maelezo mafupi yenye mifano inayofaa Tanzania.</string>
+    <string name="profile_insert_example_085">Tumia mfano huu</string>
+    <string name="profile_replace_title_085">Ubadilishe ulichoandika?</string>
+    <string name="profile_replace_body_085">Mfano utachukua nafasi ya ulichoandika. Hakuna kitakachohifadhiwa mpaka uchague kuhifadhi.</string>
+    <string name="profile_replace_085">Badilisha maandishi</string>
+    <string name="profile_cancel_085">Ghairi</string>
+    <string name="profile_count_085">Maneno %1$d / 150 · herufi %2$d / 1,000</string>
+    <string name="profile_limit_085">Tumia maneno yasiyozidi 150 na herufi zisizozidi 1,000. Maandishi yako hayajakatwa.</string>
+    <string name="profile_legacy_085">Taarifa zilizohifadhiwa (%1$d)</string>
+    <string name="profile_legacy_body_085">Taarifa zako za awali zimebaki tofauti, pamoja na ruhusa zake za mada. Fungua kuzikagua au kuzibadili.</string>
+    <string name="profile_custom_interest_085">Mambo mengine unayopenda (si lazima)</string>
+    <string name="profile_custom_hint_085">Andika unachopenda kwa maneno yako. Mada unazochagua tu ndizo zinaweza kutumia taarifa hizi.</string>
+    <string name="profile_timezone_invalid_085">Tumia eneo la saa kama Africa/Dar_es_Salaam au UTC.</string>
+    <string name="profile_save_085">Hifadhi taarifa</string>
+    <string name="profile_global_use_085">Ukihifadhi, taarifa za Kukuhusu zitatumika katika moduli zote. Maelezo ya ziada hapa chini yanabaki na mada zake ulizochagua.</string>
+    <string name="profile_notes_title_085">Maelezo ya ziada</string>
+    <string name="profile_note_add_085">Ongeza maelezo</string>
+    <string name="profile_notes_body_085">Tenganisha mambo mahususi unayopenda au maelekezo. Kila maelezo yanatumika tu kwenye mada unazochagua.</string>
+    <string name="profile_notes_empty_085">Hakuna maelezo ya ziada bado. Ongeza ikiwa mada inahitaji taarifa zaidi.</string>
+    <string name="profile_note_limit_085">Maelezo yasizidi herufi 1,000; ondoa herufi za udhibiti zisizokubalika. Maandishi yako hayajakatwa.</string>
+</resources>

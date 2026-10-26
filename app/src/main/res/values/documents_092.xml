@@ -1,0 +1,3 @@
+<resources>
+    <string name="document_picker_error">Could not open Files. Check that a document picker is available, then try again.</string>
+</resources>

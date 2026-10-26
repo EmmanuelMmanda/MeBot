@@ -1,0 +1,21 @@
+<resources>
+    <string name="personalization_092">Binafsisha</string>
+    <string name="personalization_summary_092">Mwonekano, lugha na kufunga programu</string>
+    <string name="personalization_lock_092">PIN ya programu, alama ya kidole au uso</string>
+    <string name="starred_settings_092">Habari zenye nyota</string>
+    <string name="starred_summary_092">Muda wa kufuatilia na ukaguzi wa chinichini</string>
+    <string name="starred_intro_092">Chagua muda wa kutafuta habari mpya kuhusu mada hizi.</string>
+    <string name="starred_timing_092">Ukaguzi hufanyika wakati wa kuleta habari, kwa AI na kikomo chako. Android inaweza kuchelewesha kazi za chinichini.</string>
+    <string name="starred_empty_092">Gusa nyota kando ya habari ili kuifuatilia hapa.</string>
+    <string name="starred_background_092">Kuleta habari chinichini</string>
+    <string name="starred_background_on_092">Imewashwa · takriban kila saa %1$d</string>
+    <string name="starred_background_off_092">Imezimwa · kagua unapoburudisha habari</string>
+    <string name="starred_ai_needed_092">Unganisha AI ili kufuatilia habari mpya.</string>
+    <string name="starred_module_off_092">Moduli hii imezimwa. Iwashe kwenye Moduli ili kuendelea kufuatilia.</string>
+    <string name="starred_remove_092">Acha kufuatilia</string>
+    <string name="lock_setup_intro_092">Tumia PIN tofauti ya programu. MeBot hufungwa unapoiacha au kifaa kinapofungwa.</string>
+    <string name="lock_protects_092">Kinacholindwa</string>
+    <string name="lock_change_section_092">Badili PIN</string>
+    <string name="lock_biometric_section_092">Alama ya kidole au uso</string>
+    <string name="lock_auth_hint_092">Weka PIN yako ya sasa ya programu kubadili mipangilio ya usalama.</string>
+</resources>

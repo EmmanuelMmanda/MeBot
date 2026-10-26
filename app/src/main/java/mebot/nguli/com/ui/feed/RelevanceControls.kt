@@ -40,7 +40,7 @@ internal fun RelevanceControls(item: FeedItem, modifier: Modifier = Modifier) {
 }
 
 @Composable
-internal fun StarManagement(item: FeedItem) {
+internal fun StarManagement(item: FeedItem, showGuidance: Boolean = true) {
     val ctx = LocalRelevanceContext.current
     val star = ctx.state?.starredStories?.find { it.itemId == item.id } ?: return
     val configure = ctx.onConfigureStar ?: return
@@ -53,14 +53,15 @@ internal fun StarManagement(item: FeedItem) {
                 modifier = Modifier.testTag("star-active-${item.id}"))
         }
         Box {
-            TextButton(onClick = { menu = true }) { Text(stringResource(R.string.star_every_hours, star.checkEveryHours)) }
+            TextButton(onClick = { menu = true }, modifier = Modifier.heightIn(min = 48.dp).testTag("star-frequency-${item.id}")) { Text(stringResource(R.string.star_every_hours, star.checkEveryHours)) }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
                 StarredStories.cadences.forEach { hours -> DropdownMenuItem(
-                    text = { Text(stringResource(R.string.star_every_hours, hours)) },
+                    text = { Text(stringResource(R.string.star_every_hours, hours)) }, modifier = Modifier.testTag("star-frequency-${item.id}-$hours"),
                     onClick = { menu = false; configure(item.id, star.paused, hours) }) }
             }
         }
-        Text(stringResource(R.string.star_budget_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (showGuidance) Text(stringResource(R.string.star_budget_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (star.lastCheckedAtMillis > 0) Text(stringResource(R.string.star_last_checked, relativeTime(star.lastCheckedAtMillis)),
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }

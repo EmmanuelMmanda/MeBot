@@ -52,21 +52,4 @@
     <string name="preferences_advanced_083">Location, time zone &amp; transfer</string>
     <string name="preferences_for_topic_083">Make this topic more useful</string>
     <string name="preferences_topic_body_083">Choose a focus, then select any saved details this topic may use.</string>
-    <string name="unit_price_title">Compare prices</string>
-    <string name="unit_price_body">See which pack costs less for the same amount. Works offline.</string>
-    <string name="unit_price_note">Use the same currency and unit for both options. Convert grams to kilograms, for example, before comparing. Quality and extra costs are not included.</string>
-    <string name="unit_price_first">Option A</string>
-    <string name="unit_price_second">Option B</string>
-    <string name="unit_price_cost">Total price</string>
-    <string name="unit_price_amount">Quantity in the same unit</string>
-    <string name="unit_price_unit">Unit (for example kg, litre, piece)</string>
-    <string name="unit_price_currency">Currency (optional)</string>
-    <string name="unit_price_invalid">Enter a positive price and quantity for both. Use a dot for decimals, without commas.</string>
-    <string name="unit_price_result">%1$s costs less per unit</string>
-    <string name="unit_price_equal">Both cost the same per unit</string>
-    <string name="unit_price_per">%1$s: %2$s %3$s per %4$s</string>
-    <string name="unit_price_saving">%1$s%% less per unit</string>
-    <string name="unit_price_calculate">Compare</string>
-    <string name="unit_price_reset">Clear</string>
-    <string name="unit_price_default_unit">unit</string>
 </resources>

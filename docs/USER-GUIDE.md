@@ -1,17 +1,11 @@
-<!-- preview-084:start -->
-> **0.8.4 candidate:** Simpler story actions, fullscreen media and a clearer tour; 829 automated tests passed. [Changes and release limits](RELEASE-0.8.4.md). The official download remains **0.8.2**.
-<!-- preview-084:end -->
+> **0.9.3 corrective release:** External file-picker and permission-launch compatibility is repaired. Earlier 0.9.0–0.9.2 builds are superseded. Host and public-artifact verification are not physical/OEM acceptance. [Release verification](RELEASE-0.9.3.md).
 
-<!-- preview-083:start -->
-> **0.8.3 preview:** Starred follow-ups, searchable collections, rich conversation resources, broader interests and an offline price comparison tool. [Candidate guide](RELEASE-0.8.3.md). 817 automated tests passed; physical-device verification and original-identity signing remain pending; the official downloadable release remains **0.8.2**.
-<!-- preview-083:end -->
+# MeBot user guide — 0.9.3
 
-# MeBot user guide — 0.8.2
-
-[Start here](../START-HERE.md) · [Illustrated guide](guides/release-082.html) · [Release notes](RELEASE-0.8.2.md)
+[Start here](../START-HERE.md) · [Illustrated guide](guides/release-082.html) · [Current release notes](RELEASE-0.9.3.md)
 
 ## Install and start
-Install the official `mebot.nguli.com` package. It is separate from earlier development installations. Choose English or Kiswahili, interests and an optional city. Skip the introduction or replay the quick guide from Help. Alarm, Focus and Daily Check-in are optional.
+Install the official `mebot.nguli.com` package. 0.9.3 updates 0.9.0, 0.9.1 and 0.9.2 without uninstalling; earlier signer/package installations have different migration requirements. See [installation guidance](INSTALL.md). Choose English or Kiswahili, interests and an optional city. Skip the introduction or replay the quick guide from Help. Alarm, Focus and Daily Check-in are optional.
 
 ## Feed and discovery
 Public sources are usable without AI. Each module owns its preferences, fallback sources and permitted context. Connected AI prepares richer information only when that provider supports it. Sources remain visible. Refresh the selected module by pulling down. Completed modules appear while others work; failures preserve completed and cached content. While reading, use Show new items to accept newly prepared content without losing your position.
@@ -46,3 +40,36 @@ Tap media to load it; provider permission/availability may prevent playback. Kee
 A failed connection does not block public-source reading or daily tools. Check provider credentials, capabilities and model access. A completed response is required to report a usable AI connection. If an update is not offered, it may be the same/older version or a different package/certificate. If no new stories appear, the source may have nothing new; MeBot must not manufacture freshness.
 
 Test alarm permissions, audio, lock-screen behavior and overnight delivery on your actual phone. Automated UI captures and controlled provider tests do not establish those properties.
+
+## 0.9.0 candidate additions
+
+These controls belong to the unreleased 0.9.0 candidate, not the official 0.8.2
+APK. See [candidate details and limitations](RELEASE-0.9.0.md).
+
+- **Feed → Today** shows only items with qualifying source dates for your selected
+  local day. Publication, forecast validity and event dates are labeled separately.
+  Older and unknown-date items remain in your regular feed and Saved. Opening Today
+  does not call AI; deliberate pull-to-refresh uses your usual connection/allowance.
+- Compact onboarding icons retain topic labels. Your optional typed interests are
+  saved as the existing module-scoped note. Revisiting with an empty draft preserves
+  it; edit/delete the note in your context editor when that is your intent.
+- **You → App lock** lets you choose and confirm a separate app PIN, then optionally
+  enable supported strong biometrics using the current app PIN. Never enter your
+  device PIN into an app-owned prompt. Locking hides personal screens, not encryption
+  of the feed database. Change/disable requires current authentication. Keep the PIN;
+  biometric enrollment changes or lockout may require it. Forgot-PIN guidance does
+  not bypass protection or erase data automatically.
+- **You → Your data** retains reading-history disable/clear controls. Clearing history
+  changes local ranking without deleting your notes or saved stories.
+
+## Context import and local account removal
+
+Open the visible context import screen from your personal setup. Copy its starter prompt into your preferred assistant, then paste the returned JSON or choose its downloaded file. Review changes before saving. Cancel does not apply the imported content. About you applies globally only with your explicit save; separate notes retain module-specific access.
+
+AI connection lets you remove a saved account from this device after confirmation. This is local removal, not deletion of your provider account. It does not erase your notes or other saved accounts.
+
+## Starred follow-ups and app lock
+
+Use the star beside bookmark, then manage existing follow-ups in **You → Starred**. Background frequency remains subject to Android scheduling, your configured connection and your request allowance. The app does not promise exact polling times.
+
+Open **You → Personalization → App lock** to set an optional app PIN and supported biometrics. It follows device lock, but is an app-access gate, not feed-database encryption. Credentials and app-lock secrets are excluded from portable backups.

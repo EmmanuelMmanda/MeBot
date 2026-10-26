@@ -13,6 +13,8 @@ object RecommendationPolicy {
     private val words = Regex("[\\p{L}\\p{N}]{3,}")
     private val stop = setOf("the", "and", "for", "with", "that", "this", "from", "about", "have", "want", "news", "like", "kwa", "hii", "hizi", "yangu", "habari", "katika", "na", "are", "can", "your")
     fun terms(text: String): Set<String> = words.findAll(text.lowercase()).map { it.value }.filter { it !in stop }.take(120).toSet()
+    /** Build once per immutable state/time revision, not once per candidate. */
+    fun prepare(state: FeedState, now: Long): Snapshot = Snapshot(state, now)
     fun score(state: FeedState, item: FeedItem, now: Long): Score {
         val module = state.modules.firstOrNull { it.id == item.moduleId }
         val body = terms(item.title + " " + item.summary)
@@ -38,9 +40,52 @@ object RecommendationPolicy {
         val exploration = if (state.editionSequence > 0 && item.relevance >= 40 && viewed == null) (mixed % 7).toInt() else 0
         return Score(item.relevance.coerceIn(0, 100), interest, feedback, freshness, novelty, deadline, exploration)
     }
-    /** Route a general question before sharing notes. Ambiguous questions receive no private context. */
-    fun contextForQuestion(state: FeedState, question: String): List<ContextEntry> {
-        if (question.lowercase().contains("what matters for me") || question.lowercase().contains("leo kuna nini kinachonihusu")) return generalContext(state)
+
+    class Snapshot internal constructor(private val state: FeedState, private val now: Long) {
+        private val explicit = state.modules.associate { module -> module.id to terms(
+            FeedLogic.scopedContext(state, module).joinToString(" ") { it.text } + " " + module.query) }
+        private val titleTerms = state.items.filter { it.id in state.savedIds || it.id in state.hiddenIds }.associate { it.id to terms(it.title) }
+        private val saved = state.items.filter { it.id in state.savedIds }.groupBy { it.moduleId }
+        private val hidden = state.items.filter { it.id in state.hiddenIds }.groupBy { it.moduleId }
+        private val signals = state.relevanceSignals.groupBy { it.moduleId }.mapValues { (_, entries) ->
+            entries.map { it to kotlin.math.exp(-(now-it.updatedAtMillis).coerceAtLeast(0)/86_400_000.0/60.0) }
+        }
+        fun score(item: FeedItem): Score {
+        val body = terms(item.title + " " + item.summary)
+        val interest = (body.count { it in explicit[item.moduleId].orEmpty() } * 3).coerceAtMost(15)
+        fun affinity(entries: Map<String,List<FeedItem>>): Int = entries[item.moduleId].orEmpty().asSequence()
+            .filter { it.id != item.id }.take(40).map { saved -> body.count { it in titleTerms.getValue(saved.id) }.coerceAtMost(3) }.sum().coerceAtMost(5)
+        val adjustment = if(body.isEmpty()) 0 else signals[item.moduleId].orEmpty().sumOf { (signal, decay) ->
+            val overlap = body.count { it in signal.terms }
+            val similarity = if(signal.itemId == item.id) 1.0 else if(overlap < 2) 0.0 else
+                (overlap / kotlin.math.sqrt(body.size.toDouble()*signal.terms.size.coerceAtLeast(1))).coerceIn(0.0,1.0)
+            (if(signal.relevant) 24.0 else -30.0) * similarity * decay
+        }.toInt().coerceIn(-45,35)
+        val feedback = (affinity(saved)*2-affinity(hidden)*3+adjustment).coerceIn(-50,40)
+        val ageHours = (now - (item.publishedAtMillis.takeIf { it > 0 } ?: item.fetchedAtMillis)).coerceAtLeast(0) / 3_600_000.0
+        val halfLife = if (item.kind in setOf("news", "weather", "security", "business")) 24.0 else 168.0
+        val freshness = (-ln(1 + ageHours / halfLife) * if(halfLife == 24.0) 12 else 6).toInt().coerceAtLeast(-60)
+        val viewed = if (state.readingHistoryEnabled) state.viewedAtMillis[item.id] else null
+        val novelty = if (viewed == null) 14 else when ((now-viewed).coerceAtLeast(0)) {
+            in 0 until 21_600_000L -> -18
+            in 0 until 86_400_000L -> -10
+            else -> -3
+        }
+        val days = runCatching { ChronoUnit.DAYS.between(LocalDate.parse(FeedLogic.dateAt(now, state.timezone)), LocalDate.parse(item.deadline)) }.getOrNull()
+        val deadline = if (days != null && days in 0..3) 24 else 0
+        // Only a small, deterministic exploration allowance; never replace strong relevance with random noise.
+        val mixed = ((item.id.hashCode().toLong() * 0x9E3779B9L) xor (state.editionSequence * 0x85EBCA6BL)).ushr(8)
+        val exploration = if (state.editionSequence > 0 && item.relevance >= 40 && viewed == null) (mixed % 7).toInt() else 0
+        return Score(item.relevance.coerceIn(0, 100), interest, feedback, freshness, novelty, deadline, exploration)
+    }
+    }
+    /** Global About-you is explicitly shared with every question; other notes still require topic routing. */
+    fun contextForQuestion(state: FeedState, question: String): List<ContextEntry> =
+        FeedLogic.contextForKinds(state, questionKinds(state, question), 24)
+
+    /** Shared native/service routing metadata; this is not permission to expand any note's scopes. */
+    fun questionKinds(state: FeedState, question: String): Set<String> {
+        if (question.lowercase().contains("what matters for me") || question.lowercase().contains("leo kuna nini kinachonihusu")) return emptySet()
         val q = terms(question)
         val aliases = mapOf(
             "music" to setOf("music", "song", "songs", "piano", "muziki", "nyimbo", "wimbo"),
@@ -51,16 +96,11 @@ object RecommendationPolicy {
             "learning" to setOf("learn", "lesson", "course", "learning", "jifunze", "somo", "kujifunza"),
             "security" to setOf("security", "vulnerability", "vulnerabilities", "usalama"),
             "scholarships" to setOf("scholarship", "scholarships", "ufadhili"))
-        val selected = state.modules.filter { it.enabled && (aliases[it.kind].orEmpty().any(q::contains) || it.kind in q) }.map { it.kind }.toSet()
-        if(selected.isEmpty()) return emptyList()
-        return generalContext(state).filter { it.scopes.any(selected::contains) }
+        return state.modules.filter { it.enabled && (aliases[it.kind].orEmpty().any(q::contains) || it.kind in q) }.map { it.kind }.toSet()
     }
 
-    fun generalContext(state: FeedState): List<ContextEntry> {
-        val allowed = state.modules.filter { it.enabled }.map { it.kind }.toSet()
-        // General chat sees preference/interest/goal notes only, never private module-only notes.
-        return state.context.filter { it.confirmed && it.category in setOf("interest", "preference", "goal") && it.scopes.any(allowed::contains) }.take(24)
-    }
+    fun generalContext(state: FeedState): List<ContextEntry> = FeedLogic.contextForKinds(state, emptySet(), 24)
+
 }
 
 object LanguagePolicy {

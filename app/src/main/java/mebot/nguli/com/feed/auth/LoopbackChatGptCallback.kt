@@ -1,5 +1,9 @@
 package mebot.nguli.com.feed.auth
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -27,49 +31,72 @@ internal data class ChatGptCallbackCopy(
 )
 
 /** Only a loopback-bound, state-matched, single-use request can supply the authorization response. */
-internal class LoopbackChatGptCallback(private val copy: ChatGptCallbackCopy) : AutoCloseable {
+internal class LoopbackChatGptCallback(
+    private val copy: ChatGptCallbackCopy,
+    private val writeResponse: (Socket, ByteArray, ByteArray) -> Unit = { socket, headers, page ->
+        socket.getOutputStream().apply { write(headers); write(page); flush() }
+    },
+) : AutoCloseable {
     private val server = ServerSocket().apply {
         reuseAddress = false
         bind(InetSocketAddress(InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)), 0), 8)
         soTimeout = 500
     }
     private val closed = AtomicBoolean(false)
-    @Volatile private var activeSocket: Socket? = null
+    private val activeSockets = java.util.concurrent.ConcurrentHashMap.newKeySet<Socket>()
+    private val claimed = AtomicBoolean(false)
+    internal val activeConnectionCount: Int get() = activeSockets.size
     val redirectUri = "http://127.0.0.1:${server.localPort}/auth/callback"
 
     suspend fun await(expectedState: String): Map<String, String> = withContext(Dispatchers.IO) {
-        while (!closed.get()) {
-            currentCoroutineContext().ensureActive()
-            val socket = try { server.accept() } catch (_: SocketTimeoutException) { continue }
-            activeSocket = socket
-            if (closed.get()) { socket.close(); break }
-            socket.use {
-                it.soTimeout = 2_000
-                try {
-                    if (!it.inetAddress.isLoopbackAddress) { respond(it, 400, false); return@use }
-                    val raw = readHeaders(it)
-                    val callback = parseRequest(raw, server.localPort)
-                    if (!ChatGptIdTokenVerifier.constantTimeEqual(expectedState, callback["state"].orEmpty())) {
-                        respond(it, 400, false)
-                        return@use
-                    }
-                    respond(it, 200, true)
-                    close()
-                    return@withContext callback
-                } catch (_: SocketTimeoutException) { runCatching { respond(it, 408, false) } }
-                catch (_: IllegalArgumentException) { runCatching { respond(it, 400, false) } }
-                catch (_: java.io.IOException) { /* A disconnected local browser cannot consume the pending attempt. */ }
-                finally { activeSocket = null }
+        coroutineScope {
+            val accepted = CompletableDeferred<Map<String, String>>()
+            val slots = Semaphore(4)
+            while (!closed.get() && !accepted.isCompleted) {
+                currentCoroutineContext().ensureActive()
+                val socket = try { server.accept() }
+                    catch (_: SocketTimeoutException) { continue }
+                    catch (error: java.net.SocketException) { if (closed.get()) break else throw error }
+                activeSockets.add(socket)
+                if (closed.get() || !slots.tryAcquire()) { activeSockets.remove(socket); socket.close(); continue }
+                // Browsers may preconnect without sending headers. One idle connection must not
+                // hold the real callback behind its read timeout; concurrency stays strictly bounded.
+                launch(Dispatchers.IO) {
+                    try {
+                        socket.use {
+                            try {
+                                it.soTimeout = 2_000
+                                if (!it.inetAddress.isLoopbackAddress) { respond(it, 400, false); return@use }
+                                val callback = parseRequest(readHeaders(it), server.localPort)
+                                if (!ChatGptIdTokenVerifier.constantTimeEqual(expectedState, callback["state"].orEmpty())) {
+                                    respond(it, 400, false); return@use
+                                }
+                                val winner = synchronized(this@LoopbackChatGptCallback) {
+                                    !closed.get() && claimed.compareAndSet(false, true)
+                                }
+                                if (!winner) return@use
+                                // Rendering a browser page is not the authentication boundary. Once a
+                                // valid callback has arrived, a closed browser response must not discard it.
+                                try { respond(it, 200, true) }
+                                catch (_: java.io.IOException) { /* Browser went away after sending valid consent. */ }
+                                finally { accepted.complete(callback); close() }
+                            } catch (_: SocketTimeoutException) { runCatching { respond(it, 408, false) } }
+                            catch (_: IllegalArgumentException) { runCatching { respond(it, 400, false) } }
+                            catch (_: java.io.IOException) { /* Incomplete requests cannot consume the attempt. */ }
+                        }
+                    } catch (_: java.io.IOException) { /* Closing a disconnected browser is best effort. */ }
+                    finally { slots.release(); activeSockets.remove(socket) }
+                }
             }
+            if (accepted.isCompleted) accepted.await() else throw ChatGptAuthException("chatgpt_cancelled")
         }
-        throw ChatGptAuthException("chatgpt_cancelled")
     }
 
     @Synchronized
     override fun close() {
         if (closed.compareAndSet(false, true)) {
             runCatching { server.close() }
-            runCatching { activeSocket?.close() }
+            activeSockets.forEach { socket -> runCatching { socket.close() } }
         }
     }
 
@@ -108,7 +135,7 @@ internal class LoopbackChatGptCallback(private val copy: ChatGptCallbackCopy) : 
             .toByteArray(Charsets.UTF_8)
         val reason = when (status) { 200 -> "OK"; 408 -> "Request Timeout"; else -> "Bad Request" }
         val headers = "HTTP/1.1 $status $reason\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${page.size}\r\nCache-Control: no-store\r\nPragma: no-cache\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'none'; style-src 'sha256-$styleHash'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n"
-        socket.getOutputStream().apply { write(headers.toByteArray(Charsets.US_ASCII)); write(page); flush() }
+        writeResponse(socket, headers.toByteArray(Charsets.US_ASCII), page)
     }
 
     companion object {

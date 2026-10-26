@@ -173,6 +173,7 @@ internal fun ModuleReorderList(modules: List<FeedModule>, scroll: ScrollState, v
                                     Icon(Icons.Outlined.DragHandle, null, Modifier.size(21.dp))
                                 }
                                 DropdownMenu(expanded = menu && pendingIds == null, onDismissRequest = { menu = false }) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
                                     DropdownMenuItem(text = { Text(moveUp) }, enabled = index > 0,
                                         onClick = { menu = false; move(id, -1) }, modifier = Modifier.testTag("module-up-$id"))
                                     DropdownMenuItem(text = { Text(moveDown) }, enabled = index < installedIds.lastIndex,

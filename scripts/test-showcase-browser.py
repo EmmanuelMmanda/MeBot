@@ -19,7 +19,8 @@ server = ThreadingHTTPServer(('127.0.0.1', 0), partial(Quiet, directory=str(ROOT
 threading.Thread(target=server.serve_forever, daemon=True).start()
 base = f'http://127.0.0.1:{server.server_port}/'
 r = json.loads((ROOT / 'docs/assets/release.json').read_text())
-apk = f"https://github.com/EmmanuelMmanda/MeBot/releases/download/{r['tag']}/{r['filename']}"
+published = r["status"] == "published"
+apk = f"https://github.com/EmmanuelMmanda/MeBot/releases/download/{r['tag']}/{r['filename']}" if published else None
 checks = []
 def load(page,name,**kwargs):
     if not os.environ.get('MEBOT_OFFLINE_BROWSER'):
@@ -50,7 +51,7 @@ try:
                 page = context.new_page()
                 errors = []
                 page.on('pageerror', lambda e: errors.append(str(e)))
-                for name in ['index.html', 'screenshots.html', 'download.html', 'releases.html', 'tour.html', 'preview-083.html', 'preview-084.html']:
+                for name in ['index.html', 'screenshots.html', 'download.html', 'releases.html', 'tour.html', 'preview-083.html', 'preview-084.html', 'preview-085.html', 'preview-090.html']:
                     load(page,name,wait_until='networkidle')
                     assert page.locator('h1').count() == 1, name
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), f'Overflow {width} {theme} {name}'
@@ -65,6 +66,17 @@ try:
                         assert page.locator('a[href*="/releases/download/v0.8.4/"]').count() == 0
                         assert page.locator('main [lang="sw"]').count() == 1
                         assert page.locator('a[href="preview-083.html"]').count() >= 1
+                    if name == 'preview-085.html':
+                        assert 'Preview, not a published APK' in page.locator('main').inner_text()
+                        assert '150 words and 1,000 characters' in page.locator('main').inner_text()
+                        assert page.locator('a[href*="/releases/download/v0.8.5/"]').count() == 0
+                        assert page.locator('main [lang="sw"]').count() == 1
+                    if name == 'preview-090.html':
+                        assert 'not a published official APK' in page.locator('main').inner_text()
+                        assert page.locator('a[href*="/releases/download/v0.9.0/"]').count() == 0
+                        assert page.locator('.shot img[src$="onboarding-en-chooser.png"]').count() == 1
+                        assert page.locator('.shot img[src$="onboarding-sw-chooser.png"]').count() == 1
+                        assert page.locator('.shot img[src*="small-sw-large"]').count() == 0
                     for link in page.locator('[data-release-apk]').all():
                         assert link.is_visible() and link.get_attribute('href') == apk
                     for im in page.locator('.shot:visible img').all():
@@ -80,8 +92,9 @@ try:
         page = context.new_page()
         load(page,'screenshots.html',wait_until='networkidle')
         page.get_by_role('button', name='Getting started', exact=True).click()
-        assert page.locator('#screen-gallery .shot:visible').count() == 3
-        assert page.locator('#screen-count').inner_text() == '3 screens'
+        start_count = sum(s['group'] == 'start' for s in json.loads((ROOT/'docs/assets/screens.json').read_text()))
+        assert page.locator('#screen-gallery .shot:visible').count() == start_count
+        assert page.locator('#screen-count').inner_text() == f'{start_count} screens'
         opener = page.locator('#screen-gallery .shot:visible a').first
         opener.focus(); page.keyboard.press('Enter')
         assert page.locator('#image-dialog').is_visible()
@@ -100,8 +113,12 @@ try:
         page = context.new_page()
         for name in ('index.html','download.html','releases.html'):
             load(page,name)
-            assert page.locator('[data-release-apk]').first.is_visible()
-            assert page.locator('[data-release-apk]').first.get_attribute('href') == apk
+            if published:
+                assert page.locator('[data-release-apk]').first.is_visible()
+                assert page.locator('[data-release-apk]').first.get_attribute('href') == apk
+            else:
+                assert page.locator('[data-release-apk]').count() == 0
+                assert page.locator('.release-hold').is_visible()
         load(page,'screenshots.html')
         assert page.locator('#screen-gallery .shot').count() == len(json.loads((ROOT/'docs/assets/screens.json').read_text()))
         checks += ['APK links and all screenshots remain available with JavaScript disabled']
@@ -119,12 +136,12 @@ try:
         page.locator('[data-tour-prev]').click(); assert page.locator('#tour-panel-0').is_visible()
         page.screenshot(path=str(OUT/'tour-390.png'),full_page=True)
         checks += ['Illustrated guide: all six steps, next/back, keyboard Home and reduced motion']
-        load(page,'preview-084.html',wait_until='networkidle')
+        load(page,'preview-085.html',wait_until='networkidle')
         page.keyboard.press('Tab')
         assert page.locator('.skip-link').evaluate('el => el === document.activeElement')
         page.keyboard.press('Enter')
         assert page.locator('#main').evaluate('el => el === document.activeElement')
-        checks += ['0.8.4 preview: keyboard skip link reaches main content']
+        checks += ['0.8.5 preview: keyboard skip link reaches main content']
         context.close(); browser.close()
 finally:
     server.shutdown()

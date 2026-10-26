@@ -61,7 +61,9 @@ class MeBotAlarmAudioUiTest {
         WorkManagerTestInitHelper.initializeTestWorkManager(app)
         runBlocking { app.repository.erase() }
         app.alarms.clearAll()
-        vm = ViewModelProvider(compose.activity)[MeBotViewModel::class.java]
+        // Match production and avoid a global Android factory retaining another Robolectric app.
+        vm = ViewModelProvider(compose.activity, ViewModelProvider.AndroidViewModelFactory(app))[MeBotViewModel::class.java]
+        assertSame("ViewModel must use this test Activity application", app, vm.getApplication<FeedTestApplication>())
         compose.waitUntil(10_000) { vm.ui.value.state != null }
     }
 
@@ -93,8 +95,14 @@ class MeBotAlarmAudioUiTest {
         restoration.emulateSavedInstanceStateRestore()
         compose.onNodeWithTag("alarm-sound-bell").performScrollTo().assertIsSelected()
         compose.onNodeWithTag("alarm-speech-message").performScrollTo().assertTextContains("Open the curtains and start the day.")
+        compose.onNodeWithTag("alarm-enabled").assertIsOff()
         compose.onNodeWithTag("alarm-save").performScrollTo().performClick()
-        compose.waitUntil(10_000) { saved == 1 && runBlocking { app.repository.current() }.alarms.size == 1 }
+        compose.waitForIdle()
+        try {
+            compose.waitUntil(10_000) { saved == 1 && runBlocking { app.repository.current() }.alarms.size == 1 }
+        } catch (failure: androidx.compose.ui.test.ComposeTimeoutException) {
+            throw AssertionError("Alarm save did not finish: callback=$saved message=${vm.message.value?.let(app::getString)} persisted=${runBlocking { app.repository.current() }.alarms.map { it.enabled }}", failure)
+        }
         val plan = runBlocking { app.repository.current() }.alarms.single()
         assertEquals("bell", plan.soundId)
         assertEquals("", plan.soundUri)

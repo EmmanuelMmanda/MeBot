@@ -96,7 +96,6 @@ internal fun AiActivityPanel(activity: AiActivity?, modifier: Modifier = Modifie
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                     val detail = when {
                         resultCount != null -> stringResource(R.string.activity_verified_count, resultCount)
-                        activity.receivedCharacters > 0 -> stringResource(R.string.activity_received_chars, activity.receivedCharacters)
                         activity.source.isNotBlank() -> activity.source
                         else -> stringResource(R.string.activity_seconds, seconds)
                     }
@@ -112,6 +111,7 @@ internal fun AiActivityPanel(activity: AiActivity?, modifier: Modifier = Modifie
         DropdownMenu(expanded = expanded && showDetails, onDismissRequest = { expanded = false },
             properties = PopupProperties(focusable = true, usePlatformDefaultWidth = false),
             modifier = Modifier.width(anchorWidth).heightIn(max = 380.dp).testTag("activity-details-popup")) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(scopeLabel.ifBlank { operation }, style = MaterialTheme.typography.titleSmall)
                 activity.contextEntries?.let { count ->

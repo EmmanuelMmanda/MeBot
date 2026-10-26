@@ -26,6 +26,7 @@ interface FeedEnricher { suspend fun enrich(items: List<FeedItem>): List<FeedIte
 class PublisherMediaEnricher(
     private val http: FeedHttp = SecureFeedHttp(maxBytes = 1024 * 1024, publicReadTimeoutMillis = 8_000, publicDeadlineMillis = 10_000),
     private val maxItems: Int = 6,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) : FeedEnricher {
     override suspend fun enrich(items: List<FeedItem>): List<FeedItem> = coroutineScope {
         val selected = items.filter { it.media == null && it.contentType != "weather" && FeedLogic.safeUrl(it.sourceUrl, true) }
@@ -33,11 +34,16 @@ class PublisherMediaEnricher(
         val semaphore = Semaphore(2)
         items.map { item -> async {
             if (item.id !in selected) item else semaphore.withPermit {
-                val media = try {
-                    withTimeoutOrNull(12_000) { PublisherMediaParser.parse(http.request(item.sourceUrl), item.sourceUrl, item.sourceName) }
+                val enriched = try {
+                    withTimeoutOrNull(12_000) {
+                        // Reuse the existing bounded public HTML retrieval: Today never adds a request.
+                        val html = http.request(item.sourceUrl)
+                        item.copy(media = PublisherMediaParser.parse(html, item.sourceUrl, item.sourceName),
+                            temporal = PublisherTemporalParser.parse(html, item.sourceUrl, clock()) ?: item.temporal)
+                    }
                 } catch (cancel: CancellationException) { throw cancel }
                 catch (_: Exception) { null }
-                item.copy(media = media)
+                enriched ?: item
             }
         } }.awaitAll()
     }

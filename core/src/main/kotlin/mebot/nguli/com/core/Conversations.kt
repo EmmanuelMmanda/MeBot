@@ -78,8 +78,7 @@ object ConversationLogic {
     fun context(state: FeedState, thread: AiConversation): List<ContextEntry> {
         val kind = thread.moduleId?.let { id -> state.modules.find { it.id == id }?.kind }
             ?: thread.itemId?.let { id -> state.items.find { it.id == id }?.kind }
-            ?: return emptyList()
-        return state.context.filter { it.confirmed && kind in it.scopes }.take(32)
+        return FeedLogic.contextForKinds(state, setOfNotNull(kind))
     }
 
     fun validateBriefs(briefs: List<AiItemBrief>) {

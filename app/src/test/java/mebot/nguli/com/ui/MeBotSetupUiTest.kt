@@ -26,6 +26,7 @@ import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.FeedTestApplication
 import mebot.nguli.com.feed.FeedViewModel
 import mebot.nguli.com.ui.feed.ContextScreen
+import mebot.nguli.com.ui.feed.ContextImportScreen
 import mebot.nguli.com.ui.feed.ContextSetup
 import mebot.nguli.com.ui.feed.FaqScreen
 import kotlinx.coroutines.Dispatchers
@@ -95,27 +96,25 @@ class MeBotSetupUiTest {
         restoration.setContent {
             val ui by vm.ui.collectAsState()
             MeBotTheme { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                ContextScreen(ui, vm, onDone = {})
+                ContextImportScreen(ui, vm, onBack = {})
             } }
         }
         compose.onNodeWithTag("context-import").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(compose.activity.getString(R.string.feed_advanced)).assertDoesNotExist()
         screenshot("60-mebot-context-v061")
-        compose.onNodeWithTag("context-paste").performScrollTo().performClick()
         compose.onNodeWithTag("context-paste-review").assertIsNotEnabled()
-        compose.onNodeWithTag("context-paste-input").performTextInput("{ invalid JSON }")
-        compose.onNodeWithTag("context-paste-review").performClick()
+        compose.onNodeWithTag("context-paste-input").performScrollTo().performTextInput("{ invalid JSON }")
+        compose.onNodeWithTag("context-paste-review").performScrollTo().performClick()
         waitForModel { !vm.ui.value.importWorking && vm.ui.value.error != null }
         assertEquals(original.context, runBlocking { app.feedRepository.current().context })
-        screenshot("67-mebot-context-paste-v061", "context-paste-dialog")
+        screenshot("67-mebot-context-paste-v061")
         restoration.emulateSavedInstanceStateRestore()
         compose.onNodeWithTag("context-paste-input").assertTextContains("{ invalid JSON }")
 
         val valid = ContextSetup.example("Prefer practical tutorials with working examples")
-        compose.onNodeWithTag("context-paste-input").performTextReplacement(valid)
-        compose.onNodeWithTag("context-paste-review").performClick()
+        compose.onNodeWithTag("context-paste-input").performScrollTo().performTextReplacement(valid)
+        compose.onNodeWithTag("context-paste-review").performScrollTo().performClick()
         waitForModel { vm.ui.value.importPreview != null }
-        compose.onNodeWithTag("context-paste-dialog").assertDoesNotExist()
         compose.onNodeWithTag("import-review").assertExists()
         assertEquals(original.context, runBlocking { app.feedRepository.current().context })
         compose.onNodeWithTag("import-confirm").performClick()

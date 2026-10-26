@@ -101,7 +101,21 @@ class MeBotFeedJourneyTest {
     }
 
     @Test fun moduleDraftSurvivesRotationAndPausingItPreservesSavedContent() {
+        val installation = app
+        val repository = app.feedRepository
+        val observations = mutableListOf<String>()
+        fun observe(label: String, value: FeedState = state()) {
+            assertSame("Application changed at $label", installation, app)
+            assertSame("Repository changed at $label", repository, app.feedRepository)
+            val observation = "$label: modules=${value.modules.map { it.id to it.enabled }} saved=${value.savedIds} " +
+                "activity=${System.identityHashCode(compose.activity)} app=${System.identityHashCode(app)} repo=${System.identityHashCode(app.feedRepository)}"
+            if (observations.lastOrNull() != observation) {
+                if (observations.size == 32) observations.removeAt(0)
+                observations += observation
+            }
+        }
         start()
+        observe("after-onboarding")
         tab("modules")
         screenshot("24-mebot-modules")
         // The first empty refresh can cover the bottom edge where scrollTo places Add.
@@ -117,17 +131,41 @@ class MeBotFeedJourneyTest {
         compose.onNodeWithTag("module-topic").performScrollTo().performTextInput("Open source tools for local AI")
         compose.activityRule.scenario.recreate()
         waitForTag("module-name")
+        observe("after-editor-recreation")
         compose.onNodeWithTag("module-name").assertTextContains("Research watch")
         compose.onNodeWithTag("module-topic").assertTextContains("Open source tools for local AI")
         screenshot("25-mebot-add-watch")
         compose.onNodeWithTag("module-save").performScrollTo().performClick()
         waitForState { it.modules.any { module -> module.title == "Research watch" } }
         val module = state().modules.single { it.title == "Research watch" }
+        observe("saved-module-${module.id}")
         waitForTag("module-${module.id}")
         val article = stories().first().copy(id = "watch-result", moduleId = module.id, kind = "watch")
-        runBlocking { app.feedRepository.update { it.copy(items = listOf(article), savedIds = setOf(article.id)) } }
+        val fixture = runBlocking { app.feedRepository.update { it.copy(items = listOf(article), savedIds = setOf(article.id)) } }
+        observe("fixture-update-return", fixture)
+        observe("fixture-immediate-read")
+        observe("before-toggle")
         compose.onNodeWithTag("module-toggle-${module.id}").performScrollTo().performClick()
-        waitForState { it.modules.single { entry -> entry.id == module.id }.enabled.not() }
+        fun diagnosed(failure: Throwable): AssertionError {
+            val persistedIds = runCatching {
+                val raw = File(installation.filesDir, "mebot/feed.json").readText()
+                mebot.nguli.com.feed.FeedJson.decodeFromString<FeedState>(raw).modules.map { it.id to it.enabled }
+            }.fold({ it.toString() }, { "unreadable:${it.javaClass.simpleName}" })
+            val ui = androidx.lifecycle.ViewModelProvider(compose.activity)[mebot.nguli.com.feed.FeedViewModel::class.java].ui.value
+            return AssertionError("Module ${module.id} absent or pause failed; persisted modules=$persistedIds; " +
+                "VM modules=${ui.state?.modules?.map { it.id to it.enabled }} error=${ui.error} saving=${ui.moduleSavingId}\n" +
+                observations.joinToString("\n"), failure)
+        }
+        try {
+            waitForState { current ->
+                observe("toggle-poll", current)
+                current.modules.single { entry -> entry.id == module.id }.enabled.not()
+            }
+        } catch (failure: Exception) {
+            throw diagnosed(failure)
+        } catch (failure: AssertionError) {
+            throw diagnosed(failure)
+        }
         compose.activityRule.scenario.recreate()
         waitForTag("module-toggle-${module.id}")
         compose.onNodeWithTag("module-toggle-${module.id}").performScrollTo().assertIsOff()
@@ -136,34 +174,41 @@ class MeBotFeedJourneyTest {
         tab("saved")
         compose.onNodeWithTag("item-watch-result").performScrollTo().assertIsDisplayed()
         assertEquals(setOf(article.id), state().savedIds)
+        println("Module pause diagnostic checkpoints:\n" + observations.joinToString("\n"))
     }
 
     @Test fun editingContextPreservesExistingScopesAndChangesTheReopenedGreeting() {
         start()
-        val scoped = ContextEntry(id = "scoped-interest", text = "Build small Android tools", scopes = setOf("news"), origin = "imported", updatedAtMillis = 1)
-        val changedText = "Build accessible Android tools\nKeep them easy to maintain"
+        val scoped = ContextEntry(id = "scoped-interest", text = "For business updates, focus on stock management and customer service in Tanzania.", scopes = setOf("business"), origin = "imported", updatedAtMillis = 1)
+        val changedText = "I am a Tanzanian entrepreneur running a neighbourhood shop, a food business and a delivery service. I want practical ideas and concise explanations with local examples."
         runBlocking { app.feedRepository.update { it.copy(context = listOf(scoped), items = listOf(stories().first().copy(why = "An old explanation", relevance = 90))) } }
         tab("you")
         clickText(R.string.preferences_title_083)
         waitForTag("context-name")
         compose.onNodeWithTag("context-name").performScrollTo().performTextInput("Alex")
         compose.onNodeWithTag("context-edit").performScrollTo().performTextReplacement(changedText)
-        compose.onNodeWithTag("context-add").performScrollTo().performClick()
-        compose.onNode(SemanticsMatcher("additional context entry") { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("context-edit-") == true }).performScrollTo().performTextInput("Learn practical machine learning")
+        compose.onNodeWithTag("context-edit-scoped-interest").assertTextContains(scoped.text)
         compose.activityRule.scenario.recreate()
         waitForTag("context-name")
         compose.onNodeWithTag("context-name").assertTextContains("Alex")
         compose.onNodeWithTag("context-edit").assertTextContains(changedText)
-        compose.onNode(SemanticsMatcher("additional context entry") { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("context-edit-") == true }).assertTextContains("Learn practical machine learning")
-        compose.onNodeWithTag("context-name").performScrollTo()
+        compose.onNodeWithTag("context-edit-scoped-interest").assertTextContains(scoped.text)
+        compose.onNode(hasText(text(R.string.preferences_title_083)) and !hasSetTextAction()).performScrollTo()
         screenshot("28-mebot-context")
+        screenshot("v085-personal-page")
+        compose.onNodeWithTag("context-global-use").performScrollTo().assertExists()
+        compose.onNodeWithTag("context-scopes-${PersonalProfile085.PROFILE_ID}").assertDoesNotExist()
+        compose.onNodeWithTag("context-scopes-scoped-interest").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("context-edit-scoped-interest").assertIsDisplayed()
+        screenshot("v085-context-notes")
         compose.onNodeWithTag("context-save").performScrollTo().performClick()
         waitForState { it.name == "Alex" && it.context.size == 2 }
         waitForTag("nav-you")
-        val edited = state().context.single { it.id == scoped.id }
-        assertEquals(scoped.copy(text = changedText, updatedAtMillis = edited.updatedAtMillis), edited)
-        assertTrue(edited.updatedAtMillis > scoped.updatedAtMillis)
-        assertEquals(setOf("news", "opportunities", "watch"), state().context.single { it.id != scoped.id }.scopes)
+        assertEquals(scoped, state().context.single { it.id == scoped.id })
+        val profile = state().context.single { it.id == PersonalProfile085.PROFILE_ID }
+        assertEquals(changedText, profile.text)
+        assertTrue(profile.global)
+        assertTrue(profile.scopes.isEmpty())
         assertTrue(state().items.single().why.isEmpty())
         assertEquals(0, state().items.single().relevance)
         compose.activityRule.scenario.recreate()

@@ -136,10 +136,10 @@
     }).then(release => {
       const repository = 'https://github.com/EmmanuelMmanda/MeBot';
       const valid = item => item && /^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?$/.test(item.version) && item.tag === `v${item.version}`;
-      const validApk = item => item.filename === `mebot-${item.version}.apk`
+      const validApk = item => [`mebot-${item.version}.apk`, `MeBot-${item.version}.apk`].includes(item.filename)
         && /^[a-f0-9]{64}$/i.test(item.sha256 || '')
         && Number.isSafeInteger(item.sizeBytes) && item.sizeBytes > 0;
-      const validSource = item => item.sourceFilename === `mebot-${item.version}-source.zip`
+      const validSource = item => [`mebot-${item.version}-source.zip`, `MeBot-${item.version}-source.zip`].includes(item.sourceFilename)
         && ((/^[a-f0-9]{64}$/i.test(item.sourceSha256 || '') && Number.isSafeInteger(item.sourceSizeBytes) && item.sourceSizeBytes > 0) || item.sourceIntegrityFile === 'SHA256SUMS.txt')
         && /^[a-f0-9]{40}$/i.test(item.sourceCommit || '');
       const unavailable = () => document.querySelectorAll('[data-release-load-error]').forEach(item => { item.hidden = false; });
@@ -151,11 +151,11 @@
           unavailable(); return;
         }
         const sourceLink = node.querySelector('[data-archive-source]');
-        if (sourceLink) { sourceLink.href = `${repository}/releases/download/${entry.tag}/mebot-${entry.version}-source.zip`; sourceLink.hidden = false; }
+        if (sourceLink) { sourceLink.href = `${repository}/releases/download/${entry.tag}/${entry.sourceFilename}`; sourceLink.hidden = false; }
         const notesLink = node.querySelector('[data-archive-notes]');
         if (notesLink) { notesLink.href = `${repository}/releases/tag/${entry.tag}`; notesLink.hidden = false; }
         const apkLink = node.querySelector('[data-archive-apk]');
-        if (apkLink && entry.apk === true) { apkLink.href = `${repository}/releases/download/${entry.tag}/mebot-${entry.version}.apk`; apkLink.hidden = false; }
+        if (apkLink && entry.apk === true) { apkLink.href = `${repository}/releases/download/${entry.tag}/${entry.filename}`; apkLink.hidden = false; }
         const status = node.querySelector('[data-archive-status]');
         if (status) status.textContent = entry.apk === true ? 'Public APK and source' : 'Source only · no APK';
         node.querySelectorAll('[data-archive-pending]').forEach(item => { item.hidden = true; });
@@ -166,12 +166,12 @@
       });
       if (release.status !== 'published') return;
       if (!validApk(release) || !validSource(release)) throw new Error('Incomplete public release metadata');
-      const file = `mebot-${release.version}.apk`;
+      const file = release.filename;
       const apk = `${repository}/releases/download/v${release.version}/${file}`;
       document.querySelectorAll('[data-release-apk]').forEach(link => { link.href = apk; link.hidden = false; });
       document.querySelectorAll('[data-release-pending]').forEach(item => { item.hidden = true; });
       document.querySelectorAll('[data-release-source]').forEach(link => {
-        link.href = `${repository}/releases/download/v${release.version}/mebot-${release.version}-source.zip`; link.hidden = false;
+        link.href = `${repository}/releases/download/v${release.version}/${release.sourceFilename}`; link.hidden = false;
       });
       releaseNodes.forEach(item => { item.textContent = `Version ${release.version} · ${release.channel === 'beta' ? 'Testing release' : 'Official release'}`; });
       document.querySelectorAll('[data-release-filename]').forEach(item => { item.textContent = file; });

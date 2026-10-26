@@ -1,0 +1,21 @@
+<resources>
+    <string name="personalization_092">Personalization</string>
+    <string name="personalization_summary_092">Appearance, language and app lock</string>
+    <string name="personalization_lock_092">App PIN and fingerprint or face unlock</string>
+    <string name="starred_settings_092">Starred stories</string>
+    <string name="starred_summary_092">Follow-up frequency and background checks</string>
+    <string name="starred_intro_092">Choose how often to look for new coverage.</string>
+    <string name="starred_timing_092">Checks run during feed refresh, using your AI connection and request allowance. Android may delay background work.</string>
+    <string name="starred_empty_092">Tap the star beside a story to follow it here.</string>
+    <string name="starred_background_092">Background refresh</string>
+    <string name="starred_background_on_092">Enabled · about every %1$d hours</string>
+    <string name="starred_background_off_092">Off · checks run when you refresh</string>
+    <string name="starred_ai_needed_092">Connect AI to check for follow-ups.</string>
+    <string name="starred_module_off_092">This module is off. Enable it in Modules to resume checks.</string>
+    <string name="starred_remove_092">Stop following</string>
+    <string name="lock_setup_intro_092">Use a separate app PIN. MeBot locks when you leave it or your device locks.</string>
+    <string name="lock_protects_092">What this protects</string>
+    <string name="lock_change_section_092">Change PIN</string>
+    <string name="lock_biometric_section_092">Fingerprint or face</string>
+    <string name="lock_auth_hint_092">Enter your current app PIN to change security settings.</string>
+</resources>

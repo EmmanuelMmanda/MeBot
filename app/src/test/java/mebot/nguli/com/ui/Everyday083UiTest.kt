@@ -54,32 +54,14 @@ class Everyday083UiTest {
         screenshot("v083-interests")
     }
 
-    @Test fun calculatorValidatesComputesRestoresAndClearsWithoutNetwork() {
-        restoration.setContent { MeBotTheme { Surface(Modifier.fillMaxSize()) { UnitPriceScreen() } } }
-        compose.onNodeWithTag("unit-price-compare").performScrollTo().performClick()
-        compose.onNodeWithTag("unit-price-error").assertExists()
-        compose.onNodeWithTag("unit-price-a-cost").performScrollTo().performTextInput("2500")
-        compose.onNodeWithTag("unit-price-a-amount").performScrollTo().performTextInput("1")
-        compose.onNodeWithTag("unit-price-b-cost").performScrollTo().performTextInput("6000")
-        compose.onNodeWithTag("unit-price-b-amount").performScrollTo().performTextInput("3")
-        compose.onNodeWithTag("unit-price-compare").performScrollTo().performClick()
-        compose.onNodeWithTag("unit-price-result").assertExists()
-        compose.onNodeWithTag("unit-price-error").assertDoesNotExist()
-        restoration.emulateSavedInstanceStateRestore()
-        compose.onNodeWithTag("unit-price-result").performScrollTo().assertIsDisplayed()
-        screenshot("v083-price-comparison")
-        compose.onNodeWithTag("unit-price-reset").performScrollTo().performClick()
-        compose.onNodeWithTag("unit-price-result").assertDoesNotExist()
-    }
-
-    @Test fun modulesExposeOfflinePriceToolAndNewTopicsWithoutChangingSavedChoices() {
+    @Test fun modulesOmitRemovedPriceToolAndKeepNewTopicsWithoutChangingSavedChoices() {
         var opened = ""
         compose.setContent { MeBotTheme { Surface(Modifier.fillMaxSize(), color=MaterialTheme.colorScheme.background) {
             ModulesScreen(FeedState(),AppState(),{},{_,_->},{opened=it},{_,_->})
         } } }
         compose.onNodeWithTag("module-search").performTextInput("compare prices")
-        compose.onNodeWithTag("module-compare-prices").performScrollTo().performClick()
-        assertEquals("compare_prices", opened)
+        compose.onNodeWithTag("module-compare-prices").assertDoesNotExist()
+        assertEquals("", opened)
         compose.onNodeWithTag("module-search").performScrollTo().performTextReplacement("farming")
         compose.onNodeWithTag("module-farming").assertExists()
         compose.onNodeWithTag("module-toggle-farming").assertIsOff()

@@ -30,7 +30,14 @@ object FeedLogic {
         .digest(canonicalUrl(url).toByteArray()).take(16).joinToString("") { "%02x".format(it) }
 
     fun scopedContext(state: FeedState, module: FeedModule): List<ContextEntry> =
-        state.context.filter { it.confirmed && module.kind in it.scopes }.take(32)
+        contextForKinds(state, setOf(module.kind))
+
+    /** Explicit About-you consent applies to future/disabled/custom modules too; old notes remain scoped. */
+    fun contextForKinds(state: FeedState, kinds: Set<String>, limit: Int = 32): List<ContextEntry> {
+        require(limit >= 0)
+        return state.context.filter { it.confirmed && (PersonalProfile085.isGlobal(it) || (!it.global && it.scopes.any(kinds::contains))) }
+            .sortedByDescending { PersonalProfile085.isGlobal(it) }.take(limit)
+    }
 
     fun visible(state: FeedState, now: Long = System.currentTimeMillis()): List<FeedItem> {
         val enabled = state.modules.filter { it.enabled }.map { it.id }.toSet()
@@ -43,9 +50,14 @@ object FeedLogic {
     }
 
     /** One useful item per module before repeats; freshness and source variety break the tie. */
-    fun edition(state: FeedState, now: Long = System.currentTimeMillis()): List<FeedItem> {
-        val eligible = visible(state, now)
-        val scores = eligible.associate { it.id to RecommendationPolicy.score(state, it, now).total }
+    fun edition(state: FeedState, now: Long = System.currentTimeMillis()): List<FeedItem> =
+        editionEligible(state, now, visible(state, now))
+
+    /** Filter candidates before diversity selection; retain full state for personalization evidence. */
+    internal fun editionEligible(state: FeedState, now: Long, eligible: List<FeedItem>): List<FeedItem> {
+        // Small editions avoid snapshot setup; measured host fixtures show its break-even above five items.
+        val ranking = if (eligible.size > 10) RecommendationPolicy.prepare(state, now) else null
+        val scores = eligible.associate { it.id to (ranking?.score(it) ?: RecommendationPolicy.score(state, it, now)).total }
         fun score(item: FeedItem): Int = scores.getValue(item.id)
         fun source(item: FeedItem): String = runCatching { URI(item.sourceUrl).host?.removePrefix("www.") }
             .getOrNull().orEmpty().ifBlank { item.moduleId }
@@ -89,7 +101,8 @@ object FeedLogic {
             val old = existing[item.id]
             // Preserve a sourced AI explanation when a later plain RSS sync sees the same URL.
             existing[item.id] = if (old?.aiGenerated == true && !item.aiGenerated)
-                old.copy(fetchedAtMillis = now, media = old.media ?: item.media)
+                old.copy(fetchedAtMillis = now, media = old.media ?: item.media,
+                    temporal = if (canonicalUrl(old.sourceUrl) == canonicalUrl(item.sourceUrl)) item.temporal ?: old.temporal else old.temporal)
             else if (item.media == null && old?.media != null && canonicalUrl(old.sourceUrl) == canonicalUrl(item.sourceUrl))
                 item.copy(media = old.media)
             else item
@@ -123,6 +136,7 @@ object FeedLogic {
         s.modules.forEach(::validateModule)
         require(s.context.size <= 80 && s.context.map { it.id }.distinct().size == s.context.size)
         s.context.forEach { require(it.id.length in 1..100 && it.text.length in 1..1000 && it.category.length <= 40 && it.origin.length <= 40 && it.scopes.all { scope -> scope in ModuleCatalog.kinds }) }
+        s.context.forEach { require(!it.global || PersonalProfile085.isGlobal(it)) }
         require(s.items.size <= 1000 && s.items.map { it.id }.distinct().size == s.items.size)
         s.items.forEach(::validateItem)
         require(s.savedIds.size <= 500 && s.hiddenIds.size <= 1000)
@@ -156,6 +170,7 @@ object FeedLogic {
     }
 
     fun validateItem(i: FeedItem) {
+        i.temporal?.let(TodayFeed::validate)
         require(i.keyPoints.size <= 4 && i.keyPoints.all { it.isNotBlank() && it.length <= 400 })
         require(i.nextStep.length <= 800 && i.caveat.length <= 600)
         require(i.id.length in 1..100 && i.moduleId.length in 1..100 && i.title.length in 1..300)

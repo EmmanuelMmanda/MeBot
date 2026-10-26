@@ -1,0 +1,12 @@
+<resources>
+    <string name="settings_lock_summary_091">PIN, alama ya kidole au uso, na kufunga kiotomatiki</string>
+    <string name="settings_preferences_summary_091">Mwonekano, lugha na zana za kila siku</string>
+    <string name="settings_data_summary_091">Historia ya kusoma, kuingiza data na nakala</string>
+    <string name="today_published_time_091">Imechapishwa %1$s</string>
+    <string name="today_updated_time_091">Imesasishwa %1$s</string>
+    <string name="weather_range_091">Utabiri · %1$s–%2$s</string>
+    <string name="weather_unknown_time_091">Utabiri · muda haujulikani</string>
+    <string name="today_dates_091">Tarehe za chanzo</string>
+    <string name="today_retrieved_091">Imekaguliwa %1$s</string>
+    <string name="today_zone_091">Saa zinaonyeshwa kwa %1$s</string>
+</resources>

@@ -53,14 +53,14 @@ class FeedEditionEngineTest {
     }
     @After fun close() = runBlocking { jobs.cancelAndJoin() }
 
-    @Test fun connectedDiscoveryDoesNotWaitForOrPreferRss() = runBlocking {
+    @Test fun connectedDiscoveryRetainsIndependentPublicAndAiResults() = runBlocking {
         vault.write("fixture-key")
         val engine = FeedEngine(repository, vault, reader, provider)
         val result = engine.refresh()
         assertNull(result.error)
-        assertEquals(0, rssReads)
+        assertEquals(1, rssReads)
         assertEquals(listOf("news"), aiModules)
-        assertEquals(listOf("ai-news"), repository.current().items.map { it.id })
+        assertEquals(setOf("rss", "ai-news"), repository.current().items.map { it.id }.toSet())
     }
 
     @Test fun weatherUsesTypedPublicDataAndNeverConsumesAnAiRequest() = runBlocking {
@@ -106,8 +106,8 @@ class FeedEditionEngineTest {
         }
         val result = FeedEngine(repository, vault, reader, provider, enricher = media).refresh()
         assertNull(result.error)
-        assertEquals("ai-news", repository.current().items.single().id)
-        assertNull(repository.current().items.single().media)
+        assertEquals(setOf("rss", "ai-news"), repository.current().items.map { it.id }.toSet())
+        assertTrue(repository.current().items.all { it.media == null })
     }
 
     @Test fun contextChangeDuringMediaLoadCannotRestoreAStaleExplanation() = runBlocking {
@@ -126,8 +126,7 @@ class FeedEditionEngineTest {
             items = it.items.map { item -> item.copy(why = "", relevance = 0) }) }
         release.complete(Unit)
         refresh.await()
-        assertNull(repository.current().items.single().media)
-        assertEquals(0, repository.current().items.single().relevance)
+        assertTrue(repository.current().items.all { it.media == null && it.relevance == 0 })
     }
 
     @Test fun requestCapServesTheLeastRecentlyRefreshedModuleFirst() = runBlocking {
@@ -151,6 +150,51 @@ class FeedEditionEngineTest {
         val result = FeedEngine(repository, vault, reader, provider, discovery = wrong).refresh()
         assertNotNull(result.error)
         assertTrue(repository.current().items.isEmpty())
+    }
+
+    @Test fun publicStoriesAreDurableBeforeAiStartsAndSurviveItsFailureWithoutRepeatReads() = runBlocking {
+        vault.write("fixture-key")
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val slowAi = object : AiProvider {
+            override suspend fun check(connection: AiConnection, secret: String) = Unit
+            override suspend fun feed(state: FeedState, module: FeedModule, secret: String, language: String): List<FeedItem> {
+                assertTrue(repository.current().items.any { it.id == "rss" })
+                entered.complete(Unit); release.await(); throw FeedFailure("offline")
+            }
+            override suspend fun ask(state: FeedState, item: FeedItem?, question: String, secret: String, language: String) = AiAnswer("Fixture")
+        }
+        val engine = FeedEngine(repository, vault, reader, slowAi)
+        val refresh = async { engine.refresh() }
+        withTimeout(5000) { entered.await() }
+        assertFalse(refresh.isCompleted)
+        assertTrue(repository.current().items.any { it.id == "rss" })
+        assertEquals(1, rssReads)
+        assertEquals(1, repository.current().requestsToday)
+        release.complete(Unit)
+        val result = refresh.await()
+        assertEquals("partial_refresh", result.notice)
+        assertEquals("offline", result.error)
+        assertEquals(1, rssReads)
+        assertEquals(listOf("rss"), repository.current().items.map { it.id })
+    }
+
+    @Test fun publicStoriesDoNotWaitForCredentialLookupOrConsumeItsQuota() = runBlocking {
+        var reads = 0
+        val checkingVault = object : SecretVault(ApplicationProvider.getApplicationContext()) {
+            override fun read(): String? {
+                reads++
+                assertEquals(1, rssReads)
+                // Durable source commit occurs before even this synchronous credential boundary.
+                return null
+            }
+        }
+        val result = FeedEngine(repository, checkingVault, reader, provider).refresh()
+        assertNull(result.error)
+        assertTrue(reads > 0)
+        assertEquals(listOf("rss"), repository.current().items.map { it.id })
+        assertEquals(0, repository.current().requestsToday)
+        assertTrue(aiModules.isEmpty())
     }
 
     private fun story(id: String, module: FeedModule) = FeedItem(id, module.id, "Fixture " + id, "Synthetic transport test",

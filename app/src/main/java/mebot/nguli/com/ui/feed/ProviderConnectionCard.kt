@@ -84,5 +84,5 @@ internal fun ProviderConnectionCard(ui: FeedUiState, onConnect:(AiConnection,Str
             ui.providerModels.forEach{slug->TextButton(onClick={model=slug;chooseModel=false},modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)){Text(slug,modifier=Modifier.fillMaxWidth())}}
             if(!ui.providerModelsLoading && ui.providerModels.isEmpty() && ui.providerModelError==null)Text(stringResource(R.string.provider_model_manual))
         }
-    },confirmButton={TextButton(onClick={chooseModel=false}){Text(stringResource(R.string.cancel))}})
+    },confirmButton={ mebot.nguli.com.security.ProtectedWindowRegistration();TextButton(onClick={chooseModel=false}){Text(stringResource(R.string.cancel))}})
 }

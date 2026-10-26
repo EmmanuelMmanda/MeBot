@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="profile_label_085">About you</string>
+    <string name="profile_guide_085">What do you do, enjoy and want to achieve? Share only details you want MeBot to use across all modules.</string>
+    <string name="profile_example_help_085">See an example</string>
+    <string name="profile_example_title_085">An example, not your saved details</string>
+    <string name="profile_example_085">I am a Tanzanian entrepreneur running several small businesses: a neighbourhood shop, a food business and a delivery service. I want practical ideas for managing stock, serving customers and keeping clear records. I follow local business news and useful technology. I prefer concise explanations with examples relevant to Tanzania.</string>
+    <string name="profile_insert_example_085">Use this example</string>
+    <string name="profile_replace_title_085">Replace your draft?</string>
+    <string name="profile_replace_body_085">This replaces the text you have typed with the example. Nothing is saved until you choose Save.</string>
+    <string name="profile_replace_085">Replace draft</string>
+    <string name="profile_cancel_085">Cancel</string>
+    <string name="profile_count_085">%1$d / 150 words · %2$d / 1,000 characters</string>
+    <string name="profile_limit_085">Keep it within 150 words and 1,000 characters. Your draft has not been cut.</string>
+    <string name="profile_legacy_085">Saved details (%1$d)</string>
+    <string name="profile_legacy_body_085">Your earlier details are kept separately with their original topic access. Expand to review or edit them.</string>
+    <string name="profile_custom_interest_085">Your own interests (optional)</string>
+    <string name="profile_custom_hint_085">Add interests in your own words. Only the topics you select can use them.</string>
+    <string name="profile_timezone_invalid_085">Use a timezone such as Africa/Dar_es_Salaam or UTC.</string>
+    <string name="profile_save_085">Save details</string>
+    <string name="profile_global_use_085">When you save, About you becomes shared background for all modules. Context notes below keep their own selected topics.</string>
+    <string name="profile_notes_title_085">Context notes</string>
+    <string name="profile_note_add_085">Add note</string>
+    <string name="profile_notes_body_085">Keep specific interests or instructions separate. Each note is used only by the topics you choose.</string>
+    <string name="profile_notes_empty_085">No context notes yet. Add one when a topic needs more detail.</string>
+    <string name="profile_note_limit_085">Keep this note within 1,000 characters and remove unsupported control characters. Your draft has not been cut.</string>
+</resources>

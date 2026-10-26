@@ -7,14 +7,18 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import mebot.nguli.com.R
 import mebot.nguli.com.core.ContextEntry
+import mebot.nguli.com.core.PersonalProfile085
 import mebot.nguli.com.core.FeedModule
 import mebot.nguli.com.core.FeedState
 import mebot.nguli.com.feed.FeedTestApplication
@@ -114,10 +118,168 @@ class MeBotContextRestoreUiTest {
         compose.waitUntil(10_000) { closed == 1 && !replacement.ui.value.contextSaving }
         val saved = runBlocking { app.feedRepository.current() }
         assertEquals("Draft name", saved.name)
-        assertEquals("Keep this unsaved learning preference", saved.context.single().text)
-        assertEquals(setOf("learning"), saved.context.single().scopes)
-        assertEquals(entry.id, saved.context.single().id)
+        val profile = saved.context.single { it.id == PersonalProfile085.PROFILE_ID }
+        assertEquals("Keep this unsaved learning preference", profile.text)
+        assertTrue(profile.global)
+        assertTrue(profile.scopes.isEmpty())
+        assertEquals(entry, saved.context.single { it.id == entry.id })
         assertEquals(1, closed)
+    }
+
+    @Test fun globalProfileSavePreservesUnconfirmedLegacyMetadata() {
+        val primary = entry.copy(id=PersonalProfile085.PROFILE_ID,category="profile",global=true,scopes=emptySet())
+        val legacy = entry.copy(id="unconfirmed",confirmed=false,origin="imported")
+        runBlocking { app.feedRepository.update { it.copy(context=listOf(primary,legacy)) } }
+        compose.waitUntil(10_000) { selected.value!!.ui.value.state?.context == listOf(primary,legacy) }
+        restoration.setContent {
+            val vm=selected.value!!; val ui by vm.ui.collectAsState()
+            MeBotTheme { Surface(Modifier.fillMaxSize()) { ContextScreen(ui,vm,onDone={closed++}) } }
+        }
+        compose.onNodeWithTag("context-edit").performScrollTo().performTextReplacement("Revised learning interest")
+        compose.onNodeWithTag("context-save").performScrollTo().performClick()
+        compose.waitUntil(10_000) { closed==1 }
+        val saved=runBlocking { app.feedRepository.current() }
+        assertTrue(saved.context.single { it.id==primary.id }.global)
+        assertTrue(saved.context.single { it.id==primary.id }.scopes.isEmpty())
+        assertEquals(legacy,saved.context.single { it.id==legacy.id })
+    }
+
+    @Test fun globalAboutAndVisibleScopedNotesSaveTogetherWithoutPromotingOldProfile() {
+        val old = entry.copy(id="profile-about-you",text="Previously scoped business detail",scopes=setOf("business"))
+        runBlocking { app.feedRepository.update { it.copy(context=listOf(old,entry)) } }
+        compose.waitUntil(10_000) { selected.value!!.ui.value.state?.context == listOf(old,entry) }
+        restoration.setContent {
+            val vm=selected.value!!; val ui by vm.ui.collectAsState()
+            MeBotTheme { Surface(Modifier.fillMaxSize()) { ContextScreen(ui,vm,onDone={closed++}) } }
+        }
+        compose.onNodeWithTag("context-edit").assertTextContains("")
+        compose.onNodeWithTag("context-scopes-${PersonalProfile085.PROFILE_ID}").assertDoesNotExist()
+        compose.onNodeWithTag("context-edit").performScrollTo().performTextReplacement("I manage several small businesses in Tanzania.")
+        capture("global-about-you")
+        compose.onNodeWithTag("context-edit-${old.id}").performScrollTo().assertTextContains(old.text)
+        compose.onNodeWithTag("context-edit-${entry.id}").performScrollTo().performTextReplacement("x".repeat(1001))
+        compose.onNodeWithTag("context-save").performScrollTo().assertIsNotEnabled()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithTag("context-edit-${entry.id}").performScrollTo().assertTextContains("x".repeat(1001))
+        compose.onNodeWithTag("context-edit-${entry.id}").performTextReplacement("Practical learning notes")
+        compose.onNodeWithTag("context-scopes-${entry.id}").performScrollTo().performClick()
+        compose.onNodeWithTag("context-scope-${entry.id}-news").performScrollTo().performClick()
+        compose.onNodeWithText(compose.activity.getString(R.string.done)).performClick()
+        compose.onNodeWithTag("context-edit-${entry.id}").performScrollTo()
+        capture("scoped-context-notes")
+        compose.onNodeWithTag("context-save").performScrollTo().performClick()
+        compose.waitUntil(10_000) { closed==1 }
+        val saved=runBlocking { app.feedRepository.current() }
+        assertEquals(old,saved.context.single { it.id==old.id })
+        assertTrue(saved.context.single { it.id==PersonalProfile085.PROFILE_ID }.global)
+        assertEquals(setOf("learning","news"),saved.context.single { it.id==entry.id }.scopes)
+        assertFalse(saved.context.single { it.id==entry.id }.global)
+    }
+
+    @Test fun contextNoteCanBeRemovedAddedAndSavedWithoutGlobalSharing() {
+        restoration.setContent {
+            val vm=selected.value!!; val ui by vm.ui.collectAsState()
+            MeBotTheme { Surface(Modifier.fillMaxSize()) { ContextScreen(ui,vm,onDone={closed++}) } }
+        }
+        compose.onNodeWithTag("context-remove-${entry.id}").performScrollTo().performClick()
+        compose.onNodeWithTag("context-edit-${entry.id}").assertDoesNotExist()
+        compose.onNodeWithTag("context-add").performScrollTo().performClick()
+        val noteMatcher=SemanticsMatcher("a scoped note editor") {
+            it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("context-edit-") == true && it.config.contains(SemanticsProperties.EditableText)
+        }
+        compose.onNode(noteMatcher).performScrollTo().performTextInput("Only use this after I select a topic")
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNode(noteMatcher).assertTextContains("Only use this after I select a topic")
+        compose.onNodeWithTag("context-save").performScrollTo().performClick()
+        compose.waitUntil(10_000) { closed==1 }
+        val saved=runBlocking { app.feedRepository.current() }.context.single()
+        assertEquals("Only use this after I select a topic",saved.text)
+        assertFalse(saved.global); assertTrue(saved.scopes.isEmpty()); assertNotEquals(entry.id,saved.id)
+    }
+
+    @Test fun visibleInvalidTimezoneBlocksSaveAndCorrectionKeepsTheSameDraft() {
+        restoration.setContent {
+            val vm=selected.value!!; val ui by vm.ui.collectAsState()
+            MeBotTheme { Surface(Modifier.fillMaxSize()) { ContextScreen(ui,vm,onDone={closed++}) } }
+        }
+        compose.onNodeWithTag("context-edit").performScrollTo().performTextReplacement("Keep my work interests")
+        compose.onNodeWithTag("context-timezone").performScrollTo().performTextReplacement("Not/A_Timezone")
+        compose.onNodeWithTag("context-timezone").assertIsDisplayed()
+        compose.onNodeWithTag("context-save").performScrollTo().performClick()
+        compose.onNodeWithTag("context-timezone").performScrollTo().assertTextContains("Not/A_Timezone")
+        assertEquals(0,closed)
+        compose.onNodeWithTag("context-edit").assertTextContains("Keep my work interests")
+        compose.onNodeWithTag("context-timezone").performTextReplacement("UTC")
+        compose.onNodeWithTag("context-save").performScrollTo().performClick()
+        compose.waitUntil(10_000) { closed==1 }
+        val saved=runBlocking { app.feedRepository.current() }
+        assertEquals("UTC",saved.timezone)
+        assertEquals("Keep my work interests",saved.context.single { it.id==PersonalProfile085.PROFILE_ID }.text)
+    }
+
+    @Test fun leavingAndReenteringProfileKeepsUnsavedDraftWithoutWritingIt() {
+        val visible = mutableStateOf(true)
+        restoration.setContent {
+            val holder = rememberSaveableStateHolder()
+            if (visible.value) holder.SaveableStateProvider("context") {
+                val vm = selected.value!!
+                val ui by vm.ui.collectAsState()
+                MeBotTheme { Surface(Modifier.fillMaxSize()) { ContextScreen(ui, vm, onDone = {}) } }
+            }
+        }
+        compose.onNodeWithTag("context-edit").performScrollTo().performTextReplacement("My unsaved personal draft")
+        compose.runOnIdle { visible.value = false }
+        compose.onNodeWithTag("context-edit").assertDoesNotExist()
+        assertEquals(listOf(entry), runBlocking { app.feedRepository.current().context })
+        restoration.emulateSavedInstanceStateRestore()
+        compose.runOnIdle { visible.value = true }
+        compose.onNodeWithTag("context-edit").assertTextContains("My unsaved personal draft")
+        assertEquals(listOf(entry), runBlocking { app.feedRepository.current().context })
+    }
+
+    @Test fun noExplicitTopicsDoesNotShareCustomInterestsWithFallbackNews() {
+        var completed: Boolean? = null
+        selected.value!!.configureOnboarding(emptySet(), "", "My private custom interest") { completed = it }
+        compose.waitUntil(10_000) { completed != null }
+        assertEquals(true, completed)
+        val saved = runBlocking { app.feedRepository.current() }
+        assertTrue(saved.context.single { it.id == "onboarding-interests" }.scopes.isEmpty())
+        assertEquals(entry, saved.context.single { it.id == entry.id })
+    }
+
+    @Test fun blankOnboardingRetryAfterModelRecreationDoesNotDeleteOrRescopeExistingNote() {
+        val old = ContextEntry(id = "onboarding-interests", text = "Kilimo na biashara", scopes = setOf("learning"),
+            confirmed = true, origin = "onboarding", updatedAtMillis = 42L)
+        runBlocking { app.feedRepository.update { it.copy(context = listOf(entry, old)) } }
+        models.clear()
+        models = ViewModelStore()
+        selected.value = model(models)
+        compose.waitUntil(10_000) { selected.value!!.ui.value.state != null }
+        repeat(2) {
+            var completed: Boolean? = null
+            selected.value!!.configureOnboarding(setOf("news"), "", "") { completed = it }
+            compose.waitUntil(10_000) { completed != null }
+            assertEquals(true, completed)
+            assertEquals(listOf(entry, old), runBlocking { app.feedRepository.current().context })
+        }
+    }
+
+    @Test fun customOnboardingInterestsCommitWithSelectedScopesAndKeepLegacyNotes() {
+        var completed: Boolean? = null
+        selected.value!!.configureOnboarding(setOf("learning"), "Example region", "Napenda kujifunza kilimo") { completed = it }
+        compose.waitUntil(10_000) { completed != null }
+        assertEquals(true, completed)
+        val saved = runBlocking { app.feedRepository.current() }
+        assertEquals(entry, saved.context.single { it.id == entry.id })
+        val interest = saved.context.single { it.id == "onboarding-interests" }
+        assertEquals("Napenda kujifunza kilimo", interest.text)
+        assertEquals(setOf("learning"), interest.scopes)
+        assertEquals("Example region", saved.region)
+        completed = null
+        selected.value!!.configureOnboarding(setOf("news"), "Other region", "na ".repeat(151)) { completed = it }
+        compose.waitUntil(10_000) { completed != null }
+        assertEquals(false, completed)
+        assertEquals(saved, runBlocking { app.feedRepository.current() })
     }
 
     @Test fun restoredUncommittedModuleSaveRetainsTopicPreferencesAndScopeUntilRetryCommits() {
@@ -174,6 +336,21 @@ class MeBotContextRestoreUiTest {
         assertTrue(saved.context.single().scopes.isEmpty())
         assertEquals(entry.id, saved.context.single().id)
         assertEquals(1, closed)
+    }
+
+    private fun capture(name:String) {
+        compose.mainClock.advanceTimeBy(500); compose.waitForIdle()
+        val bitmap=compose.runOnIdle {
+            val window=compose.activity.window
+            window.decorView.invalidate()
+            android.graphics.Bitmap.createBitmap(window.decorView.width,window.decorView.height,android.graphics.Bitmap.Config.ARGB_8888).also {
+                var status:Int?=null
+                android.view.PixelCopy.request(window,it,{result->status=result},android.os.Handler(android.os.Looper.getMainLooper()))
+                assertEquals(android.view.PixelCopy.SUCCESS,status)
+            }
+        }
+        val file=java.io.File("build/outputs/screenshots/v085/$name.png");file.parentFile!!.mkdirs()
+        file.outputStream().use { assertTrue(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)) }
     }
 
     private fun model(store: ViewModelStore): FeedViewModel =

@@ -179,7 +179,7 @@ fun AlarmsScreen(state: AppState, vm: MeBotViewModel, onEdit: (String?) -> Unit,
         AlertDialog(onDismissRequest = { deleting = null },
             title = { Text(stringResource(R.string.alarm_delete_title)) },
             text = { Text(stringResource(R.string.alarm_delete_body)) },
-            confirmButton = { TextButton(onClick = { deleting = null; vm.deleteAlarm(id) }) { Text(stringResource(R.string.delete)) } },
+            confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { deleting = null; vm.deleteAlarm(id) }) { Text(stringResource(R.string.delete)) } },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } })
     }
 }
@@ -221,6 +221,7 @@ private fun AlarmListCard(plan: AlarmPlan, prominent: Boolean, onEdit: () -> Uni
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreHoriz, stringResource(R.string.mebot_alarm_options), tint = ink) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
                     DropdownMenuItem(text = { Text(stringResource(R.string.mebot_remove_alarm)) },
                         leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null) }, onClick = { menu = false; onDelete() })
                 }
@@ -488,6 +489,7 @@ private fun AlarmAccessSheet(
     }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = MaterialTheme.colorScheme.surface) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(stringResource(R.string.mebot_alarm_access), style = MaterialTheme.typography.headlineSmall)
@@ -536,19 +538,8 @@ private fun PermissionRow(label: String, icon: ImageVector, allowed: Boolean, on
 @Composable
 fun CheckpointScreen(state: AppState, vm: MeBotViewModel) {
     var label by rememberSaveable(state.settings.checkpointLabel) { mutableStateOf(state.settings.checkpointLabel) }
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val bitmap = remember(state.settings.checkpointCode) { state.settings.checkpointCode.takeIf { it.isNotBlank() }?.let(::checkpointBitmap) }
-    val saveImage = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
-        if (uri != null && bitmap != null) scope.launch {
-            try {
-                withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri, "wt")?.use {
-                    check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
-                } ?: error("Output unavailable") }
-                vm.showMessage(R.string.checkpoint_saved)
-            } catch (_: Exception) { vm.showMessage(R.string.file_error) }
-        }
-    }
+    val documents = mebot.nguli.com.documents.LocalDocumentActions.current
     ScreenContainer {
         ScreenTitle(stringResource(R.string.mebot_checkpoint_short), stringResource(R.string.mebot_checkpoint_short_body))
         AppCard {
@@ -561,7 +552,7 @@ fun CheckpointScreen(state: AppState, vm: MeBotViewModel) {
                 Image(bitmap.asImageBitmap(), contentDescription = stringResource(R.string.checkpoint_current, state.settings.checkpointLabel),
                     modifier = Modifier.fillMaxWidth().aspectRatio(1f).padding(12.dp))
             }
-            PrimaryAction(stringResource(R.string.mebot_checkpoint_export)) { saveImage.launch("mebot-checkpoint.png") }
+            PrimaryAction(stringResource(R.string.mebot_checkpoint_export)) { documents.exportCheckpoint() }
         }
     }
 }

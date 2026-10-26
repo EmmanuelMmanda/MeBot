@@ -28,6 +28,7 @@ class MeBotViewModel(application: Application) : AndroidViewModel(application) {
     private val _message = MutableStateFlow<Int?>(null)
     val message = _message.asStateFlow()
     private val alarmChanges = Mutex()
+    private val backupMutationEpoch = java.util.concurrent.atomic.AtomicLong(0)
 
     init {
         viewModelScope.launch {
@@ -171,12 +172,27 @@ class MeBotViewModel(application: Application) : AndroidViewModel(application) {
             checkpointCode = state.settings.checkpointCode.ifBlank { "mebot:checkpoint:${UUID.randomUUID()}" }
         )) }
     }
+    fun exportCheckpoint(uri: Uri, expectedIdentity: String?) = work(R.string.file_error) {
+        val code = repository.current().settings.checkpointCode
+        require(code.isNotBlank() && mebot.nguli.com.documents.checkpointDocumentIdentity(code) == expectedIdentity)
+        withContext(Dispatchers.IO) {
+            val bitmap = mebot.nguli.com.ui.checkpointBitmap(code)
+            try {
+                app.contentResolver.openOutputStream(uri, "wt")?.use {
+                    check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it))
+                } ?: error("Output unavailable")
+            } finally { bitmap.recycle() }
+        }
+        showMessage(R.string.checkpoint_saved)
+    }
     fun exportBackup(uri: Uri) = work(R.string.file_error) {
         val text = repository.export()
         withContext(Dispatchers.IO) { app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray(Charsets.UTF_8)) } ?: error("No output") }
         showMessage(R.string.export_success)
     }
-    fun importBackup(uri: Uri) = viewModelScope.launch {
+    fun importBackup(uri: Uri): kotlinx.coroutines.Job {
+        val expectedEpoch = backupMutationEpoch.incrementAndGet()
+        return viewModelScope.launch {
         var committed = false
         try {
             val text = withContext(Dispatchers.IO) {
@@ -195,19 +211,29 @@ class MeBotViewModel(application: Application) : AndroidViewModel(application) {
                 decoded.copy(alarms = decoded.alarms.map { it.copy(enabled = false) }, focus = null)
             }
             alarmChanges.withLock {
+                // Erase or a newer import invalidates reads that started against an older state.
+                if (backupMutationEpoch.get() != expectedEpoch) return@launch
                 // Decode and validate the whole candidate before replacing data or cancelling old alarms.
-                repository.update { candidate }
-                committed = true
-                withContext(Dispatchers.IO) { alarms.clearAll() }
-                check(reconcileAlarms(candidate))
+                val applied = commitBackupImport(candidate, expectedEpoch, backupMutationEpoch::get,
+                    update = { transform -> repository.update(transform) },
+                    reconcileCommitted = {
+                        committed = true
+                        withContext(Dispatchers.IO) { alarms.clearAll() }
+                        check(reconcileAlarms(candidate))
+                    })
+                if (!applied) return@launch
             }
-            showMessage(R.string.import_success)
+            if (backupMutationEpoch.get() == expectedEpoch) showMessage(R.string.import_success)
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) {
-            showMessage(if (committed) R.string.secondary_import_alarm_error else R.string.import_error)
+            if (backupMutationEpoch.get() == expectedEpoch)
+                showMessage(if (committed) R.string.secondary_import_alarm_error else R.string.import_error)
+        }
         }
     }
-    fun erase() = work {
+    fun erase() {
+        backupMutationEpoch.incrementAndGet()
+        work {
         alarmChanges.withLock {
             withContext(Dispatchers.IO) { alarms.clearAll() }
             val updated = repository.erase()
@@ -215,6 +241,7 @@ class MeBotViewModel(application: Application) : AndroidViewModel(application) {
                 AlarmAudioAccess.forgetDrafts(app)
                 AlarmAudioAccess.prune(app, updated.alarms)
             }
+        }
         }
     }
 }

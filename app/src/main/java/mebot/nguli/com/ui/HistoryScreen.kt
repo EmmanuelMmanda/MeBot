@@ -131,7 +131,7 @@ private fun VisitDetailsDialog(visit: DailyVisit, locale: Locale, onClose: () ->
                     }
                 }
             }
-        }, confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.close)) } },
+        }, confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = onClose) { Text(stringResource(R.string.close)) } },
     )
 }
 

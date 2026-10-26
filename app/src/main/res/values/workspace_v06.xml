@@ -16,11 +16,11 @@
     <string name="workspace_delete_title">Delete this conversation?</string>
     <string name="workspace_delete_body">Its messages and attached text will be removed from this app.</string>
     <string name="workspace_choose_context">Start with a module</string>
-    <string name="workspace_context_help">A new conversation can use the notes approved for one module. General conversations use only their messages and attached files.</string>
+    <string name="workspace_context_help">Saved About you is shared background in every conversation. Choose a module to add only the notes approved for that module.</string>
     <string name="workspace_manage_context">Your preferences</string>
     <string name="workspace_attachment_help">This text is included when you send a message in this conversation. Remove it from the composer to stop including it in future messages.</string>
     <string name="workspace_start_title">What would you like to know?</string>
-    <string name="workspace_scoped_notes">This conversation can use %1$d approved context notes.</string>
+    <string name="workspace_scoped_notes">This conversation can use %1$d approved module notes, plus your saved About you.</string>
     <string name="workspace_general_context">Ask about your topics or anything else.</string>
     <string name="workspace_research">Catch me up on a useful development</string>
     <string name="workspace_compare">Compare two practical options</string>

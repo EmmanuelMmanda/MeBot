@@ -95,6 +95,7 @@ data class ContextEntry(
     val confirmed: Boolean = true,
     val origin: String = "manual",
     val updatedAtMillis: Long = System.currentTimeMillis(),
+    val global: Boolean = false,
 )
 
 @Serializable
@@ -121,6 +122,7 @@ data class FeedItem(
     val keyPoints: List<String> = emptyList(),
     val nextStep: String = "",
     val caveat: String = "",
+    val temporal: FeedTemporal? = null,
 )
 
 @Serializable

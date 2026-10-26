@@ -11,10 +11,11 @@
     <string name="rich_conversation_files">Files in this conversation (%1$d)</string>
     <string name="rich_conversation_files_help">These files remain available for follow-up questions. Remove any file you no longer want to share in this conversation.</string>
     <string name="rich_retry_question">Retry last question</string>
-    <string name="rich_voice_settings">Voice options</string>
-    <string name="rich_voice_help">Speak a question, review it, then send. Read-aloud uses a voice installed on your phone. This is not a live, always-listening voice call.</string>
+    <string name="rich_voice_settings">Read-aloud settings</string>
+    <string name="rich_voice_help">Choose the voice and reading speed used by your phone.</string>
     <string name="rich_voice_speed">Reading speed</string>
     <string name="rich_voice_choice">Phone voice</string>
     <string name="rich_voice_default">Default voice</string>
     <string name="rich_voice_unavailable">No compatible phone voice is available in this language.</string>
+    <string name="rich_pdf_zoom">Pinch to zoom or use the controls. Fit shows the whole page.</string>
 </resources>

@@ -1,3 +1,5 @@
+> **Publication archive:** Historical source-only checkpoint; no production-signed APK is supplied. [Versioned files](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.8.4) · [Recommended 0.9.3](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.3). The verification-stage status below is retained as a dated record, not the current publication state.
+
 # MeBot 0.8.4 candidate guide
 
 Status: automated-build-verified candidate following the tested [0.8.3 foundation](RELEASE-0.8.3.md). This is not an official signed APK release. The available official download remains [0.8.2](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.8.2).

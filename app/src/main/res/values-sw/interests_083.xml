@@ -52,21 +52,4 @@
     <string name="preferences_advanced_083">Eneo, saa na kuhamisha taarifa</string>
     <string name="preferences_for_topic_083">Ifanye mada hii ikufae zaidi</string>
     <string name="preferences_topic_body_083">Chagua unacholenga, kisha ruhusu taarifa zako ambazo mada hii inaweza kutumia.</string>
-    <string name="unit_price_title">Linganisha bei</string>
-    <string name="unit_price_body">Angalia kifurushi chenye bei ndogo kwa kiasi sawa. Hufanya kazi bila intaneti.</string>
-    <string name="unit_price_note">Tumia sarafu na kipimo sawa kwa vyote. Kwa mfano, badili gramu kuwa kilo kwanza. Ubora na gharama za ziada hazijahesabiwa.</string>
-    <string name="unit_price_first">Chaguo A</string>
-    <string name="unit_price_second">Chaguo B</string>
-    <string name="unit_price_cost">Bei yote</string>
-    <string name="unit_price_amount">Kiasi kwa kipimo sawa</string>
-    <string name="unit_price_unit">Kipimo (mfano kilo, lita, kipande)</string>
-    <string name="unit_price_currency">Sarafu (si lazima)</string>
-    <string name="unit_price_invalid">Weka bei na kiasi zaidi ya sifuri kwa vyote. Tumia nukta kwa desimali, bila koma.</string>
-    <string name="unit_price_result">%1$s lina bei ndogo kwa kipimo</string>
-    <string name="unit_price_equal">Vyote vina bei sawa kwa kipimo</string>
-    <string name="unit_price_per">%1$s: %2$s %3$s kwa %4$s</string>
-    <string name="unit_price_saving">Nafuu kwa %1$s%% kwa kipimo</string>
-    <string name="unit_price_calculate">Linganisha</string>
-    <string name="unit_price_reset">Futa</string>
-    <string name="unit_price_default_unit">kipimo</string>
 </resources>

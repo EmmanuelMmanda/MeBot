@@ -80,6 +80,13 @@ class PublicDiscoveryProvider(private val http: FeedHttp = SecureFeedHttp()) : P
         val current = data["current"] as? JsonObject ?: throw FeedFailure("invalid_response")
         val validAt = Math.multiplyExact(current.long("time"), 1000L)
         if (validAt !in (now - 24 * 60 * 60_000L)..(now + 60 * 60_000L)) throw FeedFailure("invalid_response")
+        // Only a provider-declared validity interval establishes forecast relevance.
+        // Missing intervals remain readable in Feed, but cannot qualify for Today.
+        val intervalSeconds = (current["interval"] as? JsonPrimitive)?.longOrNull?.takeIf { it in 1..86_400 }
+        val temporal = intervalSeconds?.let {
+            FeedTemporal(TemporalProvenance.FORECAST_PROVIDER, validFromMillis = validAt,
+                validUntilMillis = Math.addExact(validAt, Math.multiplyExact(it, 1000L)), sourceTimezone = "UTC", verifiedAtMillis = now)
+        }
         val hourly = data["hourly"] as? JsonObject ?: throw FeedFailure("invalid_response")
         val hours = hourly["time"] as? JsonArray ?: throw FeedFailure("invalid_response")
         val rain = hourly["precipitation_probability"] as? JsonArray ?: throw FeedFailure("invalid_response")
@@ -98,7 +105,7 @@ class PublicDiscoveryProvider(private val http: FeedHttp = SecureFeedHttp()) : P
         return listOf(FeedItem(
             id = FeedLogic.itemId(sourceUrl), moduleId = module.id, title = name, summary = "",
             sourceName = "Open-Meteo", sourceUrl = sourceUrl, publishedAtMillis = validAt, fetchedAtMillis = now,
-            kind = module.kind, relevance = 75, contentType = "weather", weather = weather,
+            kind = module.kind, relevance = 75, contentType = "weather", weather = weather, temporal = temporal,
             citations = listOf(FeedCitation("Open-Meteo", sourceUrl), FeedCitation("GeoNames", "https://www.geonames.org/")),
         ))
     }
@@ -132,7 +139,8 @@ class PublicDiscoveryProvider(private val http: FeedHttp = SecureFeedHttp()) : P
             val published = parseTime(repo.text("created_at"), now)
             FeedItem(FeedLogic.itemId(link), module.id, title, repo.text("description").take(1500),
                 sourceName = "GitHub", sourceUrl = link, publishedAtMillis = published, fetchedAtMillis = now,
-                kind = module.kind, relevance = 60, contentType = "repository", citations = listOf(FeedCitation(title, link)))
+                kind = module.kind, relevance = 60, contentType = "repository", citations = listOf(FeedCitation(title, link)),
+                temporal = published.takeIf { it > 0 }?.let { FeedTemporal(TemporalProvenance.PUBLISHER, publishedAtMillis = it) })
         }
     }
 

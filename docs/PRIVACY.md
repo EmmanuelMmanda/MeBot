@@ -123,3 +123,29 @@ For implementation detail, see [AppRepository.kt](../app/src/main/java/mebot/ngu
 Only a bounded stage label, HTTP status, sanitized request ID and allowlisted response-shape description may appear under Connection details. Raw provider response bodies, OAuth URLs, codes and tokens never enter that view. The custom Android return URI contains navigation only. Existing note permissions remain explicit; selecting notes for one module does not grant them to unrelated module kinds.
 
 Data and backups includes a collapsed troubleshooting view for recent local operation/error codes and a short correlation identifier. Diagnostic logging uses bounded operation/code metadata, exception class and code locations, without provider bodies, URLs, attachments or conversation text. These records are not uploaded by MeBot and do not constitute an analytics feed.
+
+## 0.9.0 candidate: Today and optional app lock
+
+Today is an on-device projection of already retrieved content with verified date
+metadata. It retains source/module identity and existing context boundaries; it
+makes no additional inference request merely to open or paginate cached items.
+It reuses existing optional local reading history and explicit save/hide choices,
+not new telemetry or dwell tracking. Existing explicit relevance feedback retains
+its separately documented scoped provider behavior. Publisher-date metadata is
+extracted from an existing bounded HTML retrieval and is not accepted as verified
+just because an AI/service response says so. Unknown dates remain unknown.
+
+App lock is opt-in, using a user-chosen app PIN and optional supported strong
+biometrics. Its salted slow verifier is protected by a separate Android Keystore
+key in a no-backup record. A separate nonpersonal enabled marker lets direct-boot
+alarms use generic labels. PINs, verifier state and unlocked sessions are not feed
+backup fields; importing/restoring a feed cannot turn protection off. Disabling
+or changing protection requires fresh app-PIN authentication.
+
+This is a UI privacy gate, **not encryption of feed.json, conversations, cached
+media or exported backups**. It does not protect a compromised/rooted process.
+The app locks conservatively on leaving the foreground/screen-off and checks
+Keyguard on resume; it does not change device timeout. Alarm stop/snooze remain
+usable with generic labels. There is no automatic wipe or silent forgotten-PIN
+bypass. Android's explicit Clear storage loses local data and provider connections,
+not remote provider records. Physical-device/biometric acceptance remains pending.

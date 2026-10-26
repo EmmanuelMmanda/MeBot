@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+  <string name="context_import_title_092">Ingiza muktadha</string>
+  <string name="context_import_entry_092">Leta maelezo kutoka ChatGPT au faili la JSON</string>
+  <string name="context_location_092">Mahali</string>
+  <string name="context_step_one_092">1. Uliza ChatGPT</string>
+  <string name="context_prompt_step_092">Nakili agizo hili kwenye ChatGPT.</string>
+  <string name="context_step_two_092">2. Leta matokeo yako</string>
+  <string name="context_result_step_092">Pakua faili la JSON kutoka ChatGPT uliingize hapa, au bandika JSON hapa chini.</string>
+  <string name="context_review_step_092">3. Kagua maelezo na moduli zitakazoyatumia kabla ya kuhifadhi.</string>
+  <string name="connection_subtitle_092">Chagua akaunti au mtoa huduma atakayetumiwa na MeBot.</string>
+  <string name="connection_remove_092">Ondoa kwenye kifaa hiki</string>
+  <string name="connection_remove_title_092">Uondoe akaunti?</string>
+  <string name="connection_remove_body_092">Ondoa %1$s na taarifa zake za kuingia kwenye kifaa hiki. Akaunti yako ya ChatGPT haitafutwa.</string>
+  <string name="connection_remove_confirm_092">Ondoa akaunti</string>
+  <string name="connection_accounts_092">Akaunti zilizohifadhiwa</string>
+  <string name="connection_providers_092">Watoa huduma wengine</string>
+</resources>

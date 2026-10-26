@@ -1,3 +1,5 @@
+> **Publication archive:** Historical source-only checkpoint; no production-signed APK is supplied. [Versioned files](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.8.3) · [Recommended 0.9.3](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.3). The verification-stage status below is retained as a dated record, not the current publication state.
+
 # MeBot 0.8.3 candidate guide
 
 Status: completed automated candidate build, not a published official APK. Version code 14; package remains `mebot.nguli.com`. Built on the 0.8.2 source. The signed downloadable release remains [0.8.2](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.8.2) until a device-verified update is signed with the existing release identity.
