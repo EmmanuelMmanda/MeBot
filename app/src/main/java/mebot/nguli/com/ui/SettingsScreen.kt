@@ -26,22 +26,17 @@ import mebot.nguli.com.core.AppState
 import java.time.LocalDate
 
 @Composable
-fun SettingsScreen(state: AppState, vm: MeBotViewModel, onErase: () -> Unit = { vm.erase() }, onHelp: (() -> Unit)? = null) {
+fun SettingsScreen(state: AppState, vm: MeBotViewModel, onErase: () -> Unit = { vm.erase() }, onHelp: (() -> Unit)? = null, onAppLock: (() -> Unit)? = null) {
     var panel by rememberSaveable { mutableStateOf<String?>(null) }
     var name by rememberSaveable(state.profile.name) { mutableStateOf(state.profile.name) }
     var intention by rememberSaveable(state.profile.intention) { mutableStateOf(state.profile.intention) }
     var showImportConfirmation by rememberSaveable { mutableStateOf(false) }
     var showEraseConfirmation by rememberSaveable { mutableStateOf(false) }
-    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        if (uri != null) vm.exportBackup(uri)
-    }
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) vm.importBackup(uri)
-    }
+    val documents = mebot.nguli.com.documents.LocalDocumentActions.current
     val language = stringResource(when (state.settings.language) { "sw" -> R.string.swahili; "en" -> R.string.english; else -> R.string.theme_system })
     val theme = stringResource(when (state.settings.theme) { "dark" -> R.string.theme_dark; "light" -> R.string.theme_light; else -> R.string.theme_system })
     ScreenContainer {
-        ScreenTitle(stringResource(R.string.settings_title))
+        ScreenTitle(stringResource(R.string.personalization_092))
         SectionLabel(stringResource(R.string.mb_preferences))
         SettingsGroup {
             SettingsRow(Icons.Outlined.Palette, stringResource(R.string.appearance), theme) { panel = "appearance" }
@@ -49,13 +44,15 @@ fun SettingsScreen(state: AppState, vm: MeBotViewModel, onErase: () -> Unit = { 
             SettingsRow(Icons.Outlined.Language, stringResource(R.string.language), language) { panel = "language" }
             SettingsDivider()
             SettingsRow(Icons.Outlined.Timer, stringResource(R.string.default_focus), stringResource(R.string.minutes_value, state.settings.defaultFocusMinutes)) { panel = "duration" }
-            SettingsDivider()
-            SettingsRow(Icons.Outlined.GridView, stringResource(R.string.modules), null) { panel = "features" }
+            if (onAppLock != null) {
+                SettingsDivider()
+                SettingsRow(Icons.Outlined.Lock, stringResource(R.string.app_lock_title), stringResource(R.string.personalization_lock_092), onClick = onAppLock)
+            }
         }
         SectionLabel(stringResource(R.string.mb_your_data))
         SettingsGroup {
             SettingsRow(Icons.Outlined.FileUpload, stringResource(R.string.export_data), null) {
-                exportLauncher.launch("mebot-backup-${LocalDate.now()}.json")
+                documents.exportLocalBackup()
             }
             SettingsDivider()
             SettingsRow(Icons.Outlined.FileDownload, stringResource(R.string.import_data), null) { showImportConfirmation = true }
@@ -74,7 +71,7 @@ fun SettingsScreen(state: AppState, vm: MeBotViewModel, onErase: () -> Unit = { 
     }
     val panelTitle = when (panel) {
         "profile" -> R.string.profile; "appearance" -> R.string.appearance; "language" -> R.string.language
-        "duration" -> R.string.default_focus; "features" -> R.string.modules; else -> R.string.about
+        "duration" -> R.string.default_focus; else -> R.string.about
     }
     if (panel != null) AlertDialog(
         onDismissRequest = { panel = null },
@@ -91,11 +88,6 @@ fun SettingsScreen(state: AppState, vm: MeBotViewModel, onErase: () -> Unit = { 
                     }
                     "language" -> ChoiceRow(listOf("en" to stringResource(R.string.english), "sw" to stringResource(R.string.swahili), "system" to stringResource(R.string.theme_system)), state.settings.language) { selected -> vm.saveSettings { it.copy(language = selected) } }
                     "duration" -> DurationChoices(state.settings.defaultFocusMinutes) { selected -> vm.saveSettings { it.copy(defaultFocusMinutes = selected) } }
-                    "features" -> {
-                        ModuleSetting(stringResource(R.string.alarms), "alarms" in state.settings.enabledModules) { checked -> vm.saveSettings { it.copy(enabledModules = (if (checked) it.enabledModules + "alarms" else it.enabledModules - "alarms") + "daily") } }
-                        ModuleSetting(stringResource(R.string.focus_tab), "focus" in state.settings.enabledModules) { checked -> vm.saveSettings { it.copy(enabledModules = (if (checked) it.enabledModules + "focus" else it.enabledModules - "focus") + "daily") } }
-                        ModuleSetting(stringResource(R.string.history), "history" in state.settings.enabledModules) { checked -> vm.saveSettings { it.copy(enabledModules = (if (checked) it.enabledModules + "history" else it.enabledModules - "history") + "daily") } }
-                    }
                     else -> {
                         mebot.nguli.com.ui.feed.AboutMeBotContent()
                     }
@@ -113,7 +105,7 @@ fun SettingsScreen(state: AppState, vm: MeBotViewModel, onErase: () -> Unit = { 
     if (showImportConfirmation) AlertDialog(
         onDismissRequest = { showImportConfirmation = false }, title = { Text(stringResource(R.string.import_confirm_title)) },
         text = { Text(stringResource(R.string.import_confirm_body)) },
-        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { showImportConfirmation = false; importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }) { Text(stringResource(R.string.import_confirm_action)) } },
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { showImportConfirmation = false; documents.importLocalBackup() }) { Text(stringResource(R.string.import_confirm_action)) } },
         dismissButton = { TextButton(onClick = { showImportConfirmation = false }) { Text(stringResource(R.string.cancel)) } },
     )
     if (showEraseConfirmation) AlertDialog(

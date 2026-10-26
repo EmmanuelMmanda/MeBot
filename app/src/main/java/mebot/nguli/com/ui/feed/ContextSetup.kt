@@ -62,7 +62,7 @@ internal fun ContextImportActions(enabled: Boolean, onImport: () -> Unit, onPast
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun ContextPromptActions(enabled: Boolean = true) {
+internal fun ContextPromptActions(enabled: Boolean = true, guided: Boolean = false) {
     val context = LocalContext.current
     val prompt = stringResource(R.string.setup_context_prompt,
         ContextSetup.example(stringResource(R.string.setup_context_example)), ModuleCatalog.kinds.sorted().joinToString(", "))
@@ -76,8 +76,8 @@ internal fun ContextPromptActions(enabled: Boolean = true) {
         return true
     }
     AppCard(modifier = Modifier.testTag("context-setup")) {
-        Text(stringResource(R.string.setup_context_title), style = MaterialTheme.typography.titleMedium)
-        Text(stringResource(R.string.setup_context_body), style = MaterialTheme.typography.bodySmall,
+        Text(stringResource(if (guided) R.string.context_step_one_092 else R.string.setup_context_title), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(if (guided) R.string.context_prompt_step_092 else R.string.setup_context_body), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(onClick = { copyPrompt() }, enabled = enabled,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("context-starter-prompt"), shape = RoundedCornerShape(16.dp)) {
@@ -147,4 +147,39 @@ internal fun ContextPasteDialog(text: String, onTextChanged: (String) -> Unit, w
             }
         }
     }
+}
+
+/** Full-page import guide; parsing, review and confirmation still use the existing repository pipeline. */
+@Composable
+fun ContextImportScreen(ui: mebot.nguli.com.feed.FeedUiState, vm: mebot.nguli.com.feed.FeedViewModel, onBack: () -> Unit) {
+    val documents = mebot.nguli.com.documents.LocalDocumentActions.current
+    var text by rememberSaveable { mutableStateOf("") }
+    var tooLarge by rememberSaveable { mutableStateOf(false) }
+    val enabled = !ui.importWorking && !ui.contextSaving
+    mebot.nguli.com.ui.ScreenContainer(Modifier.testTag("context-import-screen")) {
+        mebot.nguli.com.ui.ScreenTitle(stringResource(R.string.context_import_title_092))
+        ImportFeedback(ui)
+        ContextPromptActions(enabled, guided = true)
+        AppCard {
+            Text(stringResource(R.string.context_step_two_092), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.context_result_step_092), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            FilledTonalButton(onClick = documents::importContext, enabled = enabled,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("context-import"), shape = RoundedCornerShape(16.dp)) {
+                Icon(Icons.Outlined.UploadFile, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.setup_import_file))
+            }
+            OutlinedTextField(text, { value ->
+                tooLarge = value.length > ContextSetup.MAX_PASTED_CHARACTERS
+                if (!tooLarge) { text = value; vm.clearMessage() }
+            }, label = { Text(stringResource(R.string.setup_paste_json)) }, enabled = enabled, isError = tooLarge,
+                minLines = 4, maxLines = 8, modifier = Modifier.fillMaxWidth().testTag("context-paste-input"), shape = RoundedCornerShape(16.dp))
+            if (tooLarge) Text(stringResource(R.string.setup_paste_too_large), color = MaterialTheme.colorScheme.error)
+        }
+        if (ui.importPreview == null) ui.error?.let { FeedStatus(it) }
+        Text(stringResource(R.string.context_review_step_092), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Button(onClick = { vm.prepareContextText(text.trim()) }, enabled = enabled && text.isNotBlank() && !tooLarge,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("context-paste-review"), shape = RoundedCornerShape(16.dp)) {
+            Text(stringResource(R.string.setup_review_context))
+        }
+    }
+    FeedImportReview(ui, vm::confirmImport, vm::cancelImport)
 }

@@ -67,6 +67,20 @@ class AppLockUiTest {
         compose.onNodeWithText("The new PINs do not match.").assertExists()
         assertFalse(c.state.value.enabled)
     }
+    @Test fun enabledSettingsSeparatesBiometricsFromChangingPinAndClearsDraftOnPause() {
+        val c = controller(true)
+        compose.setContent { MeBotTheme { AppLockSettingsScreen(c, {}) } }
+        compose.onAllNodes(hasSetTextAction()).assertCountEquals(1)
+        compose.onNodeWithText(compose.activity.getString(mebot.nguli.com.R.string.app_lock_biometric_enable)).performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText(compose.activity.getString(mebot.nguli.com.R.string.lock_change_section_092)).performScrollTo().performClick()
+        compose.onAllNodes(hasSetTextAction()).assertCountEquals(3)
+        compose.onAllNodes(hasSetTextAction())[0].performTextInput("718293")
+        compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+        compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+        compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().forEach {
+            assertEquals("", it.config[SemanticsProperties.EditableText].text)
+        }
+    }
     private fun capture(name: String) {
         compose.mainClock.advanceTimeBy(500); compose.waitForIdle()
         val bitmap = compose.runOnIdle {

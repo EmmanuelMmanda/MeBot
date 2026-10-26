@@ -347,6 +347,12 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         val revoked = withContext(Dispatchers.IO) { engine.disconnectChatGpt(id) }
         _ui.update { it.copy(error = null, notice = if (revoked) null else "chatgpt_local_signout") }
     }
+    fun removeChatGptAccount(id: String) = work {
+        cancelConnection(); cancelRefresh(); cancelAiWork()
+        withContext(Dispatchers.IO) { engine.removeSavedChatGptAccount(id) }
+        _ui.update { it.copy(error = null, notice = null) }
+    }
+
     fun toggleSaved(id: String) = work {
         repository.update { s ->
             require(s.items.any { it.id == id })
@@ -678,8 +684,15 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         }?.take(160) ?: uri.lastPathSegment?.substringAfterLast('/')?.take(160) ?: "file"
     }
 
-    fun importTextAttachment(uri: Uri) {
-        if (_ui.value.importWorking || _ui.value.asking) return
+    fun importTextAttachment(uri: Uri) = importTextAttachment(uri, _ui.value.activeConversationId)
+
+    /** The picker owner is captured before provider I/O, never selected from a later screen. */
+    fun importTextAttachment(uri: Uri, expectedTarget: String?) {
+        if (_ui.value.importWorking || _ui.value.asking || _ui.value.activeConversationId != expectedTarget) return
+        val targetGeneration = askGeneration
+        val pendingImportGeneration = importGeneration
+        fun targetUnchanged() = _ui.value.activeConversationId == expectedTarget &&
+            askGeneration == targetGeneration && importGeneration == pendingImportGeneration
         importJob = viewModelScope.launch {
             _ui.update { it.copy(importWorking = true, error = null) }
             try {
@@ -687,14 +700,22 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
                 if (!name.endsWith(".txt", true) && !name.endsWith(".md", true)) throw FeedFailure("attachment_type")
                 val text = read(uri, ConversationLogic.maxAttachmentBytes)
                 if (text.isBlank() || '\u0000' in text || text.length > ConversationLogic.maxAttachmentCharacters) throw FeedFailure("attachment_size")
-                val state = repository.current()
-                val selected = state.conversations.find { it.id == _ui.value.activeConversationId } ?: createConversation()
-                repository.update { s -> s.copy(conversations = s.conversations.map { thread ->
-                    if (thread.id != selected.id || thread.attachments.any { it.text == text && it.name == name }) thread else {
-                        if (thread.attachments.size >= 3 || thread.attachments.sumOf { it.text.length } + text.length > ConversationLogic.maxAttachmentCharacters) throw FeedFailure("attachment_size")
-                        thread.copy(attachments = thread.attachments + AiAttachment(name = name, text = text), updatedAtMillis = maxOf(System.currentTimeMillis(), thread.createdAtMillis))
+                if (!targetUnchanged()) return@launch
+                val newThread = if (expectedTarget == null) AiConversation() else null
+                repository.update { state ->
+                    if (!targetUnchanged()) return@update state
+                    val selected = if (expectedTarget == null) newThread!! else
+                        state.conversations.find { it.id == expectedTarget } ?: throw FeedFailure("invalid_input")
+                    if (newThread != null && state.conversations.size >= ConversationLogic.maxConversations) throw FeedFailure("conversation_limit")
+                    val updated = if (selected.attachments.any { it.text == text && it.name == name }) selected else {
+                        if (selected.attachments.size >= 3 || selected.attachments.sumOf { it.text.length } + text.length > ConversationLogic.maxAttachmentCharacters) throw FeedFailure("attachment_size")
+                        selected.copy(attachments = selected.attachments + AiAttachment(name = name, text = text),
+                            updatedAtMillis = maxOf(System.currentTimeMillis(), selected.createdAtMillis))
                     }
-                }) }
+                    state.copy(conversations = if (newThread != null) state.conversations + updated else
+                        state.conversations.map { if (it.id == expectedTarget) updated else it })
+                }
+                if (newThread != null && targetUnchanged()) _ui.update { it.copy(activeConversationId = newThread.id) }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (e: Exception) { diagnose("attachment", e); _ui.update { it.copy(error = failureCode(e, "invalid_input")) } }
             finally { _ui.update { it.copy(importWorking = false) } }
@@ -853,12 +874,16 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         applyBackup(candidate)
         }
     }
-    fun reset() = work {
-        importJob?.cancel(); cancelRefresh(); cancelConnection(); cancelAiWork()
-        withContext(Dispatchers.IO) { engine.clearAllCredentials() }
-        apiPresence.definitive(false)
-        repository.erase(); FeedWorker.cancel(app)
-        _ui.update { it.copy(connected = false, error = null, notice = null) }
+    fun reset(): Job {
+        // Invalidate staged objects synchronously; a later confirmation must not resurrect erased data.
+        cancelImport()
+        return work {
+            cancelRefresh(); cancelConnection(); cancelAiWork()
+            withContext(Dispatchers.IO) { engine.clearAllCredentials() }
+            apiPresence.definitive(false)
+            repository.erase(); FeedWorker.cancel(app)
+            _ui.update { it.copy(connected = false, activeConversationId = null, error = null, notice = null) }
+        }
     }
 
     override fun onCleared() {

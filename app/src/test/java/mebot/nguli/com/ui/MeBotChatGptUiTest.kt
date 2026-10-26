@@ -51,6 +51,7 @@ class MeBotChatGptUiTest {
     private val accountModels = mutableListOf<Pair<String, String>>()
     private val models = mutableListOf<String>()
     private val signOuts = mutableListOf<String>()
+    private val removals = mutableListOf<String>()
     private var apiCalls = 0
     private var cancellations = 0
     private var acknowledgements = 0
@@ -224,6 +225,35 @@ class MeBotChatGptUiTest {
         assertEquals(1, apiCalls)
     }
 
+    @Test fun removeFromDeviceRequiresConfirmationAndDoesNotSignOutOrDeleteRemotely() {
+        val account = account("local-remove", "Fixture account")
+        ui.value = connected(account)
+        show()
+        compose.onNodeWithTag("chatgpt-accounts").performScrollTo().performClick()
+        compose.onNodeWithTag("chatgpt-remove-local-remove").performScrollTo().performClick()
+        assertTrue(removals.isEmpty()); assertTrue(signOuts.isEmpty())
+        compose.onNodeWithText(text(R.string.cancel)).performClick()
+        assertTrue(removals.isEmpty())
+        compose.onNodeWithTag("chatgpt-remove-local-remove").performScrollTo().performClick()
+        compose.onNodeWithTag("chatgpt-remove-confirm").performClick()
+        assertEquals(listOf("local-remove"), removals); assertTrue(signOuts.isEmpty())
+    }
+
+    @Test fun signedOutSavedAccountCanBeRemovedAndFailureKeepsItRetryable() {
+        val account = account("signed-out", "Saved fixture").copy(connected = false, planEnabled = false)
+        ui.value = FeedUiState(state = FeedState(onboardingComplete = true), loading = false,
+            chatGpt = ChatGptAuthState(accounts = listOf(account)))
+        show()
+        compose.onNodeWithTag("chatgpt-remove-signed-out").performScrollTo().performClick()
+        compose.onNodeWithTag("chatgpt-remove-confirm").performClick()
+        compose.runOnIdle { ui.value = ui.value.copy(error = "storage_error") }
+        compose.onNodeWithTag("chatgpt-remove-signed-out").performScrollTo().assertIsEnabled().performClick()
+        compose.onNodeWithTag("chatgpt-remove-confirm").performClick()
+        assertEquals(listOf("signed-out", "signed-out"), removals); assertTrue(signOuts.isEmpty())
+        compose.runOnIdle { ui.value = ui.value.copy(error = null, chatGpt = ChatGptAuthState()) }
+        compose.onNodeWithTag("chatgpt-remove-signed-out").assertDoesNotExist()
+    }
+
     private fun show(notice: Boolean = false, settings: Settings = Settings(), fontScale: Float = 1f) {
         compose.setContent {
             MeBotTheme(settings) {
@@ -234,7 +264,7 @@ class MeBotChatGptUiTest {
                                 onChatGptSignIn = { signIns += it }, onChatGptCancel = { cancellations++ },
                                 onChatGptAccount = { selections += it }, onChatGptModel = { models += it },
                                 onChatGptAccountModel = { id, model -> selections += id; accountModels += id to model },
-                                onChatGptSignOut = { signOuts += it }, onDone = {})
+                                onChatGptSignOut = { signOuts += it }, onChatGptRemoveAccount = { removals += it }, onDone = {})
                             if (notice) ChatGptPlanNotice(ui.value) { acknowledgements++ }
                         }
                     }

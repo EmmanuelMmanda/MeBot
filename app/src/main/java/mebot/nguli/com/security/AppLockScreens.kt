@@ -65,13 +65,15 @@ fun AppLockScreen(controller: AppLockController, onBiometric: () -> Unit) {
 }
 
 @Composable
-fun AppLockSettingsScreen(controller: AppLockController, onBack: () -> Unit) {
+fun AppLockSettingsScreen(controller: AppLockController, onBack: () -> Unit, showBack: Boolean = true) {
     val state by controller.state.collectAsStateWithLifecycle()
     var current by remember { mutableStateOf("") }
     var next by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var mismatch by remember { mutableStateOf(false) }
     var done by remember { mutableStateOf(false) }
+    var showPinChange by remember { mutableStateOf(false) }
+    var showProtection by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -89,20 +91,25 @@ fun AppLockSettingsScreen(controller: AppLockController, onBack: () -> Unit) {
     }
     fun clear() { current = ""; next = ""; confirm = ""; mismatch = false; done = false }
     BackHandler { clear(); onBack() }
-    Surface(Modifier.fillMaxSize().testTag("app-lock-settings")) {
+    Surface(Modifier.fillMaxSize().testTag("app-lock-settings"), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            TextButton(onClick = { clear(); onBack() }) { Text(stringResource(R.string.app_lock_back)) }
+            if (showBack) TextButton(onClick = { clear(); onBack() }) { Text(stringResource(R.string.app_lock_back)) }
             Text(stringResource(R.string.app_lock_title), style = MaterialTheme.typography.headlineSmall)
-            Text(stringResource(R.string.app_lock_boundary), style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.lock_setup_intro_092), style = MaterialTheme.typography.bodyMedium)
+            TextButton(onClick = { showProtection = !showProtection }) { Text(stringResource(R.string.lock_protects_092)) }
+            if (showProtection) Text(stringResource(R.string.app_lock_boundary), style = MaterialTheme.typography.bodySmall)
             Text(stringResource(if (state.enabled) R.string.app_lock_enabled else R.string.app_lock_disabled), style = MaterialTheme.typography.titleMedium)
-            if (state.enabled) PinField(current, { current = it; done = false }, R.string.app_lock_current_pin, !state.busy)
+            if (state.enabled) {
+                Text(stringResource(R.string.lock_auth_hint_092), style = MaterialTheme.typography.bodySmall)
+                PinField(current, { current = it; done = false }, R.string.app_lock_current_pin, !state.busy)
+                TextButton(onClick = { showPinChange = !showPinChange; next = ""; confirm = ""; mismatch = false }) { Text(stringResource(R.string.lock_change_section_092)) }
+            }
+            if (!state.enabled || showPinChange) {
             PinField(next, { next = it; mismatch = false; done = false }, R.string.app_lock_new_pin, !state.busy)
             PinField(confirm, { confirm = it; mismatch = false }, R.string.app_lock_confirm_pin, !state.busy)
             Text(stringResource(R.string.app_lock_pin_rules), style = MaterialTheme.typography.bodySmall)
             if (mismatch) Text(stringResource(R.string.app_lock_mismatch), color = MaterialTheme.colorScheme.error)
-            LockError(state)
-            if (done) Text(stringResource(R.string.app_lock_saved), color = MaterialTheme.colorScheme.primary)
             Button(onClick = {
                 if (next != confirm) { mismatch = true; return@Button }
                 val old = current.toCharArray(); val replacement = next.toCharArray(); clear()
@@ -113,7 +120,12 @@ fun AppLockSettingsScreen(controller: AppLockController, onBack: () -> Unit) {
             }, enabled = !state.busy && next.length >= 6 && (!state.enabled || current.length >= 6), modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(if (state.enabled) R.string.app_lock_change else R.string.app_lock_enable))
             }
+            }
+            LockError(state)
+            if (done) Text(stringResource(R.string.app_lock_saved), color = MaterialTheme.colorScheme.primary)
             if (state.enabled) {
+                HorizontalDivider()
+                Text(stringResource(R.string.lock_biometric_section_092), style = MaterialTheme.typography.titleMedium)
                 Text(stringResource(R.string.app_lock_biometric_help), style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(onClick = {
                     val input = current.toCharArray(); clear()
@@ -123,7 +135,7 @@ fun AppLockSettingsScreen(controller: AppLockController, onBack: () -> Unit) {
                             input.fill('\u0000'); controller.biometricFailure()
                         } else done = controller.setBiometric(input, enabled, BiometricUnlock::prepareKey)
                     }
-                }, enabled = !state.busy && current.length >= 6, modifier = Modifier.fillMaxWidth()) {
+                }, enabled = !state.busy && current.length >= 6, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Text(stringResource(if (state.biometric) R.string.app_lock_biometric_disable else R.string.app_lock_biometric_enable))
                 }
                 OutlinedButton(onClick = { val input = current.toCharArray(); clear(); scope.launch { done = controller.disable(input) } },

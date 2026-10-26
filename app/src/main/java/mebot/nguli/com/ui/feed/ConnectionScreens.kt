@@ -57,6 +57,7 @@ fun ConnectionScreen(
     onOpenRouterFinish: (String, String) -> Unit = { _, _ -> },
     onOpenRouterCancel: () -> Unit = {},
     onLimitChange: ((Int) -> Unit)? = null,
+    onChatGptRemoveAccount: (String) -> Unit = {},
     onDone: (Boolean) -> Unit,
 ) {
     val state = ui.state ?: return
@@ -75,6 +76,7 @@ fun ConnectionScreen(
         !usingApi -> readyAccount
         else -> null
     }
+    var removingAccount by rememberSaveable { mutableStateOf<String?>(null) }
     var showAccounts by rememberSaveable { mutableStateOf(false) }
     var showApi by rememberSaveable { mutableStateOf(usingApi) }
     var replacingKey by rememberSaveable { mutableStateOf(false) }
@@ -122,10 +124,10 @@ fun ConnectionScreen(
     }
 
     ScreenContainer(Modifier.testTag("connection-screen")) {
-        ScreenTitle(stringResource(R.string.feed_connection))
+        ScreenTitle(stringResource(R.string.feed_connection), stringResource(R.string.connection_subtitle_092))
 
         if (planBusy) {
-            AppCard(color = MaterialTheme.colorScheme.primaryContainer) {
+            AppCard() {
                 Text(stringResource(if (ui.chatGpt.phase == "waiting") R.string.chatgpt_waiting_title else R.string.chatgpt_verifying_title), style = MaterialTheme.typography.headlineSmall)
                 Text(stringResource(if (ui.chatGpt.phase == "waiting") R.string.chatgpt_waiting_body else R.string.chatgpt_verifying_body), style = MaterialTheme.typography.bodyMedium)
                 TextButton(onClick = { connectionRequested = false; onChatGptCancel() }, modifier = Modifier.testTag("chatgpt-cancel")) {
@@ -133,7 +135,7 @@ fun ConnectionScreen(
                 }
             }
         } else if (usingPlan && active != null) {
-            AppCard(color = MaterialTheme.colorScheme.primaryContainer) {
+            AppCard() {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     ChatGptMark(Modifier.size(28.dp))
                     Text(stringResource(R.string.feed_connected), style = MaterialTheme.typography.headlineSmall)
@@ -167,8 +169,12 @@ fun ConnectionScreen(
             }
         } else {
             AppCard {
-                ChatGptMark(Modifier.size(34.dp))
-                Text(stringResource(R.string.chatgpt_connect_title), style = MaterialTheme.typography.headlineSmall)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                        Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) { ChatGptMark(Modifier.size(28.dp)) }
+                    }
+                    Text(stringResource(R.string.chatgpt_connect_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                }
                 Text(stringResource(R.string.chatgpt_connect_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 ChatGptSignInButton(enabled = !ui.connecting, onClick = {
                     key = ""
@@ -207,22 +213,27 @@ fun ConnectionScreen(
 
         if (ui.chatGpt.accounts.isNotEmpty()) {
             TextButton(onClick = { showAccounts = !showAccounts }, enabled = !ui.connecting,
-                modifier = Modifier.testTag("chatgpt-accounts")) {
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("chatgpt-accounts"), shape = RoundedCornerShape(20.dp)) {
                 Icon(Icons.Outlined.PersonOutline, null, Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.chatgpt_accounts))
+                Text(stringResource(R.string.connection_accounts_092), modifier = Modifier.weight(1f))
                 Spacer(Modifier.width(6.dp))
                 Icon(if (showAccounts) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
             }
             if (showAccounts) {
                 // The account already shown above needs management, not a second
                 // model picker and connection action for the same session.
-                primaryAccount?.takeIf { it.connected }?.let { account ->
-                    TextButton(onClick = { onChatGptSignOut(account.id) }, enabled = !ui.connecting,
+                primaryAccount?.let { account ->
+                    if (account.connected) TextButton(onClick = { onChatGptSignOut(account.id) }, enabled = !ui.connecting,
                         modifier = Modifier.heightIn(min = 48.dp).testTag("chatgpt-sign-out-${account.id}")) {
                         Icon(Icons.Outlined.Logout, null, Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(stringResource(R.string.chatgpt_sign_out))
+                    }
+                    TextButton(onClick = { removingAccount = account.id }, enabled = !ui.connecting,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("chatgpt-remove-${account.id}")) {
+                        Icon(Icons.Outlined.DeleteOutline, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.connection_remove_092))
                     }
                 }
                 ui.chatGpt.accounts.filterNot { it.id == primaryAccount?.id }.forEach { account ->
@@ -230,7 +241,7 @@ fun ConnectionScreen(
                         selected = selectedModel(account), onModel = { selectedModels[account.id] = it },
                         onUse = { useAccount(account) },
                         onSignIn = { connectionRequested = true; onChatGptSignIn(account.id) },
-                        onSignOut = { onChatGptSignOut(account.id) })
+                        onSignOut = { onChatGptSignOut(account.id) }, onRemove = { removingAccount = account.id })
                 }
                 OutlinedButton(onClick = { connectionRequested = true; onChatGptSignIn(null) }, enabled = !ui.connecting,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("chatgpt-add-account"), shape = RoundedCornerShape(16.dp)) {
@@ -243,10 +254,10 @@ fun ConnectionScreen(
             }
         }
 
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        TextButton(onClick = { showApi = !showApi; if (!showApi) key = "" }, enabled = !ui.connecting,
-            modifier = Modifier.testTag("connection-api-alternative")) {
-            Text(stringResource(if (usingApi) R.string.chatgpt_api_heading else R.string.chatgpt_api_alternative))
+        FilledTonalButton(onClick = { showApi = !showApi; if (!showApi) key = "" }, enabled = !ui.connecting,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("connection-api-alternative"), shape = RoundedCornerShape(20.dp)) {
+            Icon(Icons.Outlined.Key, null, Modifier.size(20.dp)); Spacer(Modifier.width(10.dp))
+            Text(stringResource(if (usingApi) R.string.chatgpt_api_heading else R.string.connection_providers_092), modifier = Modifier.weight(1f))
             Spacer(Modifier.width(6.dp))
             Icon(if (showApi) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
         }
@@ -283,6 +294,16 @@ fun ConnectionScreen(
         onLimitChange?.let { RequestAllowanceCard(state, !ui.connecting, it) }
         Text(stringResource(R.string.provider_memory_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+    removingAccount?.let { id ->
+        val account = ui.chatGpt.accounts.find { it.id == id }
+        if (account != null) AlertDialog(onDismissRequest = { removingAccount = null },
+            title = { Text(stringResource(R.string.connection_remove_title_092)) },
+            text = { Text(stringResource(R.string.connection_remove_body_092, account.label)) },
+            confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration()
+                TextButton(onClick = { removingAccount = null; onChatGptRemoveAccount(id) }, enabled = !ui.connecting,
+                    modifier = Modifier.testTag("chatgpt-remove-confirm")) { Text(stringResource(R.string.connection_remove_confirm_092)) }
+            }, dismissButton = { TextButton(onClick = { removingAccount = null }) { Text(stringResource(R.string.cancel)) } })
+    }
 }
 
 @Composable
@@ -300,7 +321,7 @@ private fun ChatGptSignInButton(enabled: Boolean, onClick: () -> Unit, tag: Stri
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChatGptAccountRow(account: ChatGptAccount, active: Boolean, enabled: Boolean, selected: String,
-    onModel: (String) -> Unit, onUse: () -> Unit, onSignIn: () -> Unit, onSignOut: () -> Unit) {
+    onModel: (String) -> Unit, onUse: () -> Unit, onSignIn: () -> Unit, onSignOut: () -> Unit, onRemove: () -> Unit) {
     AppCard {
         Text(account.label, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(stringResource(when {
@@ -317,6 +338,9 @@ private fun ChatGptAccountRow(account: ChatGptAccount, active: Boolean, enabled:
                 modifier = Modifier.testTag("chatgpt-use-${account.id}")) { Text(stringResource(R.string.chatgpt_use_account)) }
             if (account.connected) TextButton(onClick = onSignOut, enabled = enabled, modifier = Modifier.testTag("chatgpt-sign-out-${account.id}")) {
                 Text(stringResource(R.string.chatgpt_sign_out))
+            }
+            TextButton(onClick = onRemove, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp).testTag("chatgpt-remove-${account.id}")) {
+                Text(stringResource(R.string.connection_remove_092))
             }
         }
     }

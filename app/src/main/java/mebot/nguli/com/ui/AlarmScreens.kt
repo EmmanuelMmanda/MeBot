@@ -538,19 +538,8 @@ private fun PermissionRow(label: String, icon: ImageVector, allowed: Boolean, on
 @Composable
 fun CheckpointScreen(state: AppState, vm: MeBotViewModel) {
     var label by rememberSaveable(state.settings.checkpointLabel) { mutableStateOf(state.settings.checkpointLabel) }
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val bitmap = remember(state.settings.checkpointCode) { state.settings.checkpointCode.takeIf { it.isNotBlank() }?.let(::checkpointBitmap) }
-    val saveImage = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
-        if (uri != null && bitmap != null) scope.launch {
-            try {
-                withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri, "wt")?.use {
-                    check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
-                } ?: error("Output unavailable") }
-                vm.showMessage(R.string.checkpoint_saved)
-            } catch (_: Exception) { vm.showMessage(R.string.file_error) }
-        }
-    }
+    val documents = mebot.nguli.com.documents.LocalDocumentActions.current
     ScreenContainer {
         ScreenTitle(stringResource(R.string.mebot_checkpoint_short), stringResource(R.string.mebot_checkpoint_short_body))
         AppCard {
@@ -563,7 +552,7 @@ fun CheckpointScreen(state: AppState, vm: MeBotViewModel) {
                 Image(bitmap.asImageBitmap(), contentDescription = stringResource(R.string.checkpoint_current, state.settings.checkpointLabel),
                     modifier = Modifier.fillMaxWidth().aspectRatio(1f).padding(12.dp))
             }
-            PrimaryAction(stringResource(R.string.mebot_checkpoint_export)) { saveImage.launch("mebot-checkpoint.png") }
+            PrimaryAction(stringResource(R.string.mebot_checkpoint_export)) { documents.exportCheckpoint() }
         }
     }
 }

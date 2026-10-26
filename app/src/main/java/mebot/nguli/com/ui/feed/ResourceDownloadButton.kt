@@ -36,10 +36,11 @@ internal fun ResourceDownloadButton(url: String) {
     val checks by ResourceChecks.state.collectAsState()
     val checked = checks[url]
     // Verification starts on the download tap, never while streaming response cards.
-    var pendingPath by rememberSaveable(url) { mutableStateOf<String?>(null) }
+    // Preserve ownership until a cancelled/stale result cleans up, including URL changes.
+    var pendingPath by rememberSaveable { mutableStateOf<String?>(null) }
     var working by remember { mutableStateOf(false) }
     var failed by remember(url) { mutableStateOf(false) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+    val picker = mebot.nguli.com.documents.rememberDeferredDocumentLauncher(url) { result ->
         val path = pendingPath; pendingPath = null
         val temp = path?.let(::File)
         if (temp != null && temp.parentFile?.canonicalPath == File(context.cacheDir, "resource-downloads").canonicalPath) {
@@ -75,7 +76,7 @@ internal fun ResourceDownloadButton(url: String) {
                     }
                     val file = ResourceOperations.run("downloading") { ResourceDownloader(context.applicationContext).fetch(resource) }
                     pendingPath = file.path
-                    picker.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                    picker(Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
                         .setType(resource.mime).putExtra(Intent.EXTRA_TITLE, resource.name))
                 } catch (_: TimeoutCancellationException) { failed = true }
                 catch (cancel: CancellationException) { throw cancel }

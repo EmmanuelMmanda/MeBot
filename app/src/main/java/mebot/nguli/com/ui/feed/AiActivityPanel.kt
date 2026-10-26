@@ -96,7 +96,6 @@ internal fun AiActivityPanel(activity: AiActivity?, modifier: Modifier = Modifie
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                     val detail = when {
                         resultCount != null -> stringResource(R.string.activity_verified_count, resultCount)
-                        activity.receivedCharacters > 0 -> stringResource(R.string.activity_received_chars, activity.receivedCharacters)
                         activity.source.isNotBlank() -> activity.source
                         else -> stringResource(R.string.activity_seconds, seconds)
                     }

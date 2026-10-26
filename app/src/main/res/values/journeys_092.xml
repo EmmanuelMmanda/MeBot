@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+  <string name="context_import_title_092">Import context</string>
+  <string name="context_import_entry_092">Bring notes from ChatGPT or a JSON file</string>
+  <string name="context_location_092">Location</string>
+  <string name="context_step_one_092">1. Ask ChatGPT</string>
+  <string name="context_prompt_step_092">Copy this prompt into ChatGPT.</string>
+  <string name="context_step_two_092">2. Bring your result</string>
+  <string name="context_result_step_092">Download the JSON file from ChatGPT and import it, or paste the JSON below.</string>
+  <string name="context_review_step_092">3. Review the notes and module access before saving.</string>
+  <string name="connection_subtitle_092">Choose the account or provider MeBot uses.</string>
+  <string name="connection_remove_092">Remove from this device</string>
+  <string name="connection_remove_title_092">Remove account?</string>
+  <string name="connection_remove_body_092">Remove %1$s and its saved sign-in from this device. Your ChatGPT account will not be deleted.</string>
+  <string name="connection_remove_confirm_092">Remove account</string>
+  <string name="connection_accounts_092">Saved accounts</string>
+  <string name="connection_providers_092">Other providers</string>
+</resources>

@@ -103,7 +103,7 @@ fun AiWorkspace(
             }
         }
     }
-    val importFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) onImportText(uri) }
+    val documents = mebot.nguli.com.documents.LocalDocumentActions.current
     val listState = rememberLazyListState()
     var previousThread by remember { mutableStateOf<String?>(null) }
     val turns = conversation?.turns.orEmpty()
@@ -247,7 +247,7 @@ fun AiWorkspace(
                             unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent, disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent),
                         shape = RoundedCornerShape(22.dp))
                     Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { importFile.launch(arrayOf("text/plain", "text/markdown", "text/x-markdown")) },
+                        IconButton(onClick = { documents.importAttachment() },
                             enabled = !ui.asking && !ui.importWorking && conversation?.attachments.orEmpty().size < 3,
                             modifier = Modifier.testTag("workspace-attach")) { Icon(Icons.Outlined.AttachFile, stringResource(R.string.workspace_attach)) }
                         if (voiceAvailable) IconButton(onClick = {

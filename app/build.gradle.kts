@@ -12,8 +12,8 @@ android {
         applicationId = "mebot.nguli.com"
         minSdk = 26
         targetSdk = 36
-        versionCode = 18
-        versionName = "0.9.1"
+        versionCode = 19
+        versionName = "0.9.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

@@ -112,6 +112,20 @@ open class FeedEngine(
         revoked
     }
 
+    /** Local saved-account removal is intentionally distinct from provider revocation/sign-out. */
+    open suspend fun removeSavedChatGptAccount(accountId: String) = credentialsLock.withLock {
+        if (repository.current().connection.mode == "chatgpt" && repository.current().connection.accountId == accountId)
+            credentialGeneration.incrementAndGet()
+        val manager = chatGpt ?: throw FeedFailure("chatgpt_reauth")
+        manager.removeSavedAccount(accountId)
+        repository.update { state ->
+            if (state.connection.mode == "chatgpt" && state.connection.accountId == accountId)
+                state.copy(connection = state.connection.copy(accountId = ""), aiPauseCode = "")
+            else state
+        }
+        Unit
+    }
+
     open suspend fun clearAllCredentials() = credentialsLock.withLock {
         credentialGeneration.incrementAndGet()
         withContext(NonCancellable) {
