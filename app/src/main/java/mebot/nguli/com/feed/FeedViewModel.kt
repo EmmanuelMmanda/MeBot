@@ -151,6 +151,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearMessage() { _ui.update { it.copy(error = null, notice = null) } }
+    fun clearImportSummary() { _ui.update { it.copy(importSummary = null) } }
     fun clearNotice() { _ui.update { it.copy(notice = null) } }
     fun clearAnswer() { askGeneration++; askJob?.cancel(); _ui.update { it.copy(asking = false, answer = null, question = null, answerCitations = emptyList()) } }
     private fun cancelRefresh() { refreshGeneration++; refreshJob?.cancel(); _ui.update { it.copy(refreshing = false, refreshingModuleId = null) } }
@@ -757,17 +758,22 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     }
     private suspend fun applyContext(imported: PersonalContextImport) {
         cancelRefresh(); cancelAiWork(); lastAutomaticAttemptMillis = 0L
-        repository.update { s -> s.copy(name = imported.name, region = imported.region, timezone = imported.timezone,
+        val saved = repository.update { s -> s.copy(name = imported.name, region = imported.region, timezone = imported.timezone,
             context = imported.entries.map { it.copy(origin = "imported", global = false) },
-            modules = ModuleCatalog.mergeCatalog(imported.modules.ifEmpty { s.modules }), items = s.items.map { it.copy(why = "", relevance = 0) },
+            modules = ModuleCatalog.mergeCatalog(imported.modules.ifEmpty { s.modules }),
+            items = s.items.map { it.copy(why = "", relevance = 0, aiRelevance = null) },
             briefs = emptyList(), lastAiRefreshMillis = 0, lastRefreshMillis = 0) }
-        _ui.update { it.copy(notice = "imported", error = null) }
+        // Publish the exact DataStore result before the completion signal returns to the editor.
+        // The repository collector will converge on the same snapshot; this avoids briefly
+        // restoring a stale saveable context draft as the user lands on the notes list.
+        _ui.update { it.copy(state = saved, notice = "imported", error = null) }
     }
     private suspend fun applyBackup(candidate: FeedState) {
         cancelConnection(); cancelRefresh(); cancelAiWork()
         // Commit the data first. A failed store write must not erase a working account.
         // A blank plan account prevents old API credentials being used if cleanup fails.
         repository.update { candidate.copy(notifications = false, personalSeedApplied = true, modules = ModuleCatalog.mergeCatalog(candidate.modules),
+            items = candidate.items.map { it.copy(aiRelevance = null) },
             connection = AiConnection(mode = "chatgpt", model = candidate.connection.model), aiPauseCode = "") }
         apiPresence.definitive(false)
         FeedWorker.cancel(app)
@@ -823,7 +829,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     fun cancelImport() {
         importGeneration++
         importJob?.cancel(); pendingContextImport = null; pendingBackupImport = null
-        _ui.update { it.copy(importPreview = null, importWorking = false) }
+        _ui.update { it.copy(importPreview = null, importWorking = false, importSummary = null) }
     }
     fun confirmImport() {
         if (_ui.value.importWorking) return

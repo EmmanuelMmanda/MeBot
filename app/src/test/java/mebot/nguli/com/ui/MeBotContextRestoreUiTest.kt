@@ -93,6 +93,7 @@ class MeBotContextRestoreUiTest {
         compose.onNodeWithTag("context-save").performScrollTo().performClick()
         assertTrue(selected.value!!.ui.value.contextSaving)
         compose.onNodeWithTag("context-save").assertIsNotEnabled()
+        compose.onNodeWithTag("context-import-entry").assertIsNotEnabled()
         assertEquals(0, closed)
         restoration.emulateSavedInstanceStateRestore()
         compose.onNodeWithTag("context-save").performScrollTo().assertIsNotEnabled()
@@ -235,6 +236,35 @@ class MeBotContextRestoreUiTest {
         compose.runOnIdle { visible.value = true }
         compose.onNodeWithTag("context-edit").assertTextContains("My unsaved personal draft")
         assertEquals(listOf(entry), runBlocking { app.feedRepository.current().context })
+    }
+
+    @Test fun sameSnapshotProfileOnlyImportReplacesDraftWithoutRevealingEmptyNotes() {
+        val importedProfile = ContextEntry(id = PersonalProfile085.PROFILE_ID, text = "Portable profile stays local",
+            category = "profile", scopes = emptySet(), confirmed = true, origin = "imported", updatedAtMillis = 7L, global = false)
+        runBlocking { app.feedRepository.update { it.copy(context = listOf(importedProfile)) } }
+        compose.waitUntil(10_000) { selected.value!!.ui.value.state?.context == listOf(importedProfile) }
+        val refreshRequest = mutableStateOf(0)
+        var consumed = 0
+        restoration.setContent {
+            val vm = selected.value!!; val ui by vm.ui.collectAsState()
+            MeBotTheme {
+                Surface(Modifier.fillMaxSize()) {
+                    ContextScreen(ui, vm, importRefreshRequest = refreshRequest.value,
+                        onImportRefreshConsumed = { consumed = it; refreshRequest.value = 0 }, onDone = {})
+                }
+            }
+        }
+        compose.onNodeWithTag("context-edit").performScrollTo().performTextReplacement("Unsaved profile draft")
+        assertEquals(listOf(importedProfile), runBlocking { app.feedRepository.current().context })
+
+        // A reviewed profile-only import can be byte-for-byte identical to durable state.
+        runBlocking { app.feedRepository.update { it.copy(context = listOf(importedProfile)) } }
+        compose.runOnIdle { refreshRequest.value = 1 }
+        compose.waitUntil(10_000) { consumed == 1 && refreshRequest.value == 0 }
+        compose.onNodeWithTag("context-edit").assertTextContains(importedProfile.text)
+        compose.onNodeWithText(compose.activity.getString(R.string.profile_notes_empty_085)).assertExists()
+        compose.onNodeWithTag("context-region").assertIsDisplayed()
+        assertEquals(listOf(importedProfile), runBlocking { app.feedRepository.current().context })
     }
 
     @Test fun noExplicitTopicsDoesNotShareCustomInterestsWithFallbackNews() {

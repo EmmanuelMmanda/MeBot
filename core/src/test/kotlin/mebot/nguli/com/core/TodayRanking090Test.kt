@@ -8,7 +8,7 @@ import kotlin.random.Random
 class TodayRanking090Test {
     private val now=Instant.parse("2026-10-25T12:00:00Z").toEpochMilli()
     private fun item(id:String="one", temporal:FeedTemporal?=null)=FeedItem(id,"news","Software biashara learning","Security cloud",sourceUrl="https://example.com/$id",publishedAtMillis=now,fetchedAtMillis=now,temporal=temporal)
-    @Test fun preparedScoresExactlyMatchLegacyAcrossStateAndHistory() {
+    @Test fun preparedScoresPreserveLegacyNonFreshnessComponentsAndMatchCurrentDirectFormula() {
         val random=Random(90)
         repeat(10) { round ->
             val modules=listOf("news","technology","business").map { FeedModule(id=it,kind=it,query="software biashara cloud") }
@@ -19,7 +19,18 @@ class TodayRanking090Test {
                 relevanceSignals=(0 until 500).map { RelevanceSignal("item-${it}",modules[it%3].id,it%3!=0,"Fixture",setOf("software","cloud","biashara"),now-random.nextLong(9_000_000_000L)) },
                 editionSequence=round.toLong(),viewedAtMillis=items.take(30).associate {it.id to now-random.nextLong(100_000_000L)})
             val prepared=RecommendationPolicy.prepare(state,now)
-            items.forEach { assertEquals(LegacyRecommendationPolicy.score(state,it,now).toString(),prepared.score(it).toString()) }
+            items.forEach { item ->
+                val legacy = LegacyRecommendationPolicy.score(state,item,now)
+                val direct = RecommendationPolicy.score(state,item,now)
+                val snapshot = prepared.score(item)
+                assertEquals(legacy.semantic, direct.semantic)
+                assertEquals(legacy.interest, direct.interest)
+                assertEquals(legacy.feedback, direct.feedback)
+                assertEquals(legacy.novelty, direct.novelty)
+                assertEquals(legacy.deadline, direct.deadline)
+                assertEquals(legacy.exploration, direct.exploration)
+                assertEquals(direct.toString(), snapshot.toString())
+            }
         }
     }
     @Test fun unknownOldAndFutureDatesNeverBecomeTodayByFetch() {
@@ -79,7 +90,18 @@ class TodayRanking090Test {
         FeedLogic.validate(state)
         assertEquals(visible.map {it.id}.toSet(),FeedLogic.edition(state,now).map {it.id}.toSet())
         val snapshot=RecommendationPolicy.prepare(state,now)
-        visible.forEach { assertEquals(LegacyRecommendationPolicy.score(state,it,now).toString(),snapshot.score(it).toString()) }
+        visible.forEach { item ->
+            val legacy = LegacyRecommendationPolicy.score(state,item,now)
+            val direct = RecommendationPolicy.score(state,item,now)
+            val prepared = snapshot.score(item)
+            assertEquals(legacy.semantic, direct.semantic)
+            assertEquals(legacy.interest, direct.interest)
+            assertEquals(legacy.feedback, direct.feedback)
+            assertEquals(legacy.novelty, direct.novelty)
+            assertEquals(legacy.deadline, direct.deadline)
+            assertEquals(legacy.exploration, direct.exploration)
+            assertEquals(direct.toString(), prepared.toString())
+        }
     }
 
     @Test fun staleSourceCompetitorsCannotDistortTodayDiversity() {

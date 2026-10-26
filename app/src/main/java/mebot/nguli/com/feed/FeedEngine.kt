@@ -61,7 +61,8 @@ open class FeedEngine(
         withContext(NonCancellable) {
             try {
                 vault.write(secret)
-                repository.update { it.copy(connection = connection, aiPauseCode = "") }
+                repository.update { state -> state.copy(connection = connection, aiPauseCode = "",
+                    items = state.items.map { if (it.aiRelevance == null) it else it.copy(aiRelevance = null) }) }
             } catch (error: Exception) {
                 if (previous == null) vault.clear() else vault.write(previous)
                 throw error
@@ -90,7 +91,8 @@ open class FeedEngine(
             }
             currentCoroutineContext().ensureActive()
             withContext(NonCancellable) {
-                repository.update { it.copy(connection = connection, aiPauseCode = "") }
+                repository.update { state -> state.copy(connection = connection, aiPauseCode = "",
+                    items = state.items.map { if (it.aiRelevance == null) it else it.copy(aiRelevance = null) }) }
             }
         } catch (error: ChatGptAuthException) { throw FeedFailure(error.code) }
     }
@@ -101,14 +103,15 @@ open class FeedEngine(
         val connection = repository.current().connection
         if (connection.mode == "chatgpt" && connection.accountId.isNotBlank()) chatGpt?.signOut(connection.accountId)
         else vault.clear()
-        repository.update { it.copy(aiPauseCode = "") }
+        repository.update { state -> state.copy(aiPauseCode = "", items = state.items.map { if (it.aiRelevance == null) it else it.copy(aiRelevance = null) }) }
         Unit
     }
 
     open suspend fun disconnectChatGpt(accountId: String): Boolean = credentialsLock.withLock {
         if (repository.current().connection.accountId == accountId) credentialGeneration.incrementAndGet()
         val revoked = chatGpt?.signOut(accountId) ?: true
-        repository.update { if (it.connection.accountId == accountId) it.copy(aiPauseCode = "") else it }
+        repository.update { state -> if (state.connection.accountId == accountId)
+            state.copy(aiPauseCode = "", items = state.items.map { if (it.aiRelevance == null) it else it.copy(aiRelevance = null) }) else state }
         revoked
     }
 
@@ -120,7 +123,8 @@ open class FeedEngine(
         manager.removeSavedAccount(accountId)
         repository.update { state ->
             if (state.connection.mode == "chatgpt" && state.connection.accountId == accountId)
-                state.copy(connection = state.connection.copy(accountId = ""), aiPauseCode = "")
+                state.copy(connection = state.connection.copy(accountId = ""), aiPauseCode = "",
+                    items = state.items.map { if (it.aiRelevance == null) it else it.copy(aiRelevance = null) })
             else state
         }
         Unit
@@ -131,6 +135,7 @@ open class FeedEngine(
         withContext(NonCancellable) {
             vault.clear()
             chatGpt?.clearAll()
+            repository.update { state -> state.copy(items = state.items.map { if (it.aiRelevance == null) it else it.copy(aiRelevance = null) }) }
         }
     }
 
@@ -158,6 +163,14 @@ open class FeedEngine(
 
     private suspend fun reserveRequest(): FeedState = repository.update { state ->
         RequestBudget.reserve(state) ?: throw FeedFailure("limit_reached")
+    }
+
+    private fun validatedCandidateFits(candidates: List<FeedItem>, fits: List<FeedCandidateFit>): Map<String, Int> {
+        if (candidates.isEmpty() || fits.size != candidates.size) return emptyMap()
+        val expected = candidates.map { it.id }.toSet()
+        if (expected.size != candidates.size || fits.map { it.itemId }.distinct().size != fits.size ||
+            fits.any { it.itemId !in expected || it.fitEstimate !in 0..100 } || fits.map { it.itemId }.toSet() != expected) return emptyMap()
+        return fits.associate { it.itemId to it.fitEstimate }
     }
 
     /** Explicit searches share one request budget, regardless of the number of selected modules. */
@@ -328,22 +341,45 @@ open class FeedEngine(
                         else credential(initial.connection)
                     } ?: break
                     val reserved = reserveRequest()
-                    if (credentialGeneration.get() != generation) break
+                    if (credentialGeneration.get() != generation || !samePersonalization(reserved, initial) ||
+                        reserved.modules != initial.modules || reserved.connection != initial.connection) break
                     val dueStars = StarredStories.due(reserved, module.id, now)
                     val discoveryModule = StarredStories.query(reserved, module, now)
-                    val items = AiActivityRegistry.run(module.id, module.kind, "discovery") {
+                    val stateBeforeDiscovery = repository.current()
+                    val candidateScope = AiRelevance094.scopeProviderDigest(reserved, module)
+                    val protectedIds = stateBeforeDiscovery.savedIds + stateBeforeDiscovery.hiddenIds + stateBeforeDiscovery.starredStories.map { it.itemId }
+                    val candidateItems = if (discoveryModule == module) stateBeforeDiscovery.items.asSequence()
+                        .filter { item -> item.id in fetchedIds && item.moduleId == module.id && item.kind == module.kind &&
+                            !item.aiGenerated && item.weather == null && item.kind !in setOf("weather", "horoscope") &&
+                            item.id !in protectedIds && FeedLogic.safeUrl(item.sourceUrl) &&
+                            !AiRelevance094.isApplicable(stateBeforeDiscovery, item, now, candidateScope) }
+                        .sortedByDescending { it.fetchedAtMillis }.take(8).toList() else emptyList()
+                    val result = AiActivityRegistry.run(module.id, module.kind, "discovery") {
                         AiActivityRegistry.report("preparing", contextEntries = FeedLogic.scopedContext(reserved, module).size)
-                        val found = provider.feed(reserved, discoveryModule, requestSecret, languageCode)
+                        val response = provider.discover(reserved, discoveryModule, requestSecret, languageCode, candidateItems)
                         AiActivityRegistry.report("validating")
-                        found.forEach { FeedLogic.validateItem(it); require(it.moduleId == module.id && it.kind == module.kind) }
-                        AiActivityRegistry.report("ready", count = found.size)
-                        found
+                        response.items.forEach { FeedLogic.validateItem(it); require(it.moduleId == module.id && it.kind == module.kind) }
+                        AiActivityRegistry.report("ready", count = response.items.size)
+                        response
                     }
+                    val items = result.items
+                    val candidateFits = validatedCandidateFits(candidateItems, result.candidateFits)
                     repository.update { latest ->
                         if (credentialGeneration.get() != generation || !samePersonalization(latest, initial) || latest.modules != initial.modules || latest.connection != initial.connection) latest
                         else {
                             fetchedIds += items.map { it.id }
-                            StarredStories.checked(FeedLogic.merge(latest, items, System.currentTimeMillis()), dueStars, System.currentTimeMillis())
+                            val checked = StarredStories.checked(FeedLogic.merge(latest, items, System.currentTimeMillis()), dueStars, System.currentTimeMillis())
+                            val protectedNow = checked.savedIds + checked.hiddenIds + checked.starredStories.map { it.itemId }
+                            val submitted = candidateItems.associateBy { it.id }
+                            val enriched = checked.items.map { current ->
+                                val fit = candidateFits[current.id]
+                                val sent = submitted[current.id]
+                                if (fit == null || sent == null || current.id in protectedNow || current.aiGenerated || current.weather != null ||
+                                    AiRelevance094.contentDigest(sent) != AiRelevance094.contentDigest(current)) current
+                                else current.copy(aiRelevance = AiRelevanceEstimate(fit, System.currentTimeMillis(),
+                                    AiRelevance094.contentDigest(current), candidateScope))
+                            }
+                            checked.copy(items = enriched)
                                 .copy(lastAiRefreshMillis = System.currentTimeMillis(), aiPauseCode = "")
                         }
                     }
