@@ -19,6 +19,9 @@ import java.io.File
 import java.time.LocalDate
 import java.util.Locale
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
@@ -277,6 +280,62 @@ class MeBotJourneyTest {
     @Test
     fun editingLegacyQrAlarmPreservesItsOwnCheckpointUntilExplicitlyChanged() {
         explore()
+        val diagnosticApp = application
+        val diagnosticVm = ViewModelProvider(compose.activity)[MeBotViewModel::class.java]
+        val observations = ArrayDeque<String>()
+        fun alarmSummary(alarms: List<AlarmPlan>): String =
+            "count=${alarms.size},plans=" + alarms.take(8).joinToString(prefix = "[", postfix = "]") {
+                "${it.id}:${it.label}:enabled=${it.enabled}:mode=${it.effectiveDismissMode}:checkpoint=${it.checkpointCode}/${it.checkpointLabel}"
+            } + if (alarms.size > 8) ",truncated=${alarms.size - 8}" else ""
+        fun guarded(label: String, read: () -> String): String = runCatching(read)
+            .getOrElse { "<$label unavailable: ${it.javaClass.simpleName}: ${it.message}>" }
+        fun observe(stage: String, state: AppState) {
+            val vmSummary = guarded("viewModel.state") { alarmSummary(diagnosticVm.ui.value.state?.alarms.orEmpty()) }
+            val entry = "${System.currentTimeMillis()} $stage repoState=${alarmSummary(state.alarms)} " +
+                "vmState=$vmSummary"
+            if (observations.size == 24) observations.removeFirst()
+            observations.addLast(entry.take(700))
+        }
+        fun observeCurrent(stage: String) {
+            val state = runCatching { runBlocking { withTimeout(1_000) { diagnosticApp.repository.current() } } }.getOrNull()
+            if (state == null) {
+                if (observations.size == 24) observations.removeFirst()
+                observations.addLast("${System.currentTimeMillis()} $stage repository.current unavailable")
+            } else observe(stage, state)
+        }
+        fun fullDiagnostic(): String = buildString {
+            appendLine("app=${System.identityHashCode(diagnosticApp)} activity=${System.identityHashCode(compose.activity)}")
+            appendLine("vm=${diagnosticVm.javaClass.name}@${System.identityHashCode(diagnosticVm)} " +
+                "repository=${System.identityHashCode(diagnosticApp.repository)} " +
+                "stateFlow=${System.identityHashCode(diagnosticApp.repository.state)}")
+            appendLine("current=" + guarded("repository.current") {
+                val state = runBlocking { withTimeout(1_000) { diagnosticApp.repository.current() } }
+                alarmSummary(state.alarms)
+            })
+            appendLine("vmState=" + guarded("viewModel.state") {
+                "failed=${diagnosticVm.ui.value.failed}; ${alarmSummary(diagnosticVm.ui.value.state?.alarms.orEmpty())}"
+            })
+            appendLine("vmMessage=" + guarded("viewModel.message") {
+                diagnosticVm.message.value?.let { compose.activity.getString(it) } ?: "<none>"
+            })
+            appendLine("stateFile=" + guarded("persisted state file") {
+                val file = File(diagnosticApp.filesDir, "mebot/state.json")
+                if (!file.isFile) "missing at ${file.absolutePath}"
+                else {
+                    val size = file.length()
+                    require(size <= 512 * 1024) { "refusing oversized diagnostic state file ($size bytes)" }
+                    val decoded = Json { ignoreUnknownKeys = true }
+                        .decodeFromString<AppState>(file.readText(Charsets.UTF_8))
+                    "path=${file.absolutePath}; bytes=$size; modified=${file.lastModified()}; ${alarmSummary(decoded.alarms)}"
+                }
+            })
+            appendLine("recent observations (${observations.size}, oldest first):")
+            observations.forEach { appendLine(it) }
+            appendLine("compose tree=" + guarded("compose tree") {
+                compose.onRoot().printToString().take(6_000)
+            })
+        }.take(14_000)
+
         val original = AlarmPlan(
             id = "legacy-qr", label = "Legacy QR", enabled = false, requireCheckpoint = true,
             checkpointCode = "legacy-hallway-marker", checkpointLabel = "Hallway",
@@ -287,15 +346,30 @@ class MeBotJourneyTest {
                 settings = state.settings.copy(checkpointCode = "new-desk-marker", checkpointLabel = "Desk"),
             ) }
         }
+        observeCurrent("seed-complete")
         navigation(R.string.alarms)
         clickContent("Legacy QR")
         waitForText(text(R.string.mebot_time_title))
         compose.onNodeWithText("Hallway").performScrollTo().assertIsDisplayed()
+        observeCurrent("editor-open-hallway-visible")
         compose.onNodeWithTag("alarm-advanced").performScrollTo().performClick()
         compose.onNode(hasText(text(R.string.mebot_alarm_name)) and hasSetTextAction())
             .performScrollTo().performTextReplacement("Updated QR")
+        observeCurrent("pre-save")
         compose.onNodeWithTag("alarm-save").performScrollTo().performClick()
-        waitForState { it.alarms.single().label == "Updated QR" }
+        observeCurrent("post-save-click")
+        try {
+            waitForState { state ->
+                observe("save-poll", state)
+                state.alarms.single().label == "Updated QR"
+            }
+        } catch (failure: Throwable) {
+            if (failure is VirtualMachineError || failure is ThreadDeath || failure is LinkageError) throw failure
+            val diagnostic = runCatching { fullDiagnostic() }
+                .getOrElse { "<diagnostic capture failed: ${it.javaClass.simpleName}: ${it.message}>" }
+            throw AssertionError("Legacy QR alarm save failed; bounded state trace follows:\n$diagnostic", failure)
+        }
+        observeCurrent("save-predicate-satisfied")
         compose.onNodeWithTag("alarm-create").assertIsDisplayed()
         val saved = current().alarms.single()
         assertEquals("legacy-hallway-marker", saved.checkpointCode)
