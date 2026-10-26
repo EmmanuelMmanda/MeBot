@@ -1,3 +1,7 @@
+> **Superseded — known issue:** This version can close when choosing or exporting a file, or turning on notifications. Use the [published 0.9.3 update](RELEASE-0.9.3.md) instead. Do not uninstall or clear your data.
+
+> **Publication archive:** Historical signed release, superseded by published 0.9.3. [Versioned files](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.1) · [Published 0.9.3 corrective release](RELEASE-0.9.3.md). The verification-stage status below is retained as a dated record, not the current publication state.
+
 # MeBot 0.9.1 — reliability patch candidate
 
 This patch follows reported device failures in 0.9.0. It preserves the existing design, onboarding tiles, app lock, global About you and module-scoped notes. Version code 18 can update version 17 when signed by the same production certificate; do not uninstall or erase data to update.

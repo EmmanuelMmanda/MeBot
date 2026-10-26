@@ -19,7 +19,8 @@ server = ThreadingHTTPServer(('127.0.0.1', 0), partial(Quiet, directory=str(ROOT
 threading.Thread(target=server.serve_forever, daemon=True).start()
 base = f'http://127.0.0.1:{server.server_port}/'
 r = json.loads((ROOT / 'docs/assets/release.json').read_text())
-apk = f"https://github.com/EmmanuelMmanda/MeBot/releases/download/{r['tag']}/{r['filename']}"
+published = r["status"] == "published"
+apk = f"https://github.com/EmmanuelMmanda/MeBot/releases/download/{r['tag']}/{r['filename']}" if published else None
 checks = []
 def load(page,name,**kwargs):
     if not os.environ.get('MEBOT_OFFLINE_BROWSER'):
@@ -91,8 +92,9 @@ try:
         page = context.new_page()
         load(page,'screenshots.html',wait_until='networkidle')
         page.get_by_role('button', name='Getting started', exact=True).click()
-        assert page.locator('#screen-gallery .shot:visible').count() == 3
-        assert page.locator('#screen-count').inner_text() == '3 screens'
+        start_count = sum(s['group'] == 'start' for s in json.loads((ROOT/'docs/assets/screens.json').read_text()))
+        assert page.locator('#screen-gallery .shot:visible').count() == start_count
+        assert page.locator('#screen-count').inner_text() == f'{start_count} screens'
         opener = page.locator('#screen-gallery .shot:visible a').first
         opener.focus(); page.keyboard.press('Enter')
         assert page.locator('#image-dialog').is_visible()
@@ -111,8 +113,12 @@ try:
         page = context.new_page()
         for name in ('index.html','download.html','releases.html'):
             load(page,name)
-            assert page.locator('[data-release-apk]').first.is_visible()
-            assert page.locator('[data-release-apk]').first.get_attribute('href') == apk
+            if published:
+                assert page.locator('[data-release-apk]').first.is_visible()
+                assert page.locator('[data-release-apk]').first.get_attribute('href') == apk
+            else:
+                assert page.locator('[data-release-apk]').count() == 0
+                assert page.locator('.release-hold').is_visible()
         load(page,'screenshots.html')
         assert page.locator('#screen-gallery .shot').count() == len(json.loads((ROOT/'docs/assets/screens.json').read_text()))
         checks += ['APK links and all screenshots remain available with JavaScript disabled']

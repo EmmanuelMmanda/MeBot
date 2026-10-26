@@ -1,15 +1,11 @@
-<!-- preview-090:start -->
-> **0.9.0 local candidate:** Measured Kotlin ranking improvements, verified-date Today, compact interests and optional app lock. [Candidate guide](docs/RELEASE-0.9.0.md) · [Earlier 0.8.5](docs/RELEASE-0.8.5.md). Final gates and signing remain pending; the official download is **0.8.2**.
-<!-- preview-090:end -->
+# Start here — MeBot 0.9.3
 
-# Start here — MeBot 0.8.2
-
-[Download Android APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.8.2/mebot-0.8.2.apk) · [Release files](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.8.2) · [Full user guide](docs/USER-GUIDE.md)
+[Download Android APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.3/mebot-0.9.3.apk) · [Release files](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.3) · [Full user guide](docs/USER-GUIDE.md)
 
 ## 1. Choose interests
 Pick topics and, optionally, a city. The app does not require an imported context file.
 
-![Choose interests](docs/screenshots/v082/interests.png)
+![Choose interests](docs/screenshots/v090/onboarding-en-chooser.png)
 
 ## 2. Read, ask and refine
 Open an item for the introduction and an automatic explanation when AI is connected. Sources remain accessible. Relevant / Not relevant tunes that module; Undo changes your choice.
@@ -17,9 +13,9 @@ Open an item for the introduction and an automatic explanation when AI is connec
 ![A sourced item and its explanation](docs/screenshots/v082/detail-answer.png)
 
 ## 3. Choose a connection
-Open My MeBot → AI connection. Choose an eligible sign-in, an API key or your personal endpoint. Set the request allowance here. Public information stays usable without AI.
+Open You → AI connection. Choose an eligible sign-in, an API key or your personal endpoint. Set the request allowance here. Public information stays usable without AI.
 
-![Provider choices](docs/screenshots/v082/providers.png)
+![Provider choices](docs/screenshots/v092/connection-sw.png)
 
 ## 4. Set background behavior
 Choose timing, preparation, connection/battery conditions and quiet hours. New results arrive as modules complete.
@@ -27,7 +23,7 @@ Choose timing, preparation, connection/battery conditions and quiet hours. New r
 ![Background controls](docs/screenshots/v082/background.png)
 
 ## 5. Keep MeBot current
-Open My MeBot → Software Updates. Automatic checks and optional Wi-Fi downloads prepare eligible releases; Android requires installation approval. This package is `mebot.nguli.com`, separate from older development builds.
+Open You → Software Updates. Automatic checks and optional Wi-Fi downloads prepare eligible releases; Android requires installation approval. This package is `mebot.nguli.com`, separate from older development builds.
 
 ![Software Updates](docs/screenshots/v082/software-updates.png)
 
