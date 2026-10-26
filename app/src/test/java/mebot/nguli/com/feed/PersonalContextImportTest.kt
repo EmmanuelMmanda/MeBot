@@ -61,6 +61,33 @@ class PersonalContextImportTest {
         Dispatchers.resetMain()
     }
 
+    @Test fun confirmingWithoutAReviewedImportIsANoopWithoutSuccessFeedback() = runBlocking {
+        val before = app.feedRepository.current()
+        viewModel.confirmImport()
+        assertEquals(before, app.feedRepository.current())
+        assertNull(viewModel.ui.value.importPreview)
+        assertNull(viewModel.ui.value.importSummary)
+        assertFalse(viewModel.ui.value.importWorking)
+        assertNull(viewModel.ui.value.notice)
+    }
+
+    @Test fun resetClearsOldImportSuccessAndCannotReportItAgain() = runBlocking {
+        viewModel.prepareContextText(FeedJson.encodeToString(PersonalContextImport(name = "Reviewed profile",
+            entries = listOf(ContextEntry(id = "reviewed-note", text = "A confirmed synthetic note", scopes = setOf("news"))))))
+        withTimeout(10_000) { viewModel.ui.first { !it.importWorking && it.importPreview != null } }
+        viewModel.confirmImport()
+        withTimeout(10_000) { viewModel.ui.first { it.importSummary == "context" && !it.importWorking } }
+
+        viewModel.reset().join()
+        val erased = app.feedRepository.current()
+        assertNull(viewModel.ui.value.importPreview)
+        assertNull(viewModel.ui.value.importSummary)
+        assertFalse(viewModel.ui.value.importWorking)
+        viewModel.confirmImport()
+        assertEquals(erased, app.feedRepository.current())
+        assertNull(viewModel.ui.value.importSummary)
+    }
+
     @Test fun contextOnlyImportPreservesConfigurationCredentialsSavedContentAndScheduledAlarms() = runBlocking {
         val before = app.feedRepository.current()
         val utilities = app.repository.current()
@@ -115,6 +142,38 @@ class PersonalContextImportTest {
         assertEquals(after, viewModel.ui.value.state)
         assertTrue(viewModel.ui.value.connected)
         assertEquals(scheduled, AlarmStore(app).scheduled)
+    }
+
+    @Test fun contextImportInvalidatesDerivedRelevanceWithoutChangingCachedContent() = runBlocking {
+        val estimate = AiRelevanceEstimate(82, 123L, "a".repeat(64), "b".repeat(64))
+        app.feedRepository.update { state -> state.copy(items = state.items.map { it.copy(aiRelevance = estimate) }) }
+        val before = app.feedRepository.current()
+        val imported = PersonalContextImport(name = before.name, region = before.region, timezone = before.timezone,
+            entries = before.context)
+
+        val result = importText(FeedJson.encodeToString(imported))
+        assertEquals("imported", result.notice)
+        val after = app.feedRepository.current()
+        assertEquals(before.items.map { it.copy(why = "", relevance = 0, aiRelevance = null) }, after.items)
+        assertTrue(after.items.all { it.aiRelevance == null })
+    }
+
+    @Test fun fullBackupImportDoesNotRestoreDerivedRelevanceCache() = runBlocking {
+        val estimate = AiRelevanceEstimate(82, 123L, "a".repeat(64), "b".repeat(64))
+        val candidate = existingFeed().copy(items = existingFeed().items.map { it.copy(aiRelevance = estimate) })
+        val file = File(app.cacheDir, "backup-with-synthetic-fit-cache.json").apply {
+            writeText(FeedJson.encodeToString(candidate))
+        }
+        viewModel.prepareFeedBackup(Uri.fromFile(file))
+        withTimeout(10_000) { viewModel.ui.first { !it.importWorking && it.importPreview?.kind == "backup" } }
+        viewModel.confirmImport()
+        withTimeout(10_000) { viewModel.ui.first { !it.importWorking && it.importSummary == "backup" } }
+
+        val after = app.feedRepository.current()
+        assertEquals(candidate.items.map { it.copy(aiRelevance = null) }, after.items)
+        assertTrue(after.items.all { it.aiRelevance == null })
+        assertEquals(candidate.savedIds, after.savedIds)
+        assertEquals(candidate.hiddenIds, after.hiddenIds)
     }
 
     @Test fun malformedOrInvalidContextCannotPartiallyReplaceExistingData() = runBlocking {
@@ -260,8 +319,10 @@ class PersonalContextImportTest {
         val erased = app.feedRepository.current()
         assertTrue(erased.context.isEmpty())
         assertNull(viewModel.ui.value.importPreview)
+        assertNull(viewModel.ui.value.importSummary)
         viewModel.confirmImport()
         assertEquals(erased, app.feedRepository.current())
+        assertNull(viewModel.ui.value.importSummary)
     }
 
     @Test fun stagedFullBackupCannotBeConfirmedAfterReset(): Unit = runBlocking {

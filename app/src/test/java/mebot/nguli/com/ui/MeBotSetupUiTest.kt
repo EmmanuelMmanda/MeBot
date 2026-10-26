@@ -96,7 +96,7 @@ class MeBotSetupUiTest {
         restoration.setContent {
             val ui by vm.ui.collectAsState()
             MeBotTheme { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                ContextImportScreen(ui, vm, onBack = {})
+                ContextImportScreen(ui, vm, onImported = {})
             } }
         }
         compose.onNodeWithTag("context-import").performScrollTo().assertIsDisplayed()

@@ -240,6 +240,8 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
     var detailReturn by rememberSaveable { mutableStateOf("feed") }
     var connectionReturn by rememberSaveable { mutableStateOf("you") }
     var contextReturn by rememberSaveable { mutableStateOf("you") }
+    var contextImportRefreshRequest by rememberSaveable { mutableIntStateOf(0) }
+    var contextNotesRevealRequest by rememberSaveable { mutableIntStateOf(0) }
     var deliveryReturn by rememberSaveable { mutableStateOf("you") }
     var moduleDraft by rememberSaveable { mutableStateOf<String?>(null) }
     var moduleIsNew by rememberSaveable { mutableStateOf(false) }
@@ -455,8 +457,24 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                             if (onboarded && refresh) feedVm.refresh()
                             if (onboarded) page = connectionReturn else finishSetup()
                         }
-                        "context" -> ContextScreen(feedUi, feedVm, onImportContext = { feedVm.clearMessage(); page = "context-import" }) { page = contextReturn }
-                        "context-import" -> ContextImportScreen(feedUi, feedVm) { page = "context" }
+                        "context" -> ContextScreen(feedUi, feedVm,
+                            onImportContext = { feedVm.clearMessage(); feedVm.clearImportSummary(); page = "context-import" },
+                            importRefreshRequest = contextImportRefreshRequest,
+                            onImportRefreshConsumed = { request ->
+                                if (contextImportRefreshRequest == request) contextImportRefreshRequest = 0
+                            },
+                            revealImportedNotesRequest = contextNotesRevealRequest,
+                            onNotesRevealConsumed = { request ->
+                                if (contextNotesRevealRequest == request) contextNotesRevealRequest = 0
+                            },
+                        ) { page = contextReturn }
+                        "context-import" -> ContextImportScreen(feedUi, feedVm, onImported = {
+                            contextImportRefreshRequest++
+                            if (feedUi.state?.context?.any { it.id != PersonalProfile085.PROFILE_ID && it.text.isNotBlank() } == true) {
+                                contextNotesRevealRequest++
+                            }
+                            page = "context"
+                        })
                         "delivery" -> DeliveryScreen(feedUi, feedVm, { page = deliveryReturn }, ::openConnection)
                         "data" -> FeedDataScreen(feedUi, feedVm) { page = "settings" }
                         "app-lock" -> AppLockSettingsScreen((context.applicationContext as MeBotApplication).appLock, onBack = { page = "settings" }, showBack = false)
