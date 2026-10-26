@@ -111,3 +111,20 @@ The separate `v094/evidence/imported-notes-sw-320dp-130percent.png` image is **a
 These review images are not a pixel-baseline test suite. See [VERIFICATION.md](../VERIFICATION.md) and [test-results-summary.json](../test-results-summary.json) for executable coverage and its limits. Real-phone installation, alarm sound, lock-screen delivery and overnight behavior still require device qualification.
 
 The 0.5.1 edition tests also exercise three cached pages, filter and saved-instance restoration, stable reading position after insertion/hide, and a retained horizontal chip position. These checks measure composition/state behavior, not physical-device frame rate.
+
+## MeBot 0.9.5 story-question captures
+
+These six ordinary English and Kiswahili UI captures document the story-question flow in the published MeBot 0.9.5 release. Feed and detail screens are intentionally scrolled to the suggested-question area; the MeBot screens show an editable item-scoped draft before Send. Selecting a suggestion did not send a request. The Kiswahili UI captures keep the synthetic story text in English.
+
+All story titles, publisher labels, response text, preferences and the selected provider/model are synthetic fixtures. The provider label is not evidence of an account, subscription or live response. These images are not live articles, owner sessions or physical-phone acceptance evidence. Source links remain separately available from the item details or card menu. Screenshots illustrate sample UI state, not publication status; check the current [release directory](../releases.html) for release assets.
+
+| File | What it shows |
+| --- | --- |
+| `v095/en-feed.png` | English feed scrolled to an item-grounded question prompt. |
+| `v095/sw-feed.png` | Kiswahili feed and a story-specific question; synthetic story text remains English. |
+| `v095/en-detail.png` | Story detail with its original-source action and suggested question in view. |
+| `v095/sw-detail.png` | Kiswahili story detail with the same source/question relationship. |
+| `v095/en-mebot-prefilled.png` | Editable, unsent question about the selected story. |
+| `v095/sw-mebot-prefilled.png` | Kiswahili editable draft before Send; provider label is fixture state. |
+
+The standard gallery keeps these normal-use previews separate from narrow-layout accessibility stress evidence. See [the prepared experience preview](../preview-095.html) and [current public-release status](../PUBLIC-RELEASES.md).

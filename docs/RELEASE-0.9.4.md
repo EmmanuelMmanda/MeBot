@@ -1,6 +1,6 @@
 # MeBot 0.9.4 — your notes, a fresher feed
 
-Published 26 October 2026. The official Android update is available for `mebot.nguli.com`.
+Published 26 October 2026. The official Android update is available for `mebot.nguli.com`. MeBot 0.9.5 is now the current official release; these notes retain the history of the superseded 0.9.4 update.
 
 ## What’s improved
 

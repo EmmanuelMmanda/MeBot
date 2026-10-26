@@ -4,6 +4,7 @@ from pathlib import Path
 from html.parser import HTMLParser
 import json
 import re
+from datetime import date, datetime, timezone
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / 'docs'
@@ -21,6 +22,39 @@ assert r['filename'] and r['sha256'] and r['sizeBytes']
 assert r['sourceFilename'] and r['verificationFilename']
 integrity = json.loads((DOCS / r['integrityFile']).read_text())
 assert r['certificateSha256'] and integrity['signer_certificate_sha256'] == r['certificateSha256']
+if published:
+    assert r.get('privateCandidate') is False
+    assert r.get('publicAssetsAvailable') is True and r.get('inAppUpdateAvailable') is True
+    published_at = datetime.fromisoformat(r['publishedAt'].replace('Z', '+00:00'))
+    assert published_at.tzinfo is not None and published_at.utcoffset() == timezone.utc.utcoffset(published_at)
+    publication_date = date.fromisoformat(r['publishedDate'])
+    assert publication_date.isoformat() == integrity.get('publication_date') == published_at.astimezone(timezone.utc).date().isoformat()
+    assert r['publishedAt'] == integrity.get('published_at')
+    assert integrity['publication_status'] == 'published'
+    assert integrity['public_assets_available'] is True and integrity['in_app_update_available'] is True
+    assert integrity['public_release_assets_verified'] is True and integrity['public_release_latest'] is True
+    assert integrity['public_release_url'] == f'https://github.com/EmmanuelMmanda/MeBot/releases/tag/{r["tag"]}'
+    for catalog_field, integrity_field in (
+        ('sourceCommit', 'source_code_commit'), ('sourceTree', 'source_tree'),
+        ('filename', 'apk_file'), ('sha256', 'apk_sha256'), ('sizeBytes', 'apk_size_bytes'),
+        ('sourceFilename', 'source_file'), ('sourceSha256', 'source_sha256'),
+        ('sourceSizeBytes', 'source_size_bytes'), ('certificateSha256', 'signer_certificate_sha256'),
+    ):
+        assert r[catalog_field] == integrity[integrity_field], f'Published identity mismatch: {catalog_field}'
+if not published:
+    assert r.get('privateCandidate') is True and r.get('localArtifactsVerified') is True
+    assert official['version'] == '0.9.4' and official['status'] == 'published'
+    assert 'publishedDate' not in r and 'publishedAt' not in r
+    assert integrity['publication_status'] == 'pending'
+    assert integrity['publication_date'] is None and integrity['published_at'] is None
+    assert integrity['public_assets_available'] is False and integrity['in_app_update_available'] is False
+    for catalog_field, integrity_field in (
+        ('sourceCommit', 'source_code_commit'), ('sourceTree', 'source_tree'),
+        ('filename', 'apk_file'), ('sha256', 'apk_sha256'), ('sizeBytes', 'apk_size_bytes'),
+        ('sourceFilename', 'source_file'), ('sourceSha256', 'source_sha256'),
+        ('sourceSizeBytes', 'source_size_bytes'), ('certificateSha256', 'signer_certificate_sha256'),
+    ):
+        assert r[catalog_field] == integrity[integrity_field], f'Candidate identity mismatch: {catalog_field}'
 assert len({s['file'] for s in screens}) == len(screens), 'Duplicate screenshots'
 assert len(screens) >= 12, 'Incomplete gallery'
 for s in screens:
@@ -48,14 +82,14 @@ class Inspect(HTMLParser):
         if 'data-screen-group' in a:
             self.groups += 1
 
-main_pages = ('index.html', 'screenshots.html', 'download.html', 'releases.html', 'tour.html')
+main_pages = ('index.html', 'screenshots.html', 'download.html', 'releases.html', 'tour.html', 'preview-095.html')
 for name in main_pages:
     text = (DOCS / name).read_text()
     p = Inspect(); p.feed(text)
     assert '/releases/latest' not in text, 'GitHub latest omits prereleases'
     assert '/blob/master/' not in text, 'Wrong branch link'
     assert r['version'] in text
-    if name not in ('screenshots.html', 'tour.html'):
+    if name not in ('screenshots.html', 'tour.html', 'preview-095.html'):
         assert p.downloads, f'Missing official download: {name}'
     for a in p.downloads:
         assert a.get('href') == expected_apk and 'hidden' not in a, name
@@ -73,14 +107,17 @@ for name in main_pages:
         assert 'Evidence only' not in text or 'Accessibility stress evidence' in text
         assert '320 dp' in text and '130% font scale' in text
     if name == 'download.html':
-        for field in (r['filename'], r['sourceFilename'], r['verificationFilename'], r['sourceCommit'], r['sourceTree'], r['applicationId'], r['certificateSha256']):
+        for field in (official['filename'], official['sourceFilename'], official['verificationFilename'], official['sourceCommit'], official['sourceTree'], official['applicationId'], official['certificateSha256']):
             assert field in text, f'{field} missing from current download details'
-        for field in (r['releaseNotesFilename'], r['checksumFilename'], r['releaseMetadataFilename']):
+        for field in (official['releaseNotesFilename'], official['checksumFilename'], official['releaseMetadataFilename']):
             assert field in text, f'{field} absent from asset list'
     if name == 'releases.html':
         assert r['version'] in text and 'What changed in' in text
-        assert 'A successful context import could still leave the screen on the import flow' in text
         assert 'Historical signed · superseded' in text
+        if published and r['version'] == '0.9.5':
+            assert 'MeBot 0.9.4 is superseded by 0.9.5' in text
+        elif not published:
+            assert 'A successful context import could still leave the screen on the import flow' in text
 
 readme = (ROOT / 'README.md').read_text()
 start = (ROOT / 'START-HERE.md').read_text()
@@ -88,12 +125,57 @@ assert readme.count('<img ') >= len(screens)
 assert '/releases/latest' not in readme
 assert 'The current application version is **0.6.1**' not in readme
 assert official['tag'] in readme and expected_apk in readme
-assert r['version'] in readme and r['sourceCommit'] in readme
-assert 'imported notes' in readme.lower() and 'expired' in readme.lower()
+assert official['version'] in readme and official['sourceCommit'] in readme
+if official['version'] == '0.9.4':
+    assert 'imported notes' in readme.lower() and 'expired' in readme.lower()
+elif official['version'] == '0.9.5':
+    assert 'category label' in readme.lower() and 'story-specific questions' in readme.lower() and 'offline' in readme.lower()
 assert 'synthetic fixtures' in readme
 assert expected_apk in start and official['tag'] in start
 assert 'imported-notes-en.png' in start and 'synthetic notes' in start
 assert 'after-import' in start
+if published and r['version'] == '0.9.5':
+    current_pages = [DOCS / name for name in (*main_pages, 'guide.html', 'guides/feed-and-ai.html')]
+    for page_path in current_pages:
+        page_text = page_path.read_text().lower()
+        for stale in ('is not yet released', 'not publicly released', 'in preparation · 0.9.5', 'no candidate download', 'still being prepared', 'candidate preview'):
+            assert stale not in page_text, f'Stale published-release copy in {page_path.name}: {stale}'
+    assert 'story-flow guide' in (DOCS/'preview-095.html').read_text().lower()
+    assert 'sample content' in (DOCS/'screenshots.html').read_text().lower()
+    assert all(s.get('sampleFixture') is True and not s.get('candidatePreview') for s in current_screens)
+    previous_entry = next(e for e in r['releases'] if e['version']=='0.9.4')
+    assert previous_entry.get('recommendation') == 'superseded' and 'Superseded by MeBot 0.9.5' in previous_entry['notes']
+    assert 'Official MeBot 0.9.5' in (ROOT/'README.md').read_text()
+    gallery = (ROOT/'README.md').read_text().split('## See the current app',1)[1].split('## Choose your AI connection',1)[0]
+    assert re.findall(r'href="(docs/screenshots/[^"]+)"', gallery)[:3] == ['docs/screenshots/v095/en-feed.png', 'docs/screenshots/v095/sw-feed.png', 'docs/screenshots/v095/en-detail.png']
+    assert 'candidate' not in (ROOT/'README.md').read_text().lower()
+    assert 'not yet released' not in (ROOT/'START-HERE.md').read_text().lower()
+if not published:
+    candidate_preview = (DOCS / 'preview-095.html').read_text()
+    assert 'not publicly released' in candidate_preview.lower()
+    assert 'does not send' in candidate_preview.lower() or 'not send' in candidate_preview.lower()
+    assert 'fixture provider label' in candidate_preview.lower()
+    assert f'/releases/download/v{r["version"]}/' not in candidate_preview
+    assert 'Historical preview.' not in candidate_preview
+    assert 'Get MeBot 0.9.4' in (DOCS / 'index.html').read_text()
+    assert 'Get MeBot 0.9.5' not in (DOCS / 'index.html').read_text()
+    assert 'in-app updates' in candidate_preview.lower()
+    assert 'intentionally scrolled' in candidate_preview.lower()
+    assert 'physical-phone acceptance evidence' in candidate_preview.lower()
+    assert 'not a public download' in (DOCS / 'download.html').read_text().lower()
+    assert 'not offered' in (DOCS / 'releases.html').read_text().lower()
+    assert r['sourceCommit'] in integrity['source_code_commit']
+    sample_screens = [s for s in screens if s.get('candidatePreview') is True]
+    assert len(sample_screens) == 6
+    assert {Path(s['file']).name for s in sample_screens} == {
+        'en-feed.png', 'sw-feed.png', 'en-detail.png', 'sw-detail.png',
+        'en-mebot-prefilled.png', 'sw-mebot-prefilled.png',
+    }
+    assert all(s.get('sampleFixture') is True and s['version'] == r['version'] and 'captureDate' not in s for s in sample_screens)
+    for name in main_pages:
+        page_text = (DOCS / name).read_text()
+        assert f'/releases/download/v{r["version"]}/' not in page_text, f'{name} links to an unreleased candidate asset'
+    assert 'local question suggestions remain available offline' in (DOCS / 'preview-095.html').read_text().lower()
 for current in (ROOT/'README.md', ROOT/'START-HERE.md', DOCS/'USER-GUIDE.md'):
     assert 'offline price comparison tool' not in current.read_text().lower()
 
@@ -111,12 +193,15 @@ assert 'not passive reading history' in feed and 'up to eight public stories per
 assert 'After import, I do not see my notes.' in faq and 'A forecast or event disappeared from my feed.' in faq
 assert r['version'] in (DOCS / 'INSTALL.md').read_text()
 assert r['version'] in (DOCS / 'PUBLIC-RELEASES.md').read_text()
-assert '0.9.3 fixed that crash but could remain on the context-import screen after a successful import' in (DOCS / 'PUBLIC-RELEASES.md').read_text()
+assert '0.9.3 corrected those crashes' in (DOCS / 'PUBLIC-RELEASES.md').read_text()
 for page in DOCS.rglob('*.html'):
     html = page.read_text()
+    if 'class="image-note"' in html:
+        assert 'Native Android host captures with dated public stories and labelled synthetic examples.' in html, f'Missing clear screenshot provenance: {page}'
     assert 'preview-banner' not in html, f'Stale candidate banner: {page}'
     if '<footer' in html:
-        assert f'MeBot {r["version"]} ·' in html[html.find('<footer'):], f'Stale shared footer version: {page}'
+        assert f'MeBot {official["version"]} ·' in html[html.find('<footer'):], f'Stale shared footer version: {page}'
+        assert 'Native Android host captures with dated public stories and labelled synthetic examples. No live personal accounts or physical-phone capture is implied.' in html[html.find('<footer'):], f'Stale shared footer provenance: {page}'
     if page.relative_to(DOCS).as_posix().startswith('guides/'):
         assert f'Official {official["version"]}' in html, f'Stale current release navigation: {page}'
 
