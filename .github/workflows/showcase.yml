@@ -14,11 +14,14 @@ concurrency:
 jobs:
   review:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Browser setup alone took 13m11 once; allow the full-guide render suite too.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Validate pages, screenshots and release links
+      - name: Build and validate the complete product site
         run: |
+          python3 scripts/build-showcase.py
+          git diff --exit-code -- README.md START-HERE.md docs/
           python3 scripts/check-docs.py
           python3 scripts/check-showcase.py
           node --check docs/site.js

@@ -295,13 +295,19 @@ fun FeedStatus(code: String, onRetry: (() -> Unit)? = null, onDismiss: (() -> Un
 }
 
 @Composable
-fun FeedSettingsRow(icon: ImageVector, title: String, subtitle: String = "", onClick: () -> Unit) {
-    Surface(onClick = onClick, color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(20.dp)) {
+fun FeedSettingsRow(icon: ImageVector, title: String, subtitle: String = "", onClick: () -> Unit,
+    enabled: Boolean = true, testTag: String? = null) {
+    val rowModifier = if (testTag == null) Modifier else Modifier.testTag(testTag)
+    Surface(onClick = onClick, enabled = enabled, modifier = rowModifier,
+        color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(20.dp)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 76.dp).padding(18.dp), horizontalArrangement = Arrangement.spacedBy(15.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(23.dp))
+            Icon(icon, null, tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(23.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                if (subtitle.isNotBlank()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(title, style = MaterialTheme.typography.titleMedium,
+                    color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                if (subtitle.isNotBlank()) Text(subtitle, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }

@@ -2,13 +2,12 @@ package mebot.nguli.com.core
 
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
-import kotlin.math.ln
 
 /** Local, explainable reranking of source-backed AI candidates; never an engagement score. */
 object RecommendationPolicy {
-    data class Score(val semantic: Int, val interest: Int, val feedback: Int, val freshness: Int,
+    data class Score(val semantic: Int, val interest: Int, val aiFit: Int, val feedback: Int, val freshness: Int,
         val novelty: Int, val deadline: Int, val exploration: Int) {
-        val total: Int get() = semantic + interest + feedback + freshness + novelty + deadline + exploration
+        val total: Int get() = semantic + interest + aiFit + feedback + freshness + novelty + deadline + exploration
     }
     private val words = Regex("[\\p{L}\\p{N}]{3,}")
     private val stop = setOf("the", "and", "for", "with", "that", "this", "from", "about", "have", "want", "news", "like", "kwa", "hii", "hizi", "yangu", "habari", "katika", "na", "are", "can", "your")
@@ -20,13 +19,12 @@ object RecommendationPolicy {
         val body = terms(item.title + " " + item.summary)
         val explicit = module?.let { terms(FeedLogic.scopedContext(state, it).joinToString(" ") { note -> note.text } + " " + it.query) }.orEmpty()
         val interest = (body.intersect(explicit).size * 3).coerceAtMost(15)
+        val aiFit = AiRelevance094.adjustment(state, item, now)
         fun affinity(ids: Set<String>): Int = state.items.asSequence().filter { it.id in ids && it.moduleId == item.moduleId && it.id != item.id }
             .take(40).map { saved -> body.intersect(terms(saved.title)).size.coerceAtMost(3) }.sum().coerceAtMost(5)
         // A deliberate save or hide outweighs a passive open. Reading history can be disabled.
         val feedback = (affinity(state.savedIds) * 2 - affinity(state.hiddenIds) * 3 + RelevanceFeedback.adjustment(state, item, now)).coerceIn(-50, 40)
-        val ageHours = (now - (item.publishedAtMillis.takeIf { it > 0 } ?: item.fetchedAtMillis)).coerceAtLeast(0) / 3_600_000.0
-        val halfLife = if (item.kind in setOf("news", "weather", "security", "business")) 24.0 else 168.0
-        val freshness = (-ln(1 + ageHours / halfLife) * if(halfLife == 24.0) 12 else 6).toInt().coerceAtLeast(-60)
+        val freshness = FreshnessPolicy094.freshnessScore(item, now)
         val viewed = if (state.readingHistoryEnabled) state.viewedAtMillis[item.id] else null
         val novelty = if (viewed == null) 14 else when ((now-viewed).coerceAtLeast(0)) {
             in 0 until 21_600_000L -> -18
@@ -38,7 +36,7 @@ object RecommendationPolicy {
         // Only a small, deterministic exploration allowance; never replace strong relevance with random noise.
         val mixed = ((item.id.hashCode().toLong() * 0x9E3779B9L) xor (state.editionSequence * 0x85EBCA6BL)).ushr(8)
         val exploration = if (state.editionSequence > 0 && item.relevance >= 40 && viewed == null) (mixed % 7).toInt() else 0
-        return Score(item.relevance.coerceIn(0, 100), interest, feedback, freshness, novelty, deadline, exploration)
+        return Score(item.relevance.coerceIn(0, 100), interest, aiFit, feedback, freshness, novelty, deadline, exploration)
     }
 
     class Snapshot internal constructor(private val state: FeedState, private val now: Long) {
@@ -50,9 +48,15 @@ object RecommendationPolicy {
         private val signals = state.relevanceSignals.groupBy { it.moduleId }.mapValues { (_, entries) ->
             entries.map { it to kotlin.math.exp(-(now-it.updatedAtMillis).coerceAtLeast(0)/86_400_000.0/60.0) }
         }
+        // Context/provider fingerprints are module-scoped; do not hash a full scope per candidate.
+        private val scopeProviderDigests = state.items.asSequence().filter { it.aiRelevance != null }
+            .map { it.moduleId }.distinct().mapNotNull { moduleId ->
+                state.modules.firstOrNull { it.id == moduleId }?.let { moduleId to AiRelevance094.scopeProviderDigest(state, it) }
+            }.toMap()
         fun score(item: FeedItem): Score {
         val body = terms(item.title + " " + item.summary)
         val interest = (body.count { it in explicit[item.moduleId].orEmpty() } * 3).coerceAtMost(15)
+        val aiFit = if (item.aiRelevance != null) AiRelevance094.adjustment(state, item, now, scopeProviderDigests[item.moduleId]) else 0
         fun affinity(entries: Map<String,List<FeedItem>>): Int = entries[item.moduleId].orEmpty().asSequence()
             .filter { it.id != item.id }.take(40).map { saved -> body.count { it in titleTerms.getValue(saved.id) }.coerceAtMost(3) }.sum().coerceAtMost(5)
         val adjustment = if(body.isEmpty()) 0 else signals[item.moduleId].orEmpty().sumOf { (signal, decay) ->
@@ -62,9 +66,7 @@ object RecommendationPolicy {
             (if(signal.relevant) 24.0 else -30.0) * similarity * decay
         }.toInt().coerceIn(-45,35)
         val feedback = (affinity(saved)*2-affinity(hidden)*3+adjustment).coerceIn(-50,40)
-        val ageHours = (now - (item.publishedAtMillis.takeIf { it > 0 } ?: item.fetchedAtMillis)).coerceAtLeast(0) / 3_600_000.0
-        val halfLife = if (item.kind in setOf("news", "weather", "security", "business")) 24.0 else 168.0
-        val freshness = (-ln(1 + ageHours / halfLife) * if(halfLife == 24.0) 12 else 6).toInt().coerceAtLeast(-60)
+        val freshness = FreshnessPolicy094.freshnessScore(item, now)
         val viewed = if (state.readingHistoryEnabled) state.viewedAtMillis[item.id] else null
         val novelty = if (viewed == null) 14 else when ((now-viewed).coerceAtLeast(0)) {
             in 0 until 21_600_000L -> -18
@@ -76,7 +78,7 @@ object RecommendationPolicy {
         // Only a small, deterministic exploration allowance; never replace strong relevance with random noise.
         val mixed = ((item.id.hashCode().toLong() * 0x9E3779B9L) xor (state.editionSequence * 0x85EBCA6BL)).ushr(8)
         val exploration = if (state.editionSequence > 0 && item.relevance >= 40 && viewed == null) (mixed % 7).toInt() else 0
-        return Score(item.relevance.coerceIn(0, 100), interest, feedback, freshness, novelty, deadline, exploration)
+        return Score(item.relevance.coerceIn(0, 100), interest, aiFit, feedback, freshness, novelty, deadline, exploration)
     }
     }
     /** Global About-you is explicitly shared with every question; other notes still require topic routing. */

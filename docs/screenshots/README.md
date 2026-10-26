@@ -2,7 +2,7 @@
 
 These images come from the actual Android Compose activities, rendered with Robolectric native graphics on API 35. Light layouts use a 411 dp viewport. The Kiswahili dark feed uses 320 dp. They are native rendering evidence, not browser mockups or photographs of a physical phone.
 
-The name “Alex”, context entries, example.com stories, example answers, plans and alarm records are synthetic test fixtures. They are excluded from the application. Automated feed journeys use deterministic source and AI transports with the production repository, engine and ViewModel. These images do not claim a live provider response or a signed-in owner account. The connected ChatGPT fixture is explicitly labelled “Example account · TEST-A”.
+The name “Alex”, context entries, example.com stories, example answers, plans and alarm records are synthetic test fixtures. They are excluded from the application. Automated feed journeys use deterministic source and AI transports with the production repository, engine and ViewModel. These images do not claim a live provider response or a signed-in owner account. The connected ChatGPT fixture is explicitly labelled “Example account · TEST-A”. The 0.9.4 imported-notes screenshots below also use synthetic note content; they show the normal English and Kiswahili UI, not anyone’s personal data.
 
 ## Version 0.6.1 welcome, discovery and alarm audio
 
@@ -94,6 +94,19 @@ The native connected journey tests browser launch, pending-state rotation, compl
 | `07-mebot-focus.png` | Active focus interval and pause controls |
 | `09-mebot-preferences.png` | Personal context, AI, delivery, appearance and data entry points |
 | `10-mebot-math-alarm.png` | Ringing alarm with math question and keypad |
+
+## MeBot 0.9.4 imported notes
+
+The English and Kiswahili images show the ordinary My context screen after a confirmed import. They are native Android host captures from deterministic test journeys using synthetic preferences. The shown notes and name are examples, not a real account or user profile. These gallery images are standard 822 × 1782 host captures.
+
+| File | What it shows |
+| --- | --- |
+| `v094/imported-notes-en.png` | English My context with newly imported synthetic notes visible after confirmation. |
+| `v094/imported-notes-sw.png` | Kiswahili My context with newly imported synthetic notes visible after confirmation. |
+
+The separate `v094/evidence/imported-notes-sw-320dp-130percent.png` image is **accessibility stress evidence only**: it was captured at 320 dp width and 130% text scale. It is not a typical phone-size capture and is intentionally excluded from the standard screenshot gallery.
+
+0.9.4 confirms the context replacement preview before saving, returns to My context with the imported notes visible, and keeps the existing draft if the import is cancelled or invalid. For release status, matching source and technical test limits, see the [release notes](../RELEASE-0.9.4.md) and [technical verification](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.4/MeBot-0.9.4-verification.md).
 
 These review images are not a pixel-baseline test suite. See [VERIFICATION.md](../VERIFICATION.md) and [test-results-summary.json](../test-results-summary.json) for executable coverage and its limits. Real-phone installation, alarm sound, lock-screen delivery and overnight behavior still require device qualification.
 

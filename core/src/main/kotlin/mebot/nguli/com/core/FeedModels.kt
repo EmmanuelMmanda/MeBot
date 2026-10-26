@@ -123,6 +123,17 @@ data class FeedItem(
     val nextStep: String = "",
     val caveat: String = "",
     val temporal: FeedTemporal? = null,
+    /** Bounded, provider-assisted interest fit for a verified public candidate; never a probability. */
+    val aiRelevance: AiRelevanceEstimate? = null,
+)
+
+@Serializable
+data class AiRelevanceEstimate(
+    val fitEstimate: Int,
+    val assessedAtMillis: Long,
+    val contentDigest: String,
+    /** Digest of explicit module scope, confirmed context, explicit relevance feedback and provider identity. */
+    val scopeProviderDigest: String,
 )
 
 @Serializable

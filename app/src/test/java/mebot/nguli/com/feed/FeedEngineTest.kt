@@ -89,6 +89,130 @@ class FeedEngineTest {
         assertEquals(setOf("cached"), repository.current().savedIds)
     }
 
+    @Test fun aiFitEnrichesAPublicCandidateInsideTheExistingBudgetedRequestAfterPublicCommit() = runBlocking {
+        vault.value = "test-credential"
+        val candidate = article("public-candidate")
+        val configured = news.copy(sources = listOf(FeedSource("Example", "https://example.com/feed.xml")))
+        repository.update { it.copy(modules = listOf(configured), dailyRequestLimit = 1) }
+        val reader = object : SourceReader {
+            override suspend fun read(source: FeedSource, module: FeedModule, now: Long) = listOf(candidate)
+        }
+        provider.discoverAction = { candidates ->
+            assertEquals(listOf(candidate.id), candidates.map { it.id })
+            // Public content is committed before the selected provider's optional ranking output arrives.
+            assertTrue(repository.current().items.any { it.id == candidate.id })
+            FeedDiscoveryResult(emptyList(), listOf(FeedCandidateFit(candidate.id, 90)))
+        }
+
+        engine(reader).refresh()
+
+        assertEquals(1, provider.discoveryCalls.get())
+        assertEquals(1, repository.current().requestsToday) // Ranking piggybacks; it reserves no extra request.
+        val enriched = repository.current().items.single { it.id == candidate.id }
+        assertEquals(90, enriched.aiRelevance?.fitEstimate)
+        assertEquals(AiRelevance094.contentDigest(enriched), enriched.aiRelevance?.contentDigest)
+        assertEquals(AiRelevance094.scopeProviderDigest(repository.current(), configured), enriched.aiRelevance?.scopeProviderDigest)
+    }
+
+    @Test fun malformedCandidateFitsAreRejectedAsAWholeWithoutClamping() = runBlocking {
+        vault.value = "test-credential"
+        val candidate = article("public-candidate-bad")
+        val configured = news.copy(sources = listOf(FeedSource("Example", "https://example.com/feed.xml")))
+        (0..2).forEach { index ->
+            val submitted = candidate.copy(id = "${candidate.id}-$index", sourceUrl = "https://example.com/bad-$index")
+            val badFits = when (index) {
+                0 -> listOf(FeedCandidateFit("unknown-id", 90))
+                1 -> listOf(FeedCandidateFit(submitted.id, 90), FeedCandidateFit(submitted.id, 80))
+                else -> listOf(FeedCandidateFit(submitted.id, 101))
+            }
+            repository.update { it.copy(modules = listOf(configured), items = emptyList(), requestsToday = 0,
+                dailyRequestLimit = RequestBudget.UNLIMITED, usageDate = FeedLogic.dateAt(System.currentTimeMillis(), it.timezone)) }
+            provider.discoverAction = { FeedDiscoveryResult(emptyList(), badFits) }
+            val reader = object : SourceReader {
+                override suspend fun read(source: FeedSource, module: FeedModule, now: Long) = listOf(submitted)
+            }
+            engine(reader).refresh()
+            assertNull(repository.current().items.single().aiRelevance)
+        }
+    }
+
+    @Test fun replacingCredentialsForTheSameConnectionClearsCachedFitOnlyAfterSuccessfulCheck() = runBlocking {
+        val item = article("rank-cached")
+        val connection = AiConnection()
+        val base = FeedState(modules = listOf(news), connection = connection, items = listOf(item))
+        val estimate = AiRelevanceEstimate(80, System.currentTimeMillis(), AiRelevance094.contentDigest(item),
+            AiRelevance094.scopeProviderDigest(base, news))
+        repository.update { it.copy(modules = listOf(news), connection = connection, items = listOf(item.copy(aiRelevance = estimate))) }
+        vault.value = "previous-test-credential"
+        provider.checkAction = { throw FeedFailure("unauthorized") }
+
+        assertEquals("unauthorized", (runCatching { engine().connect(connection, "replacement-test-credential") }.exceptionOrNull() as FeedFailure).code)
+        assertEquals(80, repository.current().items.single().aiRelevance?.fitEstimate)
+
+        provider.checkAction = {}
+        engine().connect(connection, "replacement-test-credential")
+        assertEquals("replacement-test-credential", vault.value)
+        assertNull(repository.current().items.single().aiRelevance)
+    }
+
+    @Test fun unchangedPublicCandidateReusesItsCachedFitAfterASecondSourceMerge() = runBlocking {
+        vault.value = "test-credential"
+        val candidate = article("same-public-candidate")
+        val configured = news.copy(sources = listOf(FeedSource("Example", "https://example.com/feed.xml")))
+        repository.update { it.copy(modules = listOf(configured), dailyRequestLimit = RequestBudget.UNLIMITED) }
+        val reader = object : SourceReader {
+            override suspend fun read(source: FeedSource, module: FeedModule, now: Long) = listOf(candidate)
+        }
+        val requestedIds = mutableListOf<List<String>>()
+        provider.discoverAction = { candidates ->
+            requestedIds += candidates.map { it.id }
+            FeedDiscoveryResult(emptyList(), if (candidates.isEmpty()) emptyList() else listOf(FeedCandidateFit(candidate.id, 80)))
+        }
+        val engine = engine(reader)
+
+        engine.refresh()
+        assertEquals(80, repository.current().items.single().aiRelevance?.fitEstimate)
+        engine.refresh()
+
+        assertEquals(listOf(listOf(candidate.id), emptyList<String>()), requestedIds)
+        assertEquals(2, repository.current().requestsToday) // One ordinary discovery request per refresh, no ranking add-on.
+        assertEquals(80, repository.current().items.single().aiRelevance?.fitEstimate)
+    }
+
+    @Test fun aLateFitIsDiscardedAfterContentOrContextChangesOrLogout() = runBlocking {
+        val configured = news.copy(sources = listOf(FeedSource("Example", "https://example.com/feed.xml")))
+        listOf("content", "context", "logout").forEach { change ->
+            vault.value = "test-credential"
+            val candidate = article("late-fit-$change")
+            repository.update { it.copy(modules = listOf(configured), items = emptyList(), savedIds = emptySet(), hiddenIds = emptySet(),
+                context = emptyList(), starredStories = emptyList(), dailyRequestLimit = RequestBudget.UNLIMITED,
+                usageDate = FeedLogic.dateAt(System.currentTimeMillis(), it.timezone), requestsToday = 0) }
+            val entered = CompletableDeferred<List<FeedItem>>()
+            val release = CompletableDeferred<Unit>()
+            provider.discoverAction = { candidates ->
+                entered.complete(candidates)
+                release.await()
+                FeedDiscoveryResult(emptyList(), listOf(FeedCandidateFit(candidate.id, 95)))
+            }
+            val reader = object : SourceReader {
+                override suspend fun read(source: FeedSource, module: FeedModule, now: Long) = listOf(candidate)
+            }
+            // Each iteration has a fresh refresh operation while retaining the same test repository/provider.
+            val currentEngine = engine(reader)
+            val refresh = async { currentEngine.refresh() }
+            val submitted = withTimeout(5000) { entered.await() }
+            assertEquals(listOf(candidate.id), submitted.map { it.id })
+            when (change) {
+                "content" -> repository.update { state -> state.copy(items = state.items.map { if (it.id == candidate.id) it.copy(summary = "Edited while provider was working") else it }) }
+                "context" -> repository.update { it.copy(context = listOf(ContextEntry(id = "changed", text = "Changed confirmed goal", scopes = setOf("news")))) }
+                "logout" -> currentEngine.disconnect()
+            }
+            release.complete(Unit)
+            refresh.await()
+            assertNull("late fit committed after $change change", repository.current().items.single { it.id == candidate.id }.aiRelevance)
+        }
+    }
+
     @Test fun refreshRejectsAnAiResultAfterItsPersonalContextChanges() = runBlocking {
         val entered = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
@@ -271,10 +395,16 @@ class FeedEngineTest {
     private class ControlledProvider : AiProvider {
         var checkAction: suspend () -> Unit = {}
         var feedAction: suspend () -> List<FeedItem> = { emptyList() }
+        var discoverAction: (suspend (List<FeedItem>) -> FeedDiscoveryResult)? = null
         var askAction: suspend () -> AiAnswer = { AiAnswer("A test answer.") }
         val askCalls = AtomicInteger()
+        val discoveryCalls = AtomicInteger()
         override suspend fun check(connection: AiConnection, secret: String) { checkAction() }
         override suspend fun feed(state: FeedState, module: FeedModule, secret: String, language: String) = feedAction()
+        override suspend fun discover(state: FeedState, module: FeedModule, secret: String, language: String, candidates: List<FeedItem>): FeedDiscoveryResult {
+            discoveryCalls.incrementAndGet()
+            return discoverAction?.invoke(candidates) ?: FeedDiscoveryResult(feedAction())
+        }
         override suspend fun ask(state: FeedState, item: FeedItem?, question: String, secret: String, language: String): AiAnswer {
             askCalls.incrementAndGet()
             return askAction()

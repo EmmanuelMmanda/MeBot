@@ -7,6 +7,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
@@ -27,6 +29,7 @@ import mebot.nguli.com.feed.FeedViewModel
 import mebot.nguli.com.feed.FeedJson
 import mebot.nguli.com.ui.*
 import kotlinx.serialization.encodeToString
+import java.security.MessageDigest
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -60,7 +63,9 @@ fun YouScreen(ui: FeedUiState, onContext: () -> Unit, onConnect: () -> Unit, onD
 }
 
 @Composable
-fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onImportContext: () -> Unit = {}, onDone: () -> Unit) {
+fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onImportContext: () -> Unit = {},
+    importRefreshRequest: Int = 0, onImportRefreshConsumed: (Int) -> Unit = {},
+    revealImportedNotesRequest: Int = 0, onNotesRevealConsumed: (Int) -> Unit = {}, onDone: () -> Unit) {
     val state = ui.state ?: return
     var name by rememberSaveable(state.name) { mutableStateOf(state.name) }
     var region by rememberSaveable(state.region) { mutableStateOf(state.region) }
@@ -69,6 +74,14 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onImportContext: () -> Uni
         mutableStateOf(FeedJson.encodeToString(PersonalProfile085.draft(state.context, state.modules.filter { it.enabled && it.kind != "weather" }.map { it.kind }.toSet())))
     }
     val entries = remember(entriesJson) { FeedJson.decodeFromString<List<ContextEntry>>(entriesJson) }
+    // SaveableStateHolder can restore this page's local draft after an import while its input
+    // changed off-screen. Reconcile against persisted snapshots, but don't overwrite a draft
+    // while the repository state itself is unchanged.
+    val persistedContext = remember(state.context) { contextSnapshotFingerprint(FeedJson.encodeToString(state.context)) }
+    var savedName by rememberSaveable { mutableStateOf(state.name) }
+    var savedRegion by rememberSaveable { mutableStateOf(state.region) }
+    var savedTimezone by rememberSaveable { mutableStateOf(state.timezone) }
+    var savedContext by rememberSaveable { mutableStateOf(persistedContext) }
     val primaryId = PersonalProfile085.primary(entries)?.id ?: PersonalProfile085.PROFILE_ID
     var localError by rememberSaveable { mutableStateOf(false) }
     var pending by rememberSaveable { mutableStateOf(false) }
@@ -77,7 +90,29 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onImportContext: () -> Uni
     val timezoneInvalid = timezone.isNotBlank() && runCatching { ZoneId.of(timezone.trim()) }.isFailure
     val canEdit = !ui.contextSaving && !ui.importWorking
     val documents = mebot.nguli.com.documents.LocalDocumentActions.current
-    LaunchedEffect(state.name, state.region, state.timezone, state.context, pending, ui.contextSaving) {
+    LaunchedEffect(state.name, state.region, state.timezone, persistedContext, importRefreshRequest) {
+        val importedSuccessfully = importRefreshRequest > 0
+        if (importedSuccessfully || savedName != state.name) { name = state.name; savedName = state.name }
+        if (importedSuccessfully || savedRegion != state.region) { region = state.region; savedRegion = state.region }
+        if (importedSuccessfully || savedTimezone != state.timezone) { timezone = state.timezone; savedTimezone = state.timezone }
+        if (importedSuccessfully || savedContext != persistedContext) {
+            entriesJson = FeedJson.encodeToString(PersonalProfile085.draft(state.context, state.modules.filter { it.enabled && it.kind != "weather" }.map { it.kind }.toSet()))
+            savedContext = persistedContext
+        }
+        if (importedSuccessfully) {
+            localError = false
+            pending = false
+            desiredContextJson = null
+            scopeEntryId = null
+            onImportRefreshConsumed(importRefreshRequest)
+        }
+    }
+    LaunchedEffect(state.name, state.region, state.timezone, state.context, pending, ui.contextSaving, importRefreshRequest) {
+        if (importRefreshRequest > 0) {
+            pending = false
+            desiredContextJson = null
+            return@LaunchedEffect
+        }
         val desired = desiredContextJson?.let { FeedJson.decodeFromString<List<ContextEntry>>(it) }
         val saved = state.name == name.trim() && state.region == region.trim() && state.timezone == timezone.trim() && state.context == desired
         if (pending && !ui.contextSaving) {
@@ -92,7 +127,8 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onImportContext: () -> Uni
         ScreenTitle(stringResource(R.string.preferences_title_083), stringResource(R.string.preferences_body_083))
         ImportFeedback(ui)
         FeedSettingsRow(Icons.Outlined.FileUpload, stringResource(R.string.context_import_title_092),
-            stringResource(R.string.context_import_entry_092), onImportContext)
+            stringResource(R.string.context_import_entry_092), onImportContext,
+            enabled = canEdit && !pending, testTag = "context-import-entry")
         AppCard {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Outlined.LocationOn, null)
@@ -107,6 +143,14 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onImportContext: () -> Uni
         OutlinedTextField(name, { name = it.take(80) }, label = { Text(stringResource(R.string.feed_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("context-name"), shape = RoundedCornerShape(16.dp), enabled = canEdit)
         val primary = entries.find { it.id == primaryId }
         val legacy = entries.filterNot { it.id == primaryId }
+        val firstNoteId = legacy.firstOrNull { it.text.isNotBlank() }?.id
+        val notesRequester = remember { BringIntoViewRequester() }
+        LaunchedEffect(revealImportedNotesRequest, firstNoteId, savedContext == persistedContext, importRefreshRequest) {
+            if (revealImportedNotesRequest > 0 && importRefreshRequest == 0 && firstNoteId != null && savedContext == persistedContext) {
+                notesRequester.bringIntoView()
+                onNotesRevealConsumed(revealImportedNotesRequest)
+            }
+        }
         if (primary != null) {
             PersonalProfileEditor085(primary.text, canEdit, { text ->
                 entriesJson = FeedJson.encodeToString(entries.map { if (it.id == primaryId) it.copy(text = text) else it })
@@ -135,7 +179,8 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onImportContext: () -> Uni
         if (localError) Text(stringResource(R.string.feed_context_invalid), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
         if (ui.importPreview == null) ui.error?.let { FeedStatus(it) }
         HorizontalDivider()
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().then(if (firstNoteId == null) Modifier.bringIntoViewRequester(notesRequester) else Modifier),
+            verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.profile_notes_title_085), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             TextButton(onClick = {
                 entriesJson = FeedJson.encodeToString(entries + ContextEntry(text = "", scopes = emptySet(), confirmed = false))
@@ -147,7 +192,8 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onImportContext: () -> Uni
         if (legacy.isEmpty()) Text(stringResource(R.string.profile_notes_empty_085), style = MaterialTheme.typography.bodySmall)
         legacy.forEach { entry ->
             key(entry.id) {
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(12.dp),
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(12.dp)
+                    .then(if (entry.id == firstNoteId) Modifier.bringIntoViewRequester(notesRequester) else Modifier),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedTextField(entry.text, { text ->
                         entriesJson = FeedJson.encodeToString(entries.map { if (it.id == entry.id) it.copy(text = text) else it })
@@ -205,6 +251,9 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onImportContext: () -> Uni
         confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { scopeEntryId = null }) { Text(stringResource(R.string.done)) } })
     FeedImportReview(ui, vm::confirmImport, vm::cancelImport)
 }
+
+private fun contextSnapshotFingerprint(serialized: String): String = MessageDigest.getInstance("SHA-256")
+    .digest(serialized.toByteArray(Charsets.UTF_8)).joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
 
 @Composable
 fun DeliveryScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit, onConnection: (() -> Unit)? = null) =

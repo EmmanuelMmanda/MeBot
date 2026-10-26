@@ -27,6 +27,24 @@
     "captureDate": "2026-10-26"
   },
   {
+    "file": "screenshots/v094/imported-notes-en.png",
+    "title": "Your notes are ready",
+    "alt": "Synthetic English context import confirmation with imported notes visible on the My context screen.",
+    "caption": "After confirming an import, return to your details and see the saved notes. Synthetic example; no owner data.",
+    "group": "start",
+    "version": "0.9.4",
+    "captureDate": "2026-10-26"
+  },
+  {
+    "file": "screenshots/v094/imported-notes-sw.png",
+    "title": "Vidokezo vyako viko tayari",
+    "alt": "Uthibitisho wa kuagiza muktadha kwa Kiswahili, ukiwa na vidokezo vya mfano vinavyoonekana kwenye ukurasa wa Muktadha wangu.",
+    "caption": "Baada ya kuthibitisha uingizaji, rudi kwenye maelezo yako na uone vidokezo vilivyohifadhiwa. Mfano wa kubuni; si data ya mmiliki.",
+    "group": "start",
+    "version": "0.9.4",
+    "captureDate": "2026-10-26"
+  },
+  {
     "file": "screenshots/v092/connection-sw.png",
     "title": "Your AI connection",
     "alt": "AI connection settings with provider and account controls.",

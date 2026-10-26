@@ -44,6 +44,7 @@ object FeedLogic {
         val today = dateAt(now, state.timezone)
         return state.items.filter {
             it.moduleId in enabled && it.id !in state.hiddenIds &&
+                FreshnessPolicy094.isActive(it, now) &&
                 (it.kind != "horoscope" || dateAt(it.fetchedAtMillis, state.timezone) == today)
         }
             .sortedWith(compareByDescending<FeedItem> { it.relevance }.thenByDescending { it.publishedAtMillis.takeIf { t -> t > 0 } ?: it.fetchedAtMillis })
@@ -100,12 +101,20 @@ object FeedLogic {
         incoming.forEach { item ->
             val old = existing[item.id]
             // Preserve a sourced AI explanation when a later plain RSS sync sees the same URL.
-            existing[item.id] = if (old?.aiGenerated == true && !item.aiGenerated)
+            val merged = if (old?.aiGenerated == true && !item.aiGenerated)
                 old.copy(fetchedAtMillis = now, media = old.media ?: item.media,
                     temporal = if (canonicalUrl(old.sourceUrl) == canonicalUrl(item.sourceUrl)) item.temporal ?: old.temporal else old.temporal)
             else if (item.media == null && old?.media != null && canonicalUrl(old.sourceUrl) == canonicalUrl(item.sourceUrl))
                 item.copy(media = old.media)
             else item
+            // Preserve only our own local estimate across an exact public-content refresh.
+            // A new incoming object cannot inject or refresh an estimate by carrying metadata.
+            val reusableAiRelevance = old?.aiRelevance?.takeIf {
+                fun publicFactual(candidate: FeedItem) = !candidate.aiGenerated && candidate.weather == null &&
+                    candidate.kind !in setOf("weather", "horoscope") && candidate.contentType != "weather" && safeUrl(candidate.sourceUrl)
+                publicFactual(old) && publicFactual(item) && AiRelevance094.contentDigest(old) == AiRelevance094.contentDigest(item)
+            }
+            existing[item.id] = merged.copy(aiRelevance = reusableAiRelevance)
         }
         val retainedIds = state.savedIds + state.starredStories.map { it.itemId }
         val saved = existing.values.filter { it.id in retainedIds }
@@ -171,6 +180,7 @@ object FeedLogic {
 
     fun validateItem(i: FeedItem) {
         i.temporal?.let(TodayFeed::validate)
+        i.aiRelevance?.let(AiRelevance094::validate)
         require(i.keyPoints.size <= 4 && i.keyPoints.all { it.isNotBlank() && it.length <= 400 })
         require(i.nextStep.length <= 800 && i.caveat.length <= 600)
         require(i.id.length in 1..100 && i.moduleId.length in 1..100 && i.title.length in 1..300)

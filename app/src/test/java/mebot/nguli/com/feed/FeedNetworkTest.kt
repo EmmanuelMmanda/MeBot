@@ -115,6 +115,64 @@ class FeedNetworkTest {
         assertFalse(request.body.contains("test-key-not-a-real-secret"))
     }
 
+    @Test fun candidateFitPiggybacksOnTheFeedCallAndOnlySendsExplicitScopedInputs() = runBlocking {
+        val candidate = FeedItem(id = "candidate-a", moduleId = module.id, kind = module.kind,
+            title = "A public article", summary = "A short public excerpt.", sourceName = "Example",
+            sourceUrl = "https://example.com/public", fetchedAtMillis = now)
+        val cached = candidate.copy(aiRelevance = AiRelevanceEstimate(88, now, "a".repeat(64), "b".repeat(64)))
+        val state = FeedState(modules = listOf(module), items = listOf(cached), region = "Dar es Salaam", connection = AiConnection(webSearch = false),
+            context = listOf(
+                ContextEntry(id = "approved", text = "Approved public technology interests", scopes = setOf("news")),
+                ContextEntry(id = "other-scope", text = "Private horoscope marker", scopes = setOf("horoscope")),
+                ContextEntry(id = "unconfirmed", text = "Unconfirmed context marker", scopes = setOf("news"), confirmed = false),
+            ), savedIds = setOf("saved-id-must-not-leak"), hiddenIds = setOf("hidden-id-must-not-leak"),
+            readingHistoryEnabled = true, viewedAtMillis = mapOf(candidate.id to now),
+            relevanceSignals = listOf(RelevanceSignal("explicit-vote", module.id, true, "Explicitly useful",
+                setOf("technology", "community"), now)))
+        val response = """{"items":[],"candidateFits":[{"id":"candidate-a","fitEstimate":87}]}"""
+        val http = FakeHttp(response(response, emptyList()))
+
+        val result = OpenAiFeedProvider(http).discover(state, module, "test-provider-key-not-real", "en", listOf(cached))
+
+        assertEquals(listOf(FeedCandidateFit("candidate-a", 87)), result.candidateFits)
+        assertEquals(1, http.requests.size)
+        val body = FeedJson.parseToJsonElement(http.requests.single().body!!).jsonObject
+        val inputText = body["input"]!!.jsonPrimitive.content
+        val input = FeedJson.parseToJsonElement(inputText).jsonObject
+        assertTrue(input["groundingSources"]!!.jsonArray.isNotEmpty())
+        assertFalse(input["groundingSources"]!!.jsonArray.single().jsonObject.containsKey("aiRelevance"))
+        assertEquals("Approved public technology interests", input["context"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content)
+        assertTrue(inputText.contains("Explicitly useful"))
+        assertTrue(inputText.contains("publicCandidates"))
+        assertFalse(inputText.contains("Private horoscope marker"))
+        assertFalse(inputText.contains("Unconfirmed context marker"))
+        listOf("readingHistoryEnabled", "viewedAtMillis", "savedIds", "hiddenIds", "aiRelevance", "contentDigest", "scopeProviderDigest",
+            "saved-id-must-not-leak", "hidden-id-must-not-leak").forEach { assertFalse("unexpected prompt field: $it", inputText.contains(it)) }
+        assertFalse(http.requests.single().body!!.contains("test-provider-key-not-real"))
+    }
+
+    @Test fun malformedCandidateFitBatchesAreIgnoredInsteadOfCoercedOrPartiallyApplied() = runBlocking {
+        val candidate = FeedItem(id = "candidate-b", moduleId = module.id, kind = module.kind,
+            title = "A public article", summary = "A short public excerpt.", sourceUrl = "https://example.com/candidate-b", fetchedAtMillis = now)
+        val malformed = listOf(
+            "\"candidateFits\":[{\"id\":\"unknown\",\"fitEstimate\":90}]",
+            "\"candidateFits\":[{\"id\":\"candidate-b\",\"fitEstimate\":90},{\"id\":\"candidate-b\",\"fitEstimate\":80}]",
+            "\"candidateFits\":[{\"id\":\"candidate-b\",\"fitEstimate\":101}]",
+            "\"candidateFits\":[{\"id\":\"candidate-b\",\"fitEstimate\":\"90\"}]",
+            "\"candidateFits\":[{\"id\":\"candidate-b\",\"fitEstimate\":90},{\"id\":\"other\",\"fitEstimate\":80}]",
+            "\"candidateFits\":[{\"id\":\"candidate-b\",\"fitEstimate\":90,\"extra\":true}]",
+            "\"candidateFits\":[{\"id\":\"candidate-b\",\"fitEstimate\":null}]",
+            "\"candidateFits\":null",
+            "\"candidateFits\":[{\"id\":\"candidate-b\",\"fitEstimate\":90}]".replace("\"candidateFits\":", "\"notCandidateFits\":"),
+        )
+        malformed.forEach { fields ->
+            val http = FakeHttp(response("""{"items":[],$fields}""", emptyList()))
+            val result = OpenAiFeedProvider(http).discover(FeedState(modules = listOf(module)), module,
+                "test-provider-key-not-real", "en", listOf(candidate))
+            assertTrue("bad fit batch accepted: $fields", result.candidateFits.isEmpty())
+        }
+    }
+
     @Test fun incompleteAiResponsesNeverBecomeAnAnswer() = runBlocking {
         val http = FakeHttp("""{"status":"incomplete","output":[]} """)
         val failure = runCatching { OpenAiFeedProvider(http).ask(FeedState(), null, "Explain this", "test-key-not-real", "en") }.exceptionOrNull()

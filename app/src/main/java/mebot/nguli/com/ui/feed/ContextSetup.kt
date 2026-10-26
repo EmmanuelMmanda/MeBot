@@ -151,10 +151,19 @@ internal fun ContextPasteDialog(text: String, onTextChanged: (String) -> Unit, w
 
 /** Full-page import guide; parsing, review and confirmation still use the existing repository pipeline. */
 @Composable
-fun ContextImportScreen(ui: mebot.nguli.com.feed.FeedUiState, vm: mebot.nguli.com.feed.FeedViewModel, onBack: () -> Unit) {
+fun ContextImportScreen(ui: mebot.nguli.com.feed.FeedUiState, vm: mebot.nguli.com.feed.FeedViewModel, onImported: () -> Unit) {
     val documents = mebot.nguli.com.documents.LocalDocumentActions.current
     var text by rememberSaveable { mutableStateOf("") }
     var tooLarge by rememberSaveable { mutableStateOf(false) }
+    // Only a newly committed context import returns to the notes editor. Invalid, cancelled,
+    // working, or stale completion state remains on this screen for review and recovery.
+    LaunchedEffect(ui.importSummary) {
+        if (ui.importSummary == "context") {
+            text = ""
+            tooLarge = false
+            onImported()
+        }
+    }
     val enabled = !ui.importWorking && !ui.contextSaving
     mebot.nguli.com.ui.ScreenContainer(Modifier.testTag("context-import-screen")) {
         mebot.nguli.com.ui.ScreenTitle(stringResource(R.string.context_import_title_092))
