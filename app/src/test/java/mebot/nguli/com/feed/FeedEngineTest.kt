@@ -219,7 +219,13 @@ class FeedEngineTest {
             }
         }
         val e=engine(reader);val job=async{e.refresh()}
-        withTimeout(5000){started.await();while(repository.current().items.none{it.id=="new-live"})delay(10)}
+        // Durable content and progress are published separately; observe both before asserting.
+        // The slow source remains suspended throughout this bounded wait.
+        withTimeout(5000) {
+            started.await()
+            while (repository.current().items.none { it.id == "new-live" } ||
+                "news" !in e.progress.value.completed || e.progress.value.newItems != 1) delay(10)
+        }
         assertTrue(e.progress.value.running)
         assertTrue(e.progress.value.completed.contains("news"))
         assertEquals(1,e.progress.value.newItems)
