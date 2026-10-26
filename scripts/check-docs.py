@@ -136,6 +136,38 @@ def check_catalog():
             error(path, 'duplicate versions')
         if catalog['version'] != integrity['version']:
             error(path, 'latest version differs from release integrity')
+        latest = next((entry for entry in entries if entry['version'] == catalog['version']), None)
+        if latest is None:
+            error(path, 'latest release has no matching history entry')
+        for catalog_field, integrity_field in (
+            ('applicationId', 'application_id'),
+            ('package', 'package'),
+            ('versionCode', 'version_code'),
+            ('sourceCommit', 'source_code_commit'),
+            ('sourceTree', 'source_tree'),
+            ('certificateSha256', 'signer_certificate_sha256'),
+            ('filename', 'apk_file'),
+            ('sha256', 'apk_sha256'),
+            ('sizeBytes', 'apk_size_bytes'),
+            ('sourceFilename', 'source_file'),
+            ('sourceSha256', 'source_sha256'),
+            ('sourceSizeBytes', 'source_size_bytes'),
+            ('verificationFilename', 'verification_file'),
+            ('verificationSha256', 'verification_sha256'),
+            ('releaseNotesFilename', 'release_notes_file'),
+            ('releaseNotesSha256', 'release_notes_sha256'),
+            ('releaseNotesSizeBytes', 'release_notes_size_bytes'),
+            ('checksumFilename', 'checksums_file'),
+            ('checksumSha256', 'checksums_sha256'),
+            ('checksumSizeBytes', 'checksums_size_bytes'),
+            ('releaseMetadataFilename', 'release_metadata_file'),
+            ('releaseMetadataSha256', 'release_metadata_sha256'),
+            ('releaseMetadataSizeBytes', 'release_metadata_size_bytes'),
+        ):
+            if catalog.get(catalog_field) != integrity.get(integrity_field):
+                error(path, f'latest {catalog_field} differs from release integrity')
+        if catalog.get('status') != integrity.get('publication_status'):
+            error(path, 'publication status differs from release integrity')
         if integrity.get('personal_profile_asset_present') is not False:
             error(path, 'current public integrity must exclude a personal profile')
         for entry in [catalog, *entries]:
@@ -161,7 +193,15 @@ def check_catalog():
         for field, integrity_field in [('sha256', 'apk_sha256'), ('sizeBytes', 'apk_size_bytes'), ('filename', 'apk_file')]:
             if catalog.get(field) != integrity.get(integrity_field):
                 error(path, f'latest {field} differs from public integrity')
-        latest_entry = next((entry for entry in entries if entry['version'] == catalog['version']), None)
+        if catalog.get('filename') != f"mebot-{catalog.get('version')}.apk":
+            error(path, 'latest public APK filename must be lowercase and version-matched')
+        for field in ('sha256', 'sourceSha256', 'verificationSha256', 'releaseNotesSha256', 'checksumSha256', 'releaseMetadataSha256'):
+            if not re.fullmatch(r'[0-9a-f]{64}', catalog.get(field) or ''):
+                error(path, f'latest {field} must be a lowercase SHA-256 digest')
+        for field in ('sourceCommit', 'sourceTree'):
+            if not re.fullmatch(r'[0-9a-f]{40}', catalog.get(field) or ''):
+                error(path, f'latest {field} must be a full lowercase git object id')
+        latest_entry = latest
         if latest_entry is None or any(latest_entry.get(key) != catalog.get(key) for key in ['tag', 'status', 'filename', 'sha256', 'sizeBytes', 'sourceCommit']):
             error(path, 'latest entry and top-level release metadata disagree')
     except (ValueError, KeyError, TypeError) as exc:
