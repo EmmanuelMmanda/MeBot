@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.9.2 — document and settings repair candidate
+
+- Guard existing document-picker launches, preserve pending operation identity across lifecycle changes, and defer protected results until the app is resumed and unlocked.
+- Restore visible location and a guided full-screen context import with concise English/Kiswahili copy, paste/file choices and explicit review before saving.
+- Refine AI connection layout; add confirmed local-only removal of saved accounts without deleting provider accounts or unrelated app data.
+- Add a dedicated starred-story settings area using existing per-story cadence, pause controls and shared background preferences.
+- Move app PIN/biometrics into Personalization, separate biometric controls from changing PIN, and keep current-PIN authorization required.
+- Remove duplicate module switches from settings and character-count loader detail; keep module selection and truthful operation phases.
+
+Private candidate until final verification/signing. Public publication remains separately authorized and gated.
+
+
+## 0.9.1 — private reliability patch candidate
+
+Cached/public reading no longer waits for AI initialization or requests; bounded browser callback handling preserves valid responses; Today/weather times are concise; settings descriptions and honest device read-aloud labels are restored. Later notice dismissal refreshes the foreground clock immediately. Same production signer as 0.9.0 is required. No public release is claimed. [Patch notes](docs/RELEASE-0.9.1.md).
+
+## 0.9.0 — local candidate, unreleased
+
+Measured Kotlin ranking snapshots; verified-date Today with source ownership and local-day boundaries; compact icon interests with preserved scoped custom notes; optional separate app PIN/strong biometrics and lifecycle protection. No database-encryption or phone-speed claim. Production signing, final release and device acceptance remain pending. [Candidate notes](docs/RELEASE-0.9.0.md). Earlier 0.8.3–0.8.5 candidate work remains included, without presenting it as a published release.
+
 ## 0.8.2 — 2026-10-25
 
 New `mebot.nguli.com` identity; provider choices; Software Updates; module-scoped feedback; progressive feed; clearer setup, background and detail UI; real sourced captures. [Release notes](docs/RELEASE-0.8.2.md).

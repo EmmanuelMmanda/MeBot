@@ -36,6 +36,19 @@ class PublicDiscoveryTest {
         assertTrue(http.bearers.all { it == null })
     }
 
+    @Test fun todayForecastRequiresProviderValidityNotFetchTime() = runBlocking {
+        val state = FeedState(region = "Example City", timezone = "Africa/Dar_es_Salaam")
+        val module = FeedModule(id = "weather", kind = "weather")
+        val unknown = PublicDiscoveryProvider(RecordingHttp(listOf(geocode, forecast))).discover(state, module, "en", now).single()
+        assertNull(unknown.temporal)
+        val verified = PublicDiscoveryProvider(RecordingHttp(listOf(geocode, forecast.replace("\"current\":{", "\"current\":{\"interval\":900,"))))
+            .discover(state, module, "en", now).single()
+        assertEquals(now, verified.temporal!!.validFromMillis)
+        assertEquals(now + 900_000, verified.temporal!!.validUntilMillis)
+        assertEquals(TodayReason.FORECAST, TodayFeed.edition(state.copy(modules = listOf(module), items = listOf(verified)), now).single().reason)
+        assertTrue(TodayFeed.edition(state.copy(modules = listOf(module), items = listOf(verified)), now + 86_400_000).isEmpty())
+    }
+
     @Test fun unknownRainProbabilityIsAnErrorNotAFabricatedZero() = runBlocking {
         val http = RecordingHttp(listOf(geocode, forecast.replace("[10,35,60]", "[10,null,60]")))
         val failure = runCatching { PublicDiscoveryProvider(http).discover(FeedState(region = "Example City"), FeedModule(id = "weather", kind = "weather"), "en", now) }.exceptionOrNull()

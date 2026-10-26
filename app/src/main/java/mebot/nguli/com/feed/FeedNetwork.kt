@@ -157,7 +157,8 @@ class RssSourceReader(private val http: FeedHttp = SecureFeedHttp()) : SourceRea
                             "title" -> title = value
                             "link" -> if (link.isBlank()) link = value
                             "description", "summary", "content", "encoded" -> if (summary.isBlank()) summary = value
-                            "pubdate", "published", "updated", "date" -> if (published.isBlank()) published = value
+                            // Atom updated may be a metadata-only edit, not publication or substantive update.
+                            "pubdate", "published", "date" -> if (published.isBlank()) published = value
                         }
                         field = ""; fieldDepth = -1
                     }
@@ -168,7 +169,10 @@ class RssSourceReader(private val http: FeedHttp = SecureFeedHttp()) : SourceRea
                             entries += FeedItem(FeedLogic.itemId(link), module.id, title.take(300), summary.take(1500),
                                 sourceName = source.name, sourceUrl = link, publishedAtMillis = date,
                                 fetchedAtMillis = now, kind = module.kind, citations = listOf(FeedCitation(source.name, link)),
-                                media = imageUrl.takeIf { it.isNotBlank() }?.let { FeedMedia(it, source.url, source.name) })
+                                media = imageUrl.takeIf { it.isNotBlank() }?.let { FeedMedia(it, source.url, source.name) },
+                                temporal = date.takeIf { it > 0 && it <= now + TodayFeed.CLOCK_SKEW_MILLIS }?.let {
+                                    FeedTemporal(TemporalProvenance.PUBLISHER, publishedAtMillis = it)
+                                })
                         }
                     }
                 }
@@ -267,6 +271,7 @@ class OpenAiFeedProvider(
             }
             val response = requestService(state, "/v1/feed", body, secret)
             return FeedJson.decodeFromJsonElement<List<FeedItem>>(response["items"] ?: throw FeedFailure("invalid_response"))
+                .map { it.copy(temporal = null) } // AI output does not establish publisher date verification.
                 .onEach { FeedLogic.validateItem(it); if (it.moduleId != module.id || it.kind != module.kind) throw FeedFailure("invalid_response") }.take(8)
         }
         val horoscope = module.kind == "horoscope"
@@ -351,7 +356,7 @@ class OpenAiFeedProvider(
             }
             val raw = http.request(state.connection.serviceUrl.trimEnd('/') + "/v1/search", "POST", body.toString(), secret)
             val result = runCatching { FeedJson.parseToJsonElement(raw) as? JsonObject }.getOrNull() ?: throw FeedFailure("invalid_response")
-            val items = runCatching { FeedJson.decodeFromJsonElement<List<FeedItem>>(result["items"] ?: throw FeedFailure("invalid_response")) }
+            val items = runCatching { FeedJson.decodeFromJsonElement<List<FeedItem>>(result["items"] ?: throw FeedFailure("invalid_response")).map { it.copy(temporal = null) } }
                 .getOrNull() ?: throw FeedFailure("invalid_response")
             if (items.size > 8 || items.any { item ->
                 val module = selected[item.moduleId]
@@ -447,7 +452,7 @@ class OpenAiFeedProvider(
         if (state.connection.mode == "service") {
             val body = buildJsonObject {
                 put("model", state.connection.model); put("question", question); put("language", responseLanguage)
-                put("item", item?.let { FeedJson.encodeToJsonElement(it) } ?: JsonNull); put("context", FeedJson.encodeToJsonElement(context))
+                put("item", item?.let { JsonObject(FeedJson.encodeToJsonElement(it).jsonObject - "temporal") } ?: JsonNull); put("context", FeedJson.encodeToJsonElement(context))
                 if (module != null) put("module", FeedJson.encodeToJsonElement(module))
                 put("moduleKind", module?.kind ?: item?.kind ?: "")
                 if (conversation != null) {
@@ -470,7 +475,7 @@ class OpenAiFeedProvider(
             put("today", FeedLogic.dateAt(System.currentTimeMillis(), state.timezone)); put("region", RegionalDefaults.region(state))
             if (module == null && item == null) put("enabledModules", buildJsonArray { state.modules.filter { it.enabled }.forEach { add(buildJsonObject { put("kind", it.kind); put("goal", ModuleCatalog.discoveryQuery(it)) }) } })
             if (!AiProviders.supportsWeb(state.connection)) put("groundingSources", FeedJson.encodeToJsonElement(state.items.filter { it.moduleId in state.modules.filter { m -> m.enabled && (module == null || m.id == module.id) }.map { m -> m.id } }.sortedByDescending { it.fetchedAtMillis }.take(12)))
-            put("question", question); put("item", item?.let { FeedJson.encodeToJsonElement(it) } ?: JsonNull)
+            put("question", question); put("item", item?.let { JsonObject(FeedJson.encodeToJsonElement(it).jsonObject - "temporal") } ?: JsonNull)
             put("context", FeedJson.encodeToJsonElement(context))
             (module ?: item?.let { FeedModule(id = it.moduleId, kind = it.kind) })?.let {
                 put("defaultContext", ModuleDefaults.requestContext(it))

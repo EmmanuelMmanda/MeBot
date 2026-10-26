@@ -98,8 +98,8 @@ internal fun MeBotOnboarding(state: FeedState, language: String, onLanguage: (St
                                 modifier = Modifier.widthIn(max = 420.dp))
                             if(saveError) Text(stringResource(R.string.interests_save_error), color=MaterialTheme.colorScheme.error)
                             if(!state.onboardingComplete && active == 1) {
-                                PersonalProfileEditor085(selectedInterests, !saving, { selectedInterests = it }, "onboarding-preferences", onboarding = true)
                                 InterestPicker083(selectedKinds, !saving) { selectedKinds = ArrayList(it) }
+                                PersonalProfileEditor085(selectedInterests, !saving, { selectedInterests = it }, "onboarding-preferences", onboarding = true)
                             } else if(!state.onboardingComplete && active == 5) {
                                 Column(Modifier.fillMaxWidth(), verticalArrangement=Arrangement.spacedBy(12.dp)) {
                                     OutlinedTextField(selectedRegion,{selectedRegion=it.take(100)},singleLine=true,enabled = !saving,

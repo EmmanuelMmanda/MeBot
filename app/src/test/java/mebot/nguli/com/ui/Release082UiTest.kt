@@ -28,6 +28,12 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class Release082UiTest {
     @get:Rule val compose=createAndroidComposeRule<ComponentActivity>()
+    @Test fun loaderShowsRealPhaseRatherThanReceivedCharacterCounts() {
+        compose.setContent { MeBotTheme { AiActivityPanel(AiActivity("phase", "news", "news", "discovery", "reading", receivedCharacters = 23535)) } }
+        compose.onNodeWithText(compose.activity.getString(R.string.activity_reading)).assertIsDisplayed()
+        compose.onNodeWithText("23535", substring = true).assertDoesNotExist()
+        compose.onNodeWithText(compose.activity.getString(R.string.activity_received_chars, 23535), substring = true).assertDoesNotExist()
+    }
     @Test fun popupMatchesItsAnchorAndRingEndsWithOperation() {
         val activity=mutableStateOf<AiActivity?>(AiActivity("a","news","news","discovery","reading",contextEntries=2))
         compose.setContent { MeBotTheme { Column(Modifier.fillMaxSize().padding(horizontal=20.dp)) {

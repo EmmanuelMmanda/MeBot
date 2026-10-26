@@ -133,9 +133,9 @@ class MeBotContextRestoreUiTest {
         compose.waitUntil(10_000) { selected.value!!.ui.value.state?.context == listOf(primary,legacy) }
         restoration.setContent {
             val vm=selected.value!!; val ui by vm.ui.collectAsState()
-            MeBotTheme { Surface(Modifier.fillMaxSize()) { ContextScreen(ui,vm,{closed++}) } }
+            MeBotTheme { Surface(Modifier.fillMaxSize()) { ContextScreen(ui,vm,onDone={closed++}) } }
         }
-        compose.onNodeWithTag("context-edit").performTextReplacement("Revised learning interest")
+        compose.onNodeWithTag("context-edit").performScrollTo().performTextReplacement("Revised learning interest")
         compose.onNodeWithTag("context-save").performScrollTo().performClick()
         compose.waitUntil(10_000) { closed==1 }
         val saved=runBlocking { app.feedRepository.current() }
@@ -150,11 +150,11 @@ class MeBotContextRestoreUiTest {
         compose.waitUntil(10_000) { selected.value!!.ui.value.state?.context == listOf(old,entry) }
         restoration.setContent {
             val vm=selected.value!!; val ui by vm.ui.collectAsState()
-            MeBotTheme { Surface(Modifier.fillMaxSize()) { ContextScreen(ui,vm,{closed++}) } }
+            MeBotTheme { Surface(Modifier.fillMaxSize()) { ContextScreen(ui,vm,onDone={closed++}) } }
         }
         compose.onNodeWithTag("context-edit").assertTextContains("")
         compose.onNodeWithTag("context-scopes-${PersonalProfile085.PROFILE_ID}").assertDoesNotExist()
-        compose.onNodeWithTag("context-edit").performTextReplacement("I manage several small businesses in Tanzania.")
+        compose.onNodeWithTag("context-edit").performScrollTo().performTextReplacement("I manage several small businesses in Tanzania.")
         capture("global-about-you")
         compose.onNodeWithTag("context-edit-${old.id}").performScrollTo().assertTextContains(old.text)
         compose.onNodeWithTag("context-edit-${entry.id}").performScrollTo().performTextReplacement("x".repeat(1001))
@@ -179,7 +179,7 @@ class MeBotContextRestoreUiTest {
     @Test fun contextNoteCanBeRemovedAddedAndSavedWithoutGlobalSharing() {
         restoration.setContent {
             val vm=selected.value!!; val ui by vm.ui.collectAsState()
-            MeBotTheme { Surface(Modifier.fillMaxSize()) { ContextScreen(ui,vm,{closed++}) } }
+            MeBotTheme { Surface(Modifier.fillMaxSize()) { ContextScreen(ui,vm,onDone={closed++}) } }
         }
         compose.onNodeWithTag("context-remove-${entry.id}").performScrollTo().performClick()
         compose.onNodeWithTag("context-edit-${entry.id}").assertDoesNotExist()
@@ -197,16 +197,14 @@ class MeBotContextRestoreUiTest {
         assertFalse(saved.global); assertTrue(saved.scopes.isEmpty()); assertNotEquals(entry.id,saved.id)
     }
 
-    @Test fun hiddenInvalidTimezoneIsRevealedAndCorrectionSavesTheSameDraft() {
+    @Test fun visibleInvalidTimezoneBlocksSaveAndCorrectionKeepsTheSameDraft() {
         restoration.setContent {
             val vm=selected.value!!; val ui by vm.ui.collectAsState()
-            MeBotTheme { Surface(Modifier.fillMaxSize()) { ContextScreen(ui,vm,{closed++}) } }
+            MeBotTheme { Surface(Modifier.fillMaxSize()) { ContextScreen(ui,vm,onDone={closed++}) } }
         }
-        compose.onNodeWithTag("context-edit").performTextReplacement("Keep my work interests")
-        compose.onNodeWithTag("context-more").performScrollTo().performClick()
+        compose.onNodeWithTag("context-edit").performScrollTo().performTextReplacement("Keep my work interests")
         compose.onNodeWithTag("context-timezone").performScrollTo().performTextReplacement("Not/A_Timezone")
-        compose.onNodeWithTag("context-more").performScrollTo().performClick()
-        compose.onNodeWithTag("context-timezone").assertDoesNotExist()
+        compose.onNodeWithTag("context-timezone").assertIsDisplayed()
         compose.onNodeWithTag("context-save").performScrollTo().performClick()
         compose.onNodeWithTag("context-timezone").performScrollTo().assertTextContains("Not/A_Timezone")
         assertEquals(0,closed)
@@ -247,6 +245,23 @@ class MeBotContextRestoreUiTest {
         val saved = runBlocking { app.feedRepository.current() }
         assertTrue(saved.context.single { it.id == "onboarding-interests" }.scopes.isEmpty())
         assertEquals(entry, saved.context.single { it.id == entry.id })
+    }
+
+    @Test fun blankOnboardingRetryAfterModelRecreationDoesNotDeleteOrRescopeExistingNote() {
+        val old = ContextEntry(id = "onboarding-interests", text = "Kilimo na biashara", scopes = setOf("learning"),
+            confirmed = true, origin = "onboarding", updatedAtMillis = 42L)
+        runBlocking { app.feedRepository.update { it.copy(context = listOf(entry, old)) } }
+        models.clear()
+        models = ViewModelStore()
+        selected.value = model(models)
+        compose.waitUntil(10_000) { selected.value!!.ui.value.state != null }
+        repeat(2) {
+            var completed: Boolean? = null
+            selected.value!!.configureOnboarding(setOf("news"), "", "") { completed = it }
+            compose.waitUntil(10_000) { completed != null }
+            assertEquals(true, completed)
+            assertEquals(listOf(entry, old), runBlocking { app.feedRepository.current().context })
+        }
     }
 
     @Test fun customOnboardingInterestsCommitWithSelectedScopesAndKeepLegacyNotes() {

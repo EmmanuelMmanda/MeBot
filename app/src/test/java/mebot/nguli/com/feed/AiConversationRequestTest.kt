@@ -9,7 +9,8 @@ import org.junit.Test
 /** Verify the request boundary, including selected credentials and the quoted history. */
 class AiConversationRequestTest {
     private val module = FeedModule(id = "technology", kind = "technology", preferences = mapOf("language" to "sw"))
-    private val item = FeedItem("item", module.id, "A release", "A sourced excerpt", sourceUrl = "https://publisher.example/release", kind = module.kind)
+    private val item = FeedItem("item", module.id, "A release", "A sourced excerpt", sourceUrl = "https://publisher.example/release", kind = module.kind,
+        temporal = FeedTemporal(TemporalProvenance.PUBLISHER, publishedAtMillis = 1_792_742_400_000))
     private val question = "Which limitation matters here?"
     private val thread = AiConversation(moduleId = module.id, itemId = item.id, turns = listOf(
         AiTurn(role = "user", text = "What changed?"), AiTurn(role = "assistant", text = "A new verified capability."),
@@ -43,6 +44,8 @@ class AiConversationRequestTest {
             assertTrue(request["instructions"]!!.jsonPrimitive.content.contains("in sw,"))
             val input = Json.parseToJsonElement(request["input"]!!.jsonArray.single().jsonObject["content"]!!.jsonPrimitive.content).jsonObject
             assertEquals(question, input["question"]!!.jsonPrimitive.content)
+            assertFalse(input["item"]!!.jsonObject.containsKey("temporal"))
+            assertFalse(input.containsKey("viewedAtMillis"))
             assertEquals(listOf("What changed?", "A new verified capability."), input["history"]!!.jsonArray.map { it.jsonObject["text"]!!.jsonPrimitive.content })
             assertEquals(listOf("approved"), input["context"]!!.jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.content })
             assertEquals("notes.txt", input["attachments"]!!.jsonArray.single().jsonObject["name"]!!.jsonPrimitive.content)
@@ -68,6 +71,7 @@ class AiConversationRequestTest {
         provider.converse(service, item, thread, question, "selected-service-token", "en")
         provider.ask(service, item, "Explain this item", "selected-service-token", "en")
         assertEquals(2, requests.size)
+        assertTrue(requests.all { !it["item"]!!.jsonObject.containsKey("temporal") })
         assertTrue(requests.all { it["language"]!!.jsonPrimitive.content == "sw" && it["model"]!!.jsonPrimitive.content == "server-model" })
         assertEquals(2, requests.first()["history"]!!.jsonArray.size)
         assertEquals(listOf("approved"), requests.first()["context"]!!.jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.content })

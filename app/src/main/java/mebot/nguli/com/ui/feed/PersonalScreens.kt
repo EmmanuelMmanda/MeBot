@@ -31,7 +31,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 @Composable
-fun YouScreen(ui: FeedUiState, onContext: () -> Unit, onConnect: () -> Unit, onDelivery: () -> Unit, onSettings: () -> Unit, onData: () -> Unit, onSoftwareUpdates: (() -> Unit)? = null) {
+fun YouScreen(ui: FeedUiState, onContext: () -> Unit, onConnect: () -> Unit, onDelivery: () -> Unit, onSettings: () -> Unit, onData: () -> Unit, onSoftwareUpdates: (() -> Unit)? = null, onAppLock: () -> Unit = {}, onStarred: () -> Unit = {}) {
     val state = ui.state ?: return
     ScreenContainer {
         ScreenTitle(stringResource(R.string.feed_you_title))
@@ -51,15 +51,16 @@ fun YouScreen(ui: FeedUiState, onContext: () -> Unit, onConnect: () -> Unit, onD
         FeedSettingsRow(Icons.Outlined.NotificationsNone, stringResource(R.string.feed_delivery),
             if (state.backgroundEnabled || state.notifications) stringResource(R.string.feed_delivery_on, state.refreshHours) else stringResource(R.string.feed_delivery_off), onDelivery)
         onSoftwareUpdates?.let { FeedSettingsRow(Icons.Outlined.SystemUpdate, stringResource(R.string.software_updates), stringResource(R.string.update_card_body), it) }
-        FeedSettingsRow(Icons.Outlined.Palette, stringResource(R.string.mb_preferences), onClick = onSettings)
-        FeedSettingsRow(Icons.Outlined.FolderOpen, stringResource(R.string.feed_data), onClick = onData)
+        FeedSettingsRow(Icons.Outlined.StarOutline, stringResource(R.string.starred_settings_092), stringResource(R.string.starred_summary_092), onClick = onStarred)
+        FeedSettingsRow(Icons.Outlined.Palette, stringResource(R.string.personalization_092), stringResource(R.string.personalization_summary_092), onClick = onSettings)
+        FeedSettingsRow(Icons.Outlined.FolderOpen, stringResource(R.string.feed_data), stringResource(R.string.settings_data_summary_091), onClick = onData)
         Text(stringResource(R.string.feed_about, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
     }
 }
 
 @Composable
-fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
+fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onImportContext: () -> Unit = {}, onDone: () -> Unit) {
     val state = ui.state ?: return
     var name by rememberSaveable(state.name) { mutableStateOf(state.name) }
     var region by rememberSaveable(state.region) { mutableStateOf(state.region) }
@@ -68,18 +69,14 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
         mutableStateOf(FeedJson.encodeToString(PersonalProfile085.draft(state.context, state.modules.filter { it.enabled && it.kind != "weather" }.map { it.kind }.toSet())))
     }
     val entries = remember(entriesJson) { FeedJson.decodeFromString<List<ContextEntry>>(entriesJson) }
-    var showMore by rememberSaveable { mutableStateOf(false) }
     val primaryId = PersonalProfile085.primary(entries)?.id ?: PersonalProfile085.PROFILE_ID
-    var showPaste by rememberSaveable { mutableStateOf(false) }
-    var pastedContext by rememberSaveable { mutableStateOf("") }
     var localError by rememberSaveable { mutableStateOf(false) }
     var pending by rememberSaveable { mutableStateOf(false) }
     var desiredContextJson by rememberSaveable { mutableStateOf<String?>(null) }
     var scopeEntryId by rememberSaveable { mutableStateOf<String?>(null) }
     val timezoneInvalid = timezone.isNotBlank() && runCatching { ZoneId.of(timezone.trim()) }.isFailure
     val canEdit = !ui.contextSaving && !ui.importWorking
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.prepareContextImport(uri) }
-    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportContext(uri) }
+    val documents = mebot.nguli.com.documents.LocalDocumentActions.current
     LaunchedEffect(state.name, state.region, state.timezone, state.context, pending, ui.contextSaving) {
         val desired = desiredContextJson?.let { FeedJson.decodeFromString<List<ContextEntry>>(it) }
         val saved = state.name == name.trim() && state.region == region.trim() && state.timezone == timezone.trim() && state.context == desired
@@ -91,12 +88,22 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
         }
     }
     LaunchedEffect(ui.error) { if (ui.error != null) pending = false }
-    LaunchedEffect(ui.importPreview) {
-        if (showPaste && ui.importPreview != null) { showPaste = false; pastedContext = "" }
-    }
     ScreenContainer {
         ScreenTitle(stringResource(R.string.preferences_title_083), stringResource(R.string.preferences_body_083))
         ImportFeedback(ui)
+        FeedSettingsRow(Icons.Outlined.FileUpload, stringResource(R.string.context_import_title_092),
+            stringResource(R.string.context_import_entry_092), onImportContext)
+        AppCard {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Outlined.LocationOn, null)
+                Text(stringResource(R.string.context_location_092), style = MaterialTheme.typography.titleMedium)
+            }
+            OutlinedTextField(region, { region = it.take(100) }, label = { Text(stringResource(R.string.feed_region)) }, singleLine = true,
+                modifier = Modifier.fillMaxWidth().testTag("context-region"), shape = RoundedCornerShape(16.dp), enabled = canEdit)
+            OutlinedTextField(timezone, { timezone = it.take(80); localError = false }, label = { Text(stringResource(R.string.feed_timezone)) },
+                isError = timezoneInvalid, supportingText = { if (timezoneInvalid) Text(stringResource(R.string.profile_timezone_invalid_085)) }, singleLine = true,
+                modifier = Modifier.fillMaxWidth().testTag("context-timezone"), shape = RoundedCornerShape(16.dp), enabled = canEdit)
+        }
         OutlinedTextField(name, { name = it.take(80) }, label = { Text(stringResource(R.string.feed_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("context-name"), shape = RoundedCornerShape(16.dp), enabled = canEdit)
         val primary = entries.find { it.id == primaryId }
         val legacy = entries.filterNot { it.id == primaryId }
@@ -117,7 +124,6 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
                 else if (state.context.find { it.id == entry.id } == entry) entry else entry.copy(text = text, confirmed = true, updatedAtMillis = now)
             }
             localError = entries.find { it.id == primaryId }?.let { !PersonalProfile085.valid(it.text) } == true || updated.size > 80 || updated.any { it.text.length > 1000 || '\u0000' in it.text } || timezoneInvalid
-            if (timezoneInvalid) showMore = true
             if (!localError) {
                 desiredContextJson = FeedJson.encodeToString(updated); pending = true
                 vm.clearMessage()
@@ -169,25 +175,9 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
             }
         }
         saveDetails("context-save-bottom")
-        TextButton(onClick = { showMore = !showMore }, modifier = Modifier.testTag("context-more")) {
-            Text(stringResource(R.string.preferences_advanced_083))
-            Icon(if (showMore) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
-        }
-        if (showMore) {
-        Text(stringResource(R.string.feed_context_scopes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedTextField(region, { region = it.take(100) }, label = { Text(stringResource(R.string.feed_region)) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("context-region"), shape = RoundedCornerShape(16.dp), enabled = canEdit)
-        OutlinedTextField(timezone, { timezone = it.take(80); localError = false }, label = { Text(stringResource(R.string.feed_timezone)) }, isError = timezoneInvalid, supportingText = { if (timezoneInvalid) Text(stringResource(R.string.profile_timezone_invalid_085)) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("context-timezone"), shape = RoundedCornerShape(16.dp), enabled = canEdit)
-        HorizontalDivider()
-        Text(stringResource(R.string.preferences_import_083), style = MaterialTheme.typography.titleMedium)
-        ContextImportActions(enabled = canEdit,
-            onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
-            onPaste = { vm.clearMessage(); showPaste = true })
-        ContextPromptActions(enabled = canEdit)
-        OutlinedButton(onClick = { exportLauncher.launch("mebot-context-${LocalDate.now()}.json") }, enabled = canEdit,
+        OutlinedButton(onClick = { documents.exportContext() }, enabled = canEdit,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("context-export")) { Text(stringResource(R.string.feed_context_export)) }
-        Text(stringResource(R.string.imports_context_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-        }
     }
     val scopeEntry = entries.find { it.id == scopeEntryId }
     if (scopeEntry != null) AlertDialog(onDismissRequest = { scopeEntryId = null },
@@ -212,15 +202,7 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit) {
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { scopeEntryId = null }) { Text(stringResource(R.string.done)) } })
-    if (showPaste) ContextPasteDialog(
-        text = pastedContext,
-        onTextChanged = { pastedContext = it; vm.clearMessage() },
-        working = ui.importWorking,
-        error = ui.error,
-        onDismiss = { showPaste = false },
-        onReview = vm::prepareContextText,
-    )
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { scopeEntryId = null }) { Text(stringResource(R.string.done)) } })
     FeedImportReview(ui, vm::confirmImport, vm::cancelImport)
 }
 
@@ -230,12 +212,11 @@ fun DeliveryScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit, onCon
 
 @Composable
 fun FeedDataScreen(ui: FeedUiState, vm: FeedViewModel, onLocalData: () -> Unit) {
-    val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportFeedBackup(uri) }
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.prepareFeedBackup(uri) }
+    val documents = mebot.nguli.com.documents.LocalDocumentActions.current
     FeedDataContent(ui,
-        onExport = { export.launch("mebot-feed-${LocalDate.now()}.json") },
-        onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+        onExport = { documents.exportFeedBackup() },
+        onImport = { documents.importFeedBackup() },
         onRestoreHidden = vm::restoreHidden, onLocalData = onLocalData,
         onHistoryChanged = vm::setReadingHistory, onClearHistory = vm::clearReadingHistory,
-        onDismissError = vm::clearMessage, onConfirmImport = vm::confirmImport, onCancelImport = vm::cancelImport, onResetFeedback=vm::resetRelevanceFeedback)
+        onDismissError = vm::clearMessage, onConfirmImport = { documents.invalidatePending(); vm.confirmImport() }, onCancelImport = vm::cancelImport, onResetFeedback=vm::resetRelevanceFeedback)
 }

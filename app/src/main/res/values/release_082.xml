@@ -10,7 +10,7 @@
     <string name="background_interactive_note">Your questions take priority over background work.</string>
     <string name="background_intro">Choose when MeBot prepares information for your next visit.</string>
     <string name="background_invalid">Check the interval and quiet hours.</string>
-    <string name="background_notifications">Let me know</string>
+    <string name="background_notifications">Notify me about new updates</string>
     <string name="background_refresh">Prepare updates in the background</string>
     <string name="background_refresh_now">Refresh now</string>
     <string name="background_system_timing">Android chooses the exact time. Updates may wait while your phone saves power.</string>

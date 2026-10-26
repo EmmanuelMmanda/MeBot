@@ -38,3 +38,6 @@ service/__pycache__/
 website-evidence/
 service/test-results.xml
 .release-stage/
+
+# Local benchmark compiled snapshots; raw redacted timing is review evidence.
+benchmarks/baseline-classes/

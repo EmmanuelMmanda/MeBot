@@ -102,6 +102,7 @@ fun FeedDetail(
                             Icon(Icons.Outlined.MoreHoriz, stringResource(R.string.detail_more_actions))
                         }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
                             if (originalAvailable) DropdownMenuItem(text = { Text(stringResource(R.string.detail_share)) },
                                 leadingIcon = { Icon(Icons.Outlined.Share, null) },
                                 onClick = { menu = false; shareResource(context, item.title, item.sourceUrl) })
@@ -181,7 +182,7 @@ fun FeedDetail(
                 }
                 DetailBrief(ui, item, onRetryBrief, onCancelBrief, onFollowUp, onConnect ?: onAsk)
                 item.weather?.let { weather ->
-                    WeatherStrip(item) { openSource(context, item.sourceUrl) }
+                    WeatherStrip(item, state?.timezone.orEmpty()) { openSource(context, item.sourceUrl) }
                     Text(stringResource(R.string.edition_feels_like, weather.feelsLikeC.toInt()), style = MaterialTheme.typography.bodyMedium)
                 }
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {

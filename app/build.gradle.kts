@@ -12,8 +12,8 @@ android {
         applicationId = "mebot.nguli.com"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "0.8.5"
+        versionCode = 20
+        versionName = "0.9.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
@@ -66,6 +66,10 @@ kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarg
 
 dependencies {
     implementation(project(":core"))
+    implementation("androidx.biometric:biometric:1.1.0")
+    // MainActivity is a FragmentActivity for BiometricPrompt. Biometric 1.1.0 otherwise
+    // brings Fragment 1.2.5, whose 16-bit request-code check crashes modern ActivityResult launches.
+    implementation("androidx.fragment:fragment:1.8.9")
     implementation(platform("androidx.compose:compose-bom:2025.12.00"))
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.activity:activity-compose:1.12.2")

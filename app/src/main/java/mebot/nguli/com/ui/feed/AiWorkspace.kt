@@ -103,7 +103,7 @@ fun AiWorkspace(
             }
         }
     }
-    val importFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) onImportText(uri) }
+    val documents = mebot.nguli.com.documents.LocalDocumentActions.current
     val listState = rememberLazyListState()
     var previousThread by remember { mutableStateOf<String?>(null) }
     val turns = conversation?.turns.orEmpty()
@@ -164,7 +164,7 @@ fun AiWorkspace(
                     }
                 } else OutlinedTextField(apiModel, {apiModel=it.take(128)},singleLine=true,label={Text(if(locale.language=="sw") "Jina la modeli" else "Model ID")})
             }},
-            confirmButton={if(state?.connection?.mode!="chatgpt")TextButton(onClick={showModels=false;onSelectModel(apiModel.trim())},enabled=apiModel.isNotBlank()){Text(if(locale.language=="sw") "Tumia" else "Use model")}},
+            confirmButton={ mebot.nguli.com.security.ProtectedWindowRegistration();if(state?.connection?.mode!="chatgpt")TextButton(onClick={showModels=false;onSelectModel(apiModel.trim())},enabled=apiModel.isNotBlank()){Text(if(locale.language=="sw") "Tumia" else "Use model")}},
             dismissButton={TextButton(onClick={showModels=false}){Text(if(locale.language=="sw") "Funga" else "Close")}})
     }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -247,7 +247,7 @@ fun AiWorkspace(
                             unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent, disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent),
                         shape = RoundedCornerShape(22.dp))
                     Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { importFile.launch(arrayOf("text/plain", "text/markdown", "text/x-markdown")) },
+                        IconButton(onClick = { documents.importAttachment() },
                             enabled = !ui.asking && !ui.importWorking && conversation?.attachments.orEmpty().size < 3,
                             modifier = Modifier.testTag("workspace-attach")) { Icon(Icons.Outlined.AttachFile, stringResource(R.string.workspace_attach)) }
                         if (voiceAvailable) IconButton(onClick = {
@@ -261,7 +261,7 @@ fun AiWorkspace(
                             Icon(Icons.Outlined.MicNone, stringResource(R.string.workspace_voice_input))
                         }
                         IconButton(onClick = { showVoiceSettings = true }, modifier = Modifier.testTag("workspace-voice-options")) {
-                            Icon(Icons.Outlined.RecordVoiceOver, stringResource(R.string.rich_voice_settings))
+                            Icon(Icons.Outlined.VolumeUp, stringResource(R.string.rich_voice_settings))
                         }
                         if (speech.readingId != null) IconButton(onClick = speech.stop) { Icon(Icons.Outlined.VolumeOff, stringResource(R.string.workspace_stop_audio)) }
                         Spacer(Modifier.weight(1f))
@@ -275,6 +275,7 @@ fun AiWorkspace(
         }
     }
     if (showConversationFiles) ModalBottomSheet(onDismissRequest = { showConversationFiles = false }) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.rich_conversation_files, conversation?.attachments.orEmpty().size), style = MaterialTheme.typography.titleLarge)
             Text(stringResource(R.string.rich_conversation_files_help), style = MaterialTheme.typography.bodyMedium)
@@ -289,6 +290,7 @@ fun AiWorkspace(
         }
     }
     if (showVoiceSettings) ModalBottomSheet(onDismissRequest = { showVoiceSettings = false }) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
         Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.rich_voice_settings), style = MaterialTheme.typography.titleLarge)
             Text(stringResource(R.string.rich_voice_help), style = MaterialTheme.typography.bodyMedium)
@@ -307,6 +309,7 @@ fun AiWorkspace(
         }
     }
     if (showHistory) ModalBottomSheet(onDismissRequest = { showHistory = false }) {
+        mebot.nguli.com.security.ProtectedWindowRegistration()
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
             Text(stringResource(R.string.workspace_history), style = MaterialTheme.typography.titleLarge)
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp).padding(top = 12.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -342,17 +345,17 @@ fun AiWorkspace(
                 Icon(moduleIcon(choice.kind), null, Modifier.size(20.dp)); Spacer(Modifier.width(10.dp)); Text(moduleName(choice), Modifier.weight(1f))
             } }
             TextButton(onClick = { showScopes = false; onContext() }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.workspace_manage_context)) }
-        } }, confirmButton = { TextButton(onClick = { showScopes = false }) { Text(stringResource(R.string.done)) } })
+        } }, confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { showScopes = false }) { Text(stringResource(R.string.done)) } })
     deletingId?.let { target -> AlertDialog(onDismissRequest = { deletingId = null },
         title = { Text(stringResource(R.string.workspace_delete_title)) }, text = { Text(stringResource(R.string.workspace_delete_body)) },
-        confirmButton = { TextButton(onClick = { onDelete(target); deletingId = null; showHistory = false }, modifier = Modifier.testTag("conversation-delete-confirm")) { Text(stringResource(R.string.workspace_delete)) } },
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { onDelete(target); deletingId = null; showHistory = false }, modifier = Modifier.testTag("conversation-delete-confirm")) { Text(stringResource(R.string.workspace_delete)) } },
         dismissButton = { TextButton(onClick = { deletingId = null }) { Text(stringResource(R.string.cancel)) } }) }
     conversation?.attachments?.find { it.id == reviewAttachmentId }?.let { attachment -> AlertDialog(onDismissRequest = { reviewAttachmentId = null },
         title = { Text(attachment.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = { Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.workspace_attachment_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             SelectionContainer { Text(attachment.text, style = MaterialTheme.typography.bodyMedium) }
-        } }, confirmButton = { TextButton(onClick = { reviewAttachmentId = null }) { Text(stringResource(R.string.done)) } }) }
+        } }, confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { reviewAttachmentId = null }) { Text(stringResource(R.string.done)) } }) }
 }
 
 @Composable

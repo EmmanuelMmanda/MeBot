@@ -211,6 +211,91 @@ class PersonalContextImportTest {
         assertEquals(before.modules, app.feedRepository.current().modules)
     }
 
+    @Test fun bothFeedExportsWriteReadableJsonWithoutChangingStateOrIncludingCredentials() = runBlocking {
+        val before = app.feedRepository.current()
+        val contextFile = File(app.cacheDir, "synthetic-export-context.json")
+        viewModel.clearMessage()
+        viewModel.exportContext(Uri.fromFile(contextFile)).join()
+        assertEquals("saved", viewModel.ui.value.notice)
+        val context = FeedJson.decodeFromString<PersonalContextImport>(contextFile.readText())
+        assertEquals(before.name, context.name)
+        assertEquals(before.context, context.entries)
+        assertEquals(before.modules, context.modules)
+        val backupFile = File(app.cacheDir, "synthetic-export-feed.json")
+        viewModel.clearMessage()
+        viewModel.exportFeedBackup(Uri.fromFile(backupFile)).join()
+        assertEquals("saved", viewModel.ui.value.notice)
+        val backup = FeedJson.decodeFromString<FeedState>(backupFile.readText())
+        assertEquals(before.copy(connection = before.connection.copy(accountId = ""), aiPauseCode = ""), backup)
+        assertFalse(backupFile.readText().contains("existing-synthetic-api-credential"))
+        assertEquals(before, app.feedRepository.current())
+    }
+
+    @Test fun unreadableImportAndUnwritableExportsReportErrorsAndRetainExistingData() = runBlocking {
+        val before = app.feedRepository.current()
+        val missing = Uri.fromFile(File(app.cacheDir, "missing-parent/missing.json"))
+        viewModel.prepareContextImport(missing)
+        withTimeout(10_000) { viewModel.ui.first { !it.importWorking && it.error != null } }
+        assertNull(viewModel.ui.value.importPreview)
+        viewModel.clearMessage()
+        viewModel.exportContext(missing).join()
+        assertNotNull(viewModel.ui.value.error)
+        assertNull(viewModel.ui.value.notice)
+        viewModel.clearMessage()
+        viewModel.exportFeedBackup(missing).join()
+        assertNotNull(viewModel.ui.value.error)
+        assertNull(viewModel.ui.value.notice)
+        assertEquals(before, app.feedRepository.current())
+        assertEquals("existing-synthetic-api-credential", app.feedSecrets.read())
+    }
+
+    @Test fun stagedContextCannotBeConfirmedAfterReset(): Unit = runBlocking {
+        val file = File(app.cacheDir, "context-before-reset.json").apply {
+            writeText(FeedJson.encodeToString(PersonalContextImport(name = "Must not return",
+                entries = listOf(ContextEntry(id = "stale-note", text = "Must stay erased")))))
+        }
+        viewModel.prepareContextImport(Uri.fromFile(file))
+        withTimeout(10000) { viewModel.ui.first { it.importPreview != null && !it.importWorking } }
+        viewModel.reset().join()
+        val erased = app.feedRepository.current()
+        assertTrue(erased.context.isEmpty())
+        assertNull(viewModel.ui.value.importPreview)
+        viewModel.confirmImport()
+        assertEquals(erased, app.feedRepository.current())
+    }
+
+    @Test fun stagedFullBackupCannotBeConfirmedAfterReset(): Unit = runBlocking {
+        val file = File(app.cacheDir, "backup-before-reset.json").apply { writeText(FeedJson.encodeToString(existingFeed())) }
+        viewModel.prepareFeedBackup(Uri.fromFile(file))
+        withTimeout(10000) { viewModel.ui.first { it.importPreview != null && !it.importWorking } }
+        viewModel.reset().join()
+        val erased = app.feedRepository.current()
+        assertTrue(erased.items.isEmpty())
+        assertNull(viewModel.ui.value.importPreview)
+        viewModel.confirmImport()
+        assertEquals(erased, app.feedRepository.current())
+    }
+
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test fun checkpointExportReconstructsPngAndRejectsChangedCheckpointIdentity() = runBlocking {
+        app.repository.update { it.copy(settings = it.settings.copy(checkpointCode = "synthetic-checkpoint")) }
+        val utilities = ViewModelProvider(viewModels, ViewModelProvider.AndroidViewModelFactory(app))[mebot.nguli.com.MeBotViewModel::class.java]
+        withTimeout(10_000) { utilities.ui.first { it.state != null } }
+        val target = File(app.cacheDir, "synthetic-checkpoint.png")
+        val identity = mebot.nguli.com.documents.checkpointDocumentIdentity("synthetic-checkpoint")
+        utilities.exportCheckpoint(Uri.fromFile(target), identity)
+        withTimeout(10_000) { utilities.message.first { it != null } }
+        assertEquals(mebot.nguli.com.R.string.checkpoint_saved, utilities.message.value)
+        assertArrayEquals(byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a), target.readBytes().take(8).toByteArray())
+        utilities.clearMessage()
+        app.repository.update { it.copy(settings = it.settings.copy(checkpointCode = "synthetic-new-checkpoint")) }
+        val stale = File(app.cacheDir, "must-not-export-stale-checkpoint.png")
+        utilities.exportCheckpoint(Uri.fromFile(stale), identity)
+        withTimeout(10_000) { utilities.message.first { it != null } }
+        assertEquals(mebot.nguli.com.R.string.file_error, utilities.message.value)
+        assertFalse(stale.exists())
+    }
+
     private suspend fun openViewModel() {
         viewModels = ViewModelStore()
         viewModel = ViewModelProvider(viewModels, ViewModelProvider.AndroidViewModelFactory(app))[FeedViewModel::class.java]

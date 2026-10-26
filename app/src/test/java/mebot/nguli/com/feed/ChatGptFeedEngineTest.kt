@@ -215,6 +215,33 @@ class ChatGptFeedEngineTest {
     }
 
     private suspend fun select() = repository.update { it.copy(connection = AiConnection("chatgpt", "catalog/model:one", accountId = "account-a")) }
+    @Test fun localRemovalOfSelectedAccountClearsSelectionButPreservesPersonalFeed() = runBlocking {
+        val saved=article("saved-local")
+        val note=ContextEntry(id="keep",text="Keep this note",scopes=setOf("news"))
+        repository.update { it.copy(connection=AiConnection(mode="chatgpt",accountId="account-a"),
+            items=listOf(saved),savedIds=setOf(saved.id),context=listOf(note),name="Fixture") }
+        engine().removeSavedChatGptAccount("account-a")
+        val after=repository.current()
+        assertEquals("chatgpt",after.connection.mode)
+        assertEquals("",after.connection.accountId)
+        assertEquals(listOf(saved),after.items)
+        assertEquals(setOf(saved.id),after.savedIds)
+        assertEquals(listOf(note),after.context)
+        assertEquals("Fixture",after.name)
+        assertEquals("synthetic-api-key",vault.value)
+        assertTrue(auth.signedOut.isEmpty())
+        assertEquals(listOf("account-a"),auth.removed)
+    }
+
+    @Test fun inactiveLocalRemovalDoesNotChangeSelectedProvider() = runBlocking {
+        val selected=AiConnection(mode="chatgpt",accountId="account-a")
+        repository.update { it.copy(connection=selected) }
+        engine().removeSavedChatGptAccount("account-b")
+        assertEquals(selected,repository.current().connection)
+        assertEquals(listOf("account-b"),auth.removed)
+        assertTrue(auth.signedOut.isEmpty())
+    }
+
     private fun engine() = FeedEngine(repository, vault, object : SourceReader {
         override suspend fun read(source: FeedSource, module: FeedModule, now: Long) = listOf(article("public-story"))
     }, provider, chatGpt = auth)
@@ -237,6 +264,7 @@ class ChatGptFeedEngineTest {
         var invalidateResult = true
         var cleared = false
         val signedOut = mutableListOf<String>()
+        val removed = mutableListOf<String>()
         val invalidated = mutableListOf<String>()
         override suspend fun initialize() = Unit
         override suspend fun accessToken(id: String): String {
@@ -248,6 +276,12 @@ class ChatGptFeedEngineTest {
         override suspend fun recordInferenceDiagnostic(id: String, expectedAccessToken: String, diagnostic: ChatGptDiagnostic) {
             assertEquals("synthetic-subscription-${id.takeLast(1)}", expectedAccessToken)
             state.value = state.value.copy(lastDiagnostic = diagnostic)
+        }
+        override suspend fun removeSavedAccount(id: String): Boolean {
+            removed += id
+            state.value=state.value.copy(accounts=state.value.accounts.filterNot { it.id==id },
+                activeAccountId=state.value.activeAccountId?.takeUnless { it==id })
+            return true
         }
         override suspend fun signOut(id: String): Boolean { signedOut += id; return true }
         override suspend fun invalidateSession(id: String, expectedAccessToken: String?): Boolean { invalidated += id; return invalidateResult }

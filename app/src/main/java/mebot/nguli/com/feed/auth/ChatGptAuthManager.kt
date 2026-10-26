@@ -32,6 +32,7 @@ open class ChatGptAuthManager internal constructor(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val signInTimeoutMillis: Long = 10 * 60_000L,
     private val callbackCopyProvider: (suspend () -> ChatGptCallbackCopy)? = null,
+    private val callbackFactory: (ChatGptCallbackCopy) -> LoopbackChatGptCallback = { LoopbackChatGptCallback(it) },
 ) {
     constructor(context: Context, language: suspend () -> String = { "system" }) : this(
         EncryptedChatGptStore(context), SecureChatGptAuthTransport(), System::currentTimeMillis,
@@ -48,6 +49,8 @@ open class ChatGptAuthManager internal constructor(
     private val storageMutex = Mutex()
     private val signInMutex = Mutex()
     private val sessionMutexes = ConcurrentHashMap<String, Mutex>()
+    private val removalEpochs = ConcurrentHashMap<String, AtomicLong>()
+    private fun removalEpoch(id: String) = removalEpochs.getOrPut(id) { AtomicLong(0) }
     private val verifier = ChatGptIdTokenVerifier(transport, nowMillis)
     private val random = SecureRandom()
     private val lifecycle = AtomicLong(0)
@@ -89,7 +92,7 @@ open class ChatGptAuthManager internal constructor(
             val selected = accountId?.let { id -> before.accounts.find { it.id == id } ?: throw ChatGptAuthException("chatgpt_reauth") }
             if (selected == null && before.accounts.size >= 20) throw ChatGptAuthException("chatgpt_account_limit")
             val copy = callbackCopyProvider?.invoke() ?: callbackCopy
-            val listener = try { LoopbackChatGptCallback(copy) }
+            val listener = try { callbackFactory(copy) }
                 catch (_: Exception) { throw ChatGptAuthException("chatgpt_loopback") }
             val expectedState = randomValue()
             val nonce = randomValue()
@@ -227,7 +230,10 @@ open class ChatGptAuthManager internal constructor(
     }
 
     private suspend fun validTokenLocked(id: String): String {
-        val record = account(id)
+        val (record, accountRemovalEpoch) = storageMutex.withLock {
+            val saved = privateState ?: throw ChatGptAuthException("chatgpt_storage")
+            (saved.accounts.find { it.id == id } ?: throw ChatGptAuthException("chatgpt_reauth")) to removalEpoch(id).get()
+        }
         if (!record.publicAccount().connected) throw ChatGptAuthException("chatgpt_reauth")
         if (!record.publicAccount().planEnabled) throw ChatGptAuthException("chatgpt_permission")
         val now = nowMillis()
@@ -251,15 +257,16 @@ open class ChatGptAuthManager internal constructor(
                 ?: VerifiedChatGptIdentity(record.issuer, record.subject, record.email, record.name)
             val replacement = tokenRecord(body, record, identity, initial = false)
             updatePrivate {
-                if (epoch != lifecycle.get() || it.accounts.find { a -> a.id == id }?.refreshToken != record.refreshToken)
+                if (epoch != lifecycle.get() || accountRemovalEpoch != removalEpoch(id).get() || it.accounts.find { a -> a.id == id }?.refreshToken != record.refreshToken)
                     throw ChatGptAuthException("chatgpt_cancelled")
                 it.copy(accounts = it.accounts.map { old -> if (old.id == id) replacement else old })
             }
             if (!replacement.publicAccount().planEnabled) throw ChatGptAuthException("chatgpt_permission")
             replacement.accessToken
         } catch (failure: ChatGptAuthException) {
-            if (failure.code == "chatgpt_reauth") clearSessionLocked(id)
-            if (epoch == lifecycle.get()) mutableState.update { it.copy(lastDiagnostic = failure.diagnostic ?: ChatGptDiagnostic("refresh")) }
+            if (failure.code == "chatgpt_reauth" && epoch == lifecycle.get() && accountRemovalEpoch == removalEpoch(id).get())
+                clearSessionLocked(id, record.accessToken)
+            if (epoch == lifecycle.get() && accountRemovalEpoch == removalEpoch(id).get()) mutableState.update { it.copy(lastDiagnostic = failure.diagnostic ?: ChatGptDiagnostic("refresh")) }
             throw failure
         } }
     }
@@ -268,6 +275,7 @@ open class ChatGptAuthManager internal constructor(
         initialize()
         return sessionMutex(id).withLock {
             val epoch = lifecycle.get()
+            val accountRemovalEpoch = removalEpoch(id).get()
             val request = diagnosticSequence.incrementAndGet()
             mutableState.update { it.copy(lastDiagnostic = null, errorCode = null) }
             try {
@@ -279,13 +287,13 @@ open class ChatGptAuthManager internal constructor(
                 val token = validTokenLocked(id)
                 val catalog = fetchModels(token)
                 updatePrivate {
-                    if (epoch != lifecycle.get() || it.accounts.find { a -> a.id == id }?.accessToken != token)
+                    if (epoch != lifecycle.get() || accountRemovalEpoch != removalEpoch(id).get() || it.accounts.find { a -> a.id == id }?.accessToken != token)
                         throw ChatGptAuthException("chatgpt_cancelled")
                     it.copy(accounts = it.accounts.map { old -> if (old.id == id) old.copy(models = catalog, modelsUpdatedAtMillis = nowMillis()) else old })
                 }
                 catalog
             } catch (failure: ChatGptAuthException) {
-                if (epoch == lifecycle.get() && request == diagnosticSequence.get() && failure.code != "chatgpt_cancelled")
+                if (epoch == lifecycle.get() && accountRemovalEpoch == removalEpoch(id).get() && request == diagnosticSequence.get() && failure.code != "chatgpt_cancelled")
                     mutableState.update { it.copy(lastDiagnostic = failure.diagnostic ?: ChatGptDiagnostic("models")) }
                 throw failure
             }
@@ -350,6 +358,27 @@ open class ChatGptAuthManager internal constructor(
             catch (_: Exception) { /* The local decision to sign out still takes effect. */ }
             finally { withContext(NonCancellable) { clearSessionLocked(id) } }
             revoked
+        }
+    }
+
+    /** Forget this device's saved row and tokens only. Never calls revocation or deletes a provider account. */
+    open suspend fun removeSavedAccount(id: String): Boolean {
+        cancelSignIn()
+        initialize()
+        // Do not wait for non-cancellable token rotation; invalidate only this account after durable write.
+        // Unrelated account rotations must still commit their newly rotated credentials.
+        return withContext(Dispatchers.IO) {
+            storageMutex.withLock {
+                val before = privateState ?: throw ChatGptAuthException("chatgpt_storage")
+                if (before.accounts.none { it.id == id }) return@withLock false
+                val next = before.copy(accounts = before.accounts.filterNot { it.id == id },
+                    activeAccountId = before.activeAccountId?.takeUnless { it == id })
+                store.write(next)
+                removalEpoch(id).incrementAndGet()
+                privateState = next
+                publish(next)
+                true
+            }
         }
     }
 

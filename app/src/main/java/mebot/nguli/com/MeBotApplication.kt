@@ -8,6 +8,7 @@ import mebot.nguli.com.feed.auth.ChatGptAuthManager
 
 open class MeBotApplication : Application() {
     // Lazy: Direct Boot receivers must not open credential-protected personal data.
+    open val appLock by lazy { mebot.nguli.com.security.AppLockController(this) }
     val repository by lazy { AppRepository(this) }
     val alarms by lazy { AlarmController(this) }
     open val feedRepository by lazy { FeedRepository(this) }

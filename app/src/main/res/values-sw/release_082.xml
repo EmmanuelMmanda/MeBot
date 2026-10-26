@@ -10,7 +10,7 @@
     <string name="background_interactive_note">Maswali yako hupewa nafasi kabla ya kazi za nyuma.</string>
     <string name="background_intro">Chagua MeBot ikuandalie taarifa lini kabla hujarudi.</string>
     <string name="background_invalid">Angalia muda wa kurudia na saa za ukimya.</string>
-    <string name="background_notifications">Nijulishe</string>
+    <string name="background_notifications">Nipe arifa za taarifa mpya</string>
     <string name="background_refresh">Andaa taarifa hata nisipokuwa kwenye programu</string>
     <string name="background_refresh_now">Tafuta taarifa sasa</string>
     <string name="background_system_timing">Android huamua muda halisi. Taarifa zinaweza kusubiri simu inapookoa betri.</string>

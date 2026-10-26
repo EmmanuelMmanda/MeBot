@@ -11,8 +11,8 @@
     <string name="rich_conversation_files">Faili za mazungumzo haya (%1$d)</string>
     <string name="rich_conversation_files_help">Faili hizi zitatumika kwenye maswali yanayofuata hapa. Ondoa faili usilotaka kushiriki tena kwenye mazungumzo haya.</string>
     <string name="rich_retry_question">Jaribu swali la mwisho tena</string>
-    <string name="rich_voice_settings">Mipangilio ya sauti</string>
-    <string name="rich_voice_help">Sema swali, likague, kisha tuma. Kusoma kwa sauti kunatumia sauti iliyopo kwenye simu yako. Hii si simu ya sauti inayosikiliza muda wote.</string>
+    <string name="rich_voice_settings">Mipangilio ya kusoma kwa sauti</string>
+    <string name="rich_voice_help">Chagua sauti ya simu na kasi ya kusoma.</string>
     <string name="rich_voice_speed">Kasi ya kusoma</string>
     <string name="rich_voice_choice">Sauti ya simu</string>
     <string name="rich_voice_default">Sauti ya kawaida</string>

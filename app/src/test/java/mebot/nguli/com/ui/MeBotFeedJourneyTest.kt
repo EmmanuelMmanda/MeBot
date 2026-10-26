@@ -101,7 +101,21 @@ class MeBotFeedJourneyTest {
     }
 
     @Test fun moduleDraftSurvivesRotationAndPausingItPreservesSavedContent() {
+        val installation = app
+        val repository = app.feedRepository
+        val observations = mutableListOf<String>()
+        fun observe(label: String, value: FeedState = state()) {
+            assertSame("Application changed at $label", installation, app)
+            assertSame("Repository changed at $label", repository, app.feedRepository)
+            val observation = "$label: modules=${value.modules.map { it.id to it.enabled }} saved=${value.savedIds} " +
+                "activity=${System.identityHashCode(compose.activity)} app=${System.identityHashCode(app)} repo=${System.identityHashCode(app.feedRepository)}"
+            if (observations.lastOrNull() != observation) {
+                if (observations.size == 32) observations.removeAt(0)
+                observations += observation
+            }
+        }
         start()
+        observe("after-onboarding")
         tab("modules")
         screenshot("24-mebot-modules")
         // The first empty refresh can cover the bottom edge where scrollTo places Add.
@@ -117,17 +131,41 @@ class MeBotFeedJourneyTest {
         compose.onNodeWithTag("module-topic").performScrollTo().performTextInput("Open source tools for local AI")
         compose.activityRule.scenario.recreate()
         waitForTag("module-name")
+        observe("after-editor-recreation")
         compose.onNodeWithTag("module-name").assertTextContains("Research watch")
         compose.onNodeWithTag("module-topic").assertTextContains("Open source tools for local AI")
         screenshot("25-mebot-add-watch")
         compose.onNodeWithTag("module-save").performScrollTo().performClick()
         waitForState { it.modules.any { module -> module.title == "Research watch" } }
         val module = state().modules.single { it.title == "Research watch" }
+        observe("saved-module-${module.id}")
         waitForTag("module-${module.id}")
         val article = stories().first().copy(id = "watch-result", moduleId = module.id, kind = "watch")
-        runBlocking { app.feedRepository.update { it.copy(items = listOf(article), savedIds = setOf(article.id)) } }
+        val fixture = runBlocking { app.feedRepository.update { it.copy(items = listOf(article), savedIds = setOf(article.id)) } }
+        observe("fixture-update-return", fixture)
+        observe("fixture-immediate-read")
+        observe("before-toggle")
         compose.onNodeWithTag("module-toggle-${module.id}").performScrollTo().performClick()
-        waitForState { it.modules.single { entry -> entry.id == module.id }.enabled.not() }
+        fun diagnosed(failure: Throwable): AssertionError {
+            val persistedIds = runCatching {
+                val raw = File(installation.filesDir, "mebot/feed.json").readText()
+                mebot.nguli.com.feed.FeedJson.decodeFromString<FeedState>(raw).modules.map { it.id to it.enabled }
+            }.fold({ it.toString() }, { "unreadable:${it.javaClass.simpleName}" })
+            val ui = androidx.lifecycle.ViewModelProvider(compose.activity)[mebot.nguli.com.feed.FeedViewModel::class.java].ui.value
+            return AssertionError("Module ${module.id} absent or pause failed; persisted modules=$persistedIds; " +
+                "VM modules=${ui.state?.modules?.map { it.id to it.enabled }} error=${ui.error} saving=${ui.moduleSavingId}\n" +
+                observations.joinToString("\n"), failure)
+        }
+        try {
+            waitForState { current ->
+                observe("toggle-poll", current)
+                current.modules.single { entry -> entry.id == module.id }.enabled.not()
+            }
+        } catch (failure: Exception) {
+            throw diagnosed(failure)
+        } catch (failure: AssertionError) {
+            throw diagnosed(failure)
+        }
         compose.activityRule.scenario.recreate()
         waitForTag("module-toggle-${module.id}")
         compose.onNodeWithTag("module-toggle-${module.id}").performScrollTo().assertIsOff()
@@ -136,6 +174,7 @@ class MeBotFeedJourneyTest {
         tab("saved")
         compose.onNodeWithTag("item-watch-result").performScrollTo().assertIsDisplayed()
         assertEquals(setOf(article.id), state().savedIds)
+        println("Module pause diagnostic checkpoints:\n" + observations.joinToString("\n"))
     }
 
     @Test fun editingContextPreservesExistingScopesAndChangesTheReopenedGreeting() {

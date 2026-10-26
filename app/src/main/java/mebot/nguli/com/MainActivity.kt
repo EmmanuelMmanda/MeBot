@@ -5,7 +5,14 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.view.ContextThemeWrapper
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
+import mebot.nguli.com.security.*
+import mebot.nguli.com.documents.*
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import android.view.WindowManager
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -59,7 +66,42 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.awaitCancellation
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
+    private val appLock get() = (application as MeBotApplication).appLock
+    private lateinit var biometricUnlock: BiometricUnlock
+    private lateinit var privacyCurtain: PrivacyCurtain
+    private var screenReceiverRegistered = false
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                privacyCurtain.cover()
+                appLock.lock()
+                biometricUnlock.cancel()
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::privacyCurtain.isInitialized) privacyCurtain.cover()
+        appLock.foreground(true)
+    }
+
+    override fun onPause() {
+        // Lock before leaving personal UI; FLAG_SECURE also prevents recents/screenshot capture.
+        if (::privacyCurtain.isInitialized) privacyCurtain.cover()
+        appLock.foreground(false)
+        if (::biometricUnlock.isInitialized) biometricUnlock.cancel()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        if (screenReceiverRegistered) unregisterReceiver(screenReceiver)
+        if (::privacyCurtain.isInitialized) privacyCurtain.close()
+        if (::biometricUnlock.isInitialized) biometricUnlock.cancel()
+        super.onDestroy()
+    }
+
     private var softwareNavigationRequest by mutableIntStateOf(0)
     private var alarmNavigationRequest by mutableIntStateOf(0)
     private var feedNavigationRequest by mutableIntStateOf(0)
@@ -68,6 +110,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Synchronous fail-closed state is known before any personal composable is mounted.
+        if (appLock.state.value.enabled) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        biometricUnlock = BiometricUnlock(this, appLock)
+        privacyCurtain = PrivacyCurtain(this, appLock)
+        privacyCurtain.cover()
+        ContextCompat.registerReceiver(this, screenReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF), ContextCompat.RECEIVER_NOT_EXPORTED)
+        screenReceiverRegistered = true
         alarmNavigationRequest = savedInstanceState?.getInt("mebot.alarmNavigationRequest")
             ?: if (intent?.action == "mebot.nguli.com.OPEN_ALARMS") 1 else 0
         feedNavigationRequest = savedInstanceState?.getInt("mebot.feedNavigationRequest")
@@ -111,7 +160,46 @@ class MainActivity : ComponentActivity() {
                             isAppearanceLightNavigationBars = lightBars
                         }
                     }
-                    FeedClock { MeBotApp(ui, vm, feedUi, feedVm, alarmNavigationRequest, feedNavigationRequest, feedNavigationItem, chatGptNavigationRequest, softwareNavigationRequest) }
+                    val protection by appLock.state.collectAsStateWithLifecycle()
+                    val coverEpoch = privacyCurtain.epoch
+                    val lockTicket = appLock.ticket()
+                    LaunchedEffect(protection.locked) {
+                        if (protection.locked) {
+                            feedVm.clearAnswer(); feedVm.cancelDetail(); feedVm.cancelSearch()
+                        }
+                    }
+                    SideEffect {
+                        if (protection.enabled) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    }
+                    val protectedScreens = rememberSaveableStateHolder()
+                    val biometricTitle = stringResource(R.string.app_lock_unlock)
+                    val biometricPinLabel = stringResource(R.string.app_lock_use_pin)
+                    DocumentActionsHost(
+                        locked = protection.locked,
+                        targetIdentity = { operation -> when (operation) {
+                            DocumentOperation.IMPORT_ATTACHMENT -> feedVm.ui.value.activeConversationId
+                            DocumentOperation.EXPORT_CHECKPOINT -> checkpointDocumentIdentity(vm.ui.value.state?.settings?.checkpointCode.orEmpty())
+                            else -> null
+                        } },
+                        canUseDocuments = { !appLock.state.value.locked && lifecycle.currentState == Lifecycle.State.RESUMED },
+                        onLaunchFailure = { vm.showMessage(R.string.document_picker_error) },
+                        onDocument = { operation, uri, target -> when (operation) {
+                            DocumentOperation.EXPORT_CHECKPOINT -> vm.exportCheckpoint(uri, target)
+                            DocumentOperation.IMPORT_ATTACHMENT -> feedVm.importTextAttachment(uri, target)
+                            DocumentOperation.IMPORT_CONTEXT -> feedVm.prepareContextImport(uri)
+                            DocumentOperation.EXPORT_CONTEXT -> feedVm.exportContext(uri)
+                            DocumentOperation.IMPORT_FEED -> feedVm.prepareFeedBackup(uri)
+                            DocumentOperation.EXPORT_FEED -> feedVm.exportFeedBackup(uri)
+                            DocumentOperation.IMPORT_LOCAL -> vm.importBackup(uri)
+                            DocumentOperation.EXPORT_LOCAL -> vm.exportBackup(uri)
+                        } },
+                    ) {
+                    if (protection.locked) AppLockScreen(appLock) { biometricUnlock.authenticate(biometricTitle, biometricPinLabel) }
+                    else protectedScreens.SaveableStateProvider("personal-navigation") {
+                        FeedClock(timezone = feedUi.state?.timezone.orEmpty(), noticeDismissals = feedUi.state?.dismissedNotices.orEmpty()) { MeBotApp(ui, vm, feedUi, feedVm, alarmNavigationRequest, feedNavigationRequest, feedNavigationItem, chatGptNavigationRequest, softwareNavigationRequest) }
+                    }
+                    }
+                    SideEffect { privacyCurtain.committed(coverEpoch, lockTicket, protection.locked) }
                 }
             }
         }
@@ -152,6 +240,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
     var detailReturn by rememberSaveable { mutableStateOf("feed") }
     var connectionReturn by rememberSaveable { mutableStateOf("you") }
     var contextReturn by rememberSaveable { mutableStateOf("you") }
+    var deliveryReturn by rememberSaveable { mutableStateOf("you") }
     var moduleDraft by rememberSaveable { mutableStateOf<String?>(null) }
     var moduleIsNew by rememberSaveable { mutableStateOf(false) }
     var moduleCatalogFilter by rememberSaveable { mutableStateOf(ModuleDiscovery.ALL) }
@@ -166,6 +255,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
     val context = LocalContext.current
     val resources = LocalResources.current
     val snackbars = remember { SnackbarHostState() }
+    val documents = LocalDocumentActions.current
     val message by vm.message.collectAsStateWithLifecycle()
     LaunchedEffect(message, resources) {
         message?.let { snackbars.showSnackbar(resources.getString(it)); vm.clearMessage() }
@@ -234,6 +324,11 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
         page = "modules"
     }
     fun back() {
+        if (page == "context-import") {
+            if (feedUi.importWorking || feedUi.contextSaving) return
+            if (feedUi.importPreview != null) { feedVm.cancelImport(); return }
+            feedVm.cancelImport()
+        }
         if (page == "connect") { feedVm.cancelChatGptSignIn(); feedVm.cancelOpenRouterSignIn() }
         page = when (page) {
             "checkpoint" -> checkpointReturn
@@ -242,8 +337,11 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
             "item" -> detailReturn
             "ask" -> if (itemId != null) "item" else "feed"
             "connect" -> if (onboarded) connectionReturn else "feed"
+            "context-import" -> "context"
             "context" -> contextReturn
-            "delivery", "data", "settings", "software-updates" -> "you"
+            "data", "settings", "software-updates", "starred-settings" -> "you"
+            "delivery" -> deliveryReturn
+            "app-lock" -> "settings"
             "faq" -> "settings"
             "tour" -> "faq"
             "search" -> "feed"
@@ -345,21 +443,25 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                         "saved" -> SavedFeed(feed, ::openItem, feedVm::toggleSaved, { page = "feed" })
                         "you" -> YouScreen(feedUi,
                             { contextReturn = "you"; feedVm.clearMessage(); page = "context" }, ::openConnection,
-                            { feedVm.clearMessage(); screenStates.removeState("delivery"); page = "delivery" }, { page = "settings" }, { page = "data" }, onSoftwareUpdates={page="software-updates"})
+                            { deliveryReturn = "you"; feedVm.clearMessage(); screenStates.removeState("delivery"); page = "delivery" }, { page = "settings" }, { page = "data" }, onSoftwareUpdates={page="software-updates"}, onAppLock={page="app-lock"}, onStarred={page="starred-settings"})
                         "software-updates" -> SoftwareUpdatesScreen((LocalContext.current.applicationContext as MeBotApplication).softwareUpdates)
                         "connect" -> ConnectionScreen(feedUi, feedVm::connect, feedVm::disconnect,
                             feedVm::beginChatGptSignIn, feedVm::cancelChatGptSignIn, feedVm::selectChatGptAccount,
                             feedVm::selectChatGptModel, feedVm::disconnectChatGptAccount, feedVm::useChatGptAccount,
                             onProviderConnect=feedVm::connectProvider, onProviderModels=feedVm::loadProviderModels,
                             onOpenRouterStart=feedVm::beginOpenRouterSignIn, onOpenRouterFinish=feedVm::finishOpenRouterSignIn,
-                            onOpenRouterCancel=feedVm::cancelOpenRouterSignIn, onLimitChange=feedVm::saveRequestLimit) { refresh ->
+                            onOpenRouterCancel=feedVm::cancelOpenRouterSignIn, onLimitChange=feedVm::saveRequestLimit,
+                            onChatGptRemoveAccount=feedVm::removeChatGptAccount) { refresh ->
                             if (onboarded && refresh) feedVm.refresh()
                             if (onboarded) page = connectionReturn else finishSetup()
                         }
-                        "context" -> ContextScreen(feedUi, feedVm) { page = contextReturn }
-                        "delivery" -> DeliveryScreen(feedUi, feedVm, { page = "you" }, ::openConnection)
+                        "context" -> ContextScreen(feedUi, feedVm, onImportContext = { feedVm.clearMessage(); page = "context-import" }) { page = contextReturn }
+                        "context-import" -> ContextImportScreen(feedUi, feedVm) { page = "context" }
+                        "delivery" -> DeliveryScreen(feedUi, feedVm, { page = deliveryReturn }, ::openConnection)
                         "data" -> FeedDataScreen(feedUi, feedVm) { page = "settings" }
-                        "settings" -> SettingsScreen(state, vm, onErase = { feedVm.reset(); vm.erase(); page = "feed" }, onHelp = { page = "faq" })
+                        "app-lock" -> AppLockSettingsScreen((context.applicationContext as MeBotApplication).appLock, onBack = { page = "settings" }, showBack = false)
+                        "starred-settings" -> StarredSettingsScreen(feedUi, feedVm, onBackground = { deliveryReturn = "starred-settings"; screenStates.removeState("delivery"); page = "delivery" }, onConnection = ::openConnection)
+                        "settings" -> SettingsScreen(state, vm, onErase = { documents.invalidatePending(); feedVm.reset(); vm.erase(); page = "feed" }, onHelp = { page = "faq" }, onAppLock = { page = "app-lock" })
                         "faq" -> FaqScreen(
                             onContext = { contextReturn = "faq"; feedVm.clearMessage(); page = "context" },
                             onConnect = ::openConnection,

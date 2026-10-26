@@ -134,12 +134,12 @@ internal fun AlarmAudioControls(
                     soundUri = uri.toString(), soundName = name))
         }
     }
-    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+    val filePicker = mebot.nguli.com.documents.rememberDeferredDocumentLauncher("${plan.id}:${plan.soundId}:${plan.soundUri}") { result ->
         if (result.resultCode == Activity.RESULT_OK) result.data?.let { data ->
             data.data?.let { picked(it, data.flags, custom = true) }
         }
     }
-    val phonePicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+    val phonePicker = mebot.nguli.com.documents.rememberDeferredDocumentLauncher("${plan.id}:${plan.soundId}:${plan.soundUri}") { result ->
         if (result.resultCode == Activity.RESULT_OK) result.data?.let { data ->
             val uri = if (Build.VERSION.SDK_INT >= 33)
                 data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
@@ -196,7 +196,7 @@ internal fun AlarmAudioControls(
                 .putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,
                     if (plan.soundId == "system" && AlarmAudioSettings.isContentUri(plan.soundUri)) Uri.parse(plan.soundUri)
                     else RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))
-            runCatching { phonePicker.launch(intent) }.onFailure { status = R.string.alarm_audio_picker_unavailable }
+            runCatching { phonePicker(intent) }.onFailure { status = R.string.alarm_audio_picker_unavailable }
         }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("alarm-sound-phone")) {
             Icon(Icons.Outlined.NotificationsActive, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.alarm_audio_phone))
@@ -205,7 +205,7 @@ internal fun AlarmAudioControls(
             stopPreview(); status = null
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).setType("audio/*").addCategory(Intent.CATEGORY_OPENABLE)
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-            runCatching { filePicker.launch(intent) }.onFailure { status = R.string.alarm_audio_picker_unavailable }
+            runCatching { filePicker(intent) }.onFailure { status = R.string.alarm_audio_picker_unavailable }
         }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("alarm-sound-file")) {
             Icon(Icons.Outlined.AudioFile, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.alarm_audio_file))

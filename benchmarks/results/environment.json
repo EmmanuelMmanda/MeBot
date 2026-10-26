@@ -1,0 +1,93 @@
+{
+  "environment": "host-jvm",
+  "baseline_commit": "4ebfd34a151715cf99215c057649158415659d72",
+  "baseline_tree": "eaac328d60ee48a981bc29390092caa5769f930f",
+  "jvm": "OpenJDK 17.0.21+9",
+  "cpu": "AMD EPYC 9V74 80-Core Processor",
+  "os": "Linux-6.18.55-x86_64-with-glibc2.41",
+  "heap": "512 MiB",
+  "warmup_per_scenario_per_fork": 100,
+  "measured_per_scenario_per_fork": 400,
+  "forks": 3,
+  "network": "none",
+  "fixture": "synthetic, validated by FeedLogic.validate; SHA-256 per CSV row",
+  "cache": "warmed JVM; no disk/network in rank metric",
+  "compilation": "Kotlin 2.2.21 JVM17, JIT default",
+  "baseline_capture": "Compiled unchanged baseline before core edits; immutable class snapshot reused for forks2/3. Harness additions only; no baseline behavior changes.",
+  "limitations": [
+    "Shared host CPU; sequential baseline/candidate, not randomized device A/B",
+    "Not Android startup/frame/battery/provider latency",
+    "p99 exploratory tail estimate from correlated iterations; independent fork count3",
+    "No durability/disk-write latency measured"
+  ],
+  "candidate_source_sha256": {
+    "RecommendationPolicy.kt": "1c4c7586625181c1d359ac62c1d792f8a8118b04ad1eb6160ab36a7b1272a0e1",
+    "FeedLogic.kt": "eba058843837472c14956026a966c9c2c8f4c862ac348d0404c5b094b481c543",
+    "RelevanceFeedback.kt": "ea714786bad1ce2298e692a4b41a46588a90693110b64d6261c353297d6a9f85"
+  },
+  "baseline_class_sha256": {
+    "main/mebot/nguli/com/core/RecommendationPolicy.class": "2783be00c3cfe07cc386e80e4ed2356e734a561d65308a5fc5ed8f91c727d221",
+    "main/mebot/nguli/com/core/RecommendationPolicy$Score.class": "50c347e8580344f4f154a44cb99ee31a59d1684dbc3551e695dc4db36ae469b2"
+  },
+  "candidate_core_tree_status": "Uncommitted feature/mebot-0.9.0 candidate; exact source digests recorded, parent owns final commit",
+  "candidate_class_sha256": {
+    "main/mebot/nguli/com/core/RecommendationPolicy$Snapshot.class": "593a02a34ef583946f65fea0c7055ea2bf53c0b6b4e86f371c08b3d67b9c0ed5",
+    "main/mebot/nguli/com/core/RecommendationPolicy$Score.class": "50c347e8580344f4f154a44cb99ee31a59d1684dbc3551e695dc4db36ae469b2",
+    "main/mebot/nguli/com/core/RecommendationPolicy.class": "ae8fe982e947e7c2b2954f5d63225243d970366890506e4255286ddd6a15a39e"
+  },
+  "post_measurement_review": {
+    "note": "After measurements, FeedLogic.edition delegates unchanged ranking body to editionEligible; Today filters temporal candidates before diversity. Temporal import validation tightened. RecommendationPolicy unchanged. Measured source hashes above remain original measured identity; rerun required for final exact-candidate timings.",
+    "source_sha256": {
+      "RecommendationPolicy.kt": "1c4c7586625181c1d359ac62c1d792f8a8118b04ad1eb6160ab36a7b1272a0e1",
+      "FeedLogic.kt": "4ee3879c0e9f00da51b44e1a1cdb4375772ed4a16dd144bb684d9821f0c12289",
+      "TodayFeed.kt": "cd62b303493ac8a0d797cfaa2deefbb6cc616f3ff5038b2b64a8b9f5edb4b0f5"
+    }
+  },
+  "final_verification": {
+    "at_utc": "2026-10-25T17:09:09.566761+00:00",
+    "source_sha256": {
+      "RecommendationPolicy.kt": "1c4c7586625181c1d359ac62c1d792f8a8118b04ad1eb6160ab36a7b1272a0e1",
+      "FeedLogic.kt": "4ee3879c0e9f00da51b44e1a1cdb4375772ed4a16dd144bb684d9821f0c12289",
+      "TodayFeed.kt": "cd62b303493ac8a0d797cfaa2deefbb6cc616f3ff5038b2b64a8b9f5edb4b0f5"
+    },
+    "results": {
+      "5-sparse": {
+        "n": 1200,
+        "p50_ms": 0.093612,
+        "p95_ms": 0.300734,
+        "p99_ms": 0.538252
+      },
+      "5-dense": {
+        "n": 1200,
+        "p50_ms": 0.253913,
+        "p95_ms": 0.468987,
+        "p99_ms": 0.62926
+      },
+      "50-sparse": {
+        "n": 1200,
+        "p50_ms": 0.474075,
+        "p95_ms": 0.819926,
+        "p99_ms": 1.051967
+      },
+      "50-dense": {
+        "n": 1200,
+        "p50_ms": 0.703782,
+        "p95_ms": 1.174591,
+        "p99_ms": 1.294452
+      },
+      "250-sparse": {
+        "n": 1200,
+        "p50_ms": 2.432189,
+        "p95_ms": 3.780783,
+        "p99_ms": 5.226574
+      },
+      "250-dense": {
+        "n": 1200,
+        "p50_ms": 3.837449,
+        "p95_ms": 5.099642,
+        "p99_ms": 6.327374
+      }
+    },
+    "scope": "Same measured normal ranking implementation with extracted eligibility helper; final exact source verification, not device latency."
+  }
+}

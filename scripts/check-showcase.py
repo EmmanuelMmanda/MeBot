@@ -61,8 +61,8 @@ for im in p.images:
     if im.get('src', '').startswith('screenshots/v083/'):
         assert im.get('alt') and im.get('width') and im.get('height')
 for page in [*DOCS.glob('*.html'), *(DOCS / 'guides').glob('*.html')]:
-    if page.name != 'preview-083.html':
-        assert 'preview-085.html' in page.read_text() or page.name == 'preview-085.html', f'Missing preview navigation: {page}'
+    if page.name not in ('preview-083.html', 'preview-084.html', 'preview-085.html'):
+        assert 'preview-090.html' in page.read_text() or page.name == 'preview-090.html', f'Missing preview navigation: {page}'
 assert readme.count('<img ') >= len(screens)
 assert '/releases/latest' not in readme
 assert 'The current application version is **0.6.1**' not in readme
@@ -83,3 +83,14 @@ assert 'lang="sw"' in current_preview
 assert 'preview-084.html' in current_preview and 'preview-083.html' in current_preview
 for current in (ROOT/'README.md', ROOT/'START-HERE.md', DOCS/'USER-GUIDE.md'):
     assert 'offline price comparison tool' not in current.read_text()
+
+engine_preview = (DOCS / 'preview-090.html').read_text()
+assert 'not a published official APK' in engine_preview
+assert '/releases/download/v0.9.0/' not in engine_preview
+assert '5.100 ms' in engine_preview and 'not phone startup' in engine_preview
+assert 'onboarding-en-chooser.png' in engine_preview and 'onboarding-sw-chooser.png' in engine_preview
+assert 'interests-small-sw-large.png' not in engine_preview
+p = Inspect(); p.feed(engine_preview)
+for im in p.images:
+    if im.get('src', '').startswith('screenshots/v090/'):
+        assert im.get('alt') and im.get('width') and im.get('height')
