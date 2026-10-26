@@ -1,6 +1,6 @@
 <resources>
     <string name="today_090_title">Leo</string>
-    <string name="today_090_scope">Tarehe zilizothibitishwa kutoka vyanzo ulivyowasha. Huenda taarifa zisikamilike; zilizohifadhiwa zinapatikana bila intaneti.</string>
+    <string name="today_090_scope">Kutoka vyanzo ulivyowasha</string>
     <string name="today_090_empty">Bado hakuna taarifa za leo zilizothibitishwa</string>
     <string name="today_090_empty_body">Taarifa za zamani na zisizo na tarehe iliyothibitishwa zipo kwenye mkondo wako wa kawaida. Onyesha upya ukiwa na intaneti kukagua vyanzo.</string>
     <string name="today_090_regular_feed">Fungua mkondo wa kawaida</string>
@@ -10,7 +10,7 @@
     <string name="today_090_happening">Inafanyika leo</string>
     <string name="today_090_due">Mwisho ni leo</string>
     <string name="today_090_why">Kwa nini hii?</string>
-    <string name="today_090_why_body">Tarehe ya chanzo inahusu leo katika ukanda wako wa saa. Mpangilio huzingatia mapendeleo, taarifa ulizohifadhi au kuficha, na historia ya kusoma ya hiari kwenye kifaa huku ukisawazisha vyanzo. Dhibiti au futa historia kwenye MeBot yako → Data na nakala. Mwonekano huu hautumi ombi la ziada la AI.</string>
+    <string name="today_090_why_body">Tarehe zinatoka kwenye chanzo. Mapendeleo yako na unavyosoma huathiri mpangilio. Dhibiti historia ya kusoma kwenye MeBot yako → Data na nakala.</string>
     <string name="today_090_original">Ilichapishwa awali %1$s</string>
     <string name="today_090_validity">Inatumika %1$s – %2$s · Imechukuliwa %3$s</string>
     <string name="today_090_latest_refresh">Uonyeshaji upya wa mwisho: %1$s</string>

@@ -205,23 +205,8 @@ open class FeedEngine(
         var success = 0
         var failure: String? = null
         val fetchedIds = mutableSetOf<String>()
-        val aiServed = mutableSetOf<String>()
         val publicRead = mutableSetOf<String>()
 
-        // Resolve the selected connection before choosing discovery sources. A paused or
-        // unavailable plan never switches to a stored API credential.
-        val credential = credentialsLock.withLock {
-            val latest = repository.current()
-            val secret = if (latest.connection != initial.connection) null
-            else if (latest.connection.mode == "chatgpt" && latest.aiPauseCode.isNotBlank() && !allowPlanRetry) {
-                failure = latest.aiPauseCode; null
-            } else try { credential(latest.connection) }
-            catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { failure = (error as? FeedFailure)?.code ?: "unauthorized"; null }
-            secret to credentialGeneration.get()
-        }
-        val secret = credential.first
-        val generation = credential.second
 
         suspend fun published(module: String, ok: Boolean) {
             val count=repository.current().items.count { it.id !in beforeIds }
@@ -290,11 +275,27 @@ open class FeedEngine(
             results.close()
         }
 
-        // Current weather and open-source discoveries use their own public APIs.
-        // RSS is a fallback for disconnected modules, never a prerequisite for AI.
-        val publicGrounding = secret == null || !AiProviders.supportsWeb(initial.connection)
-        readPublic(if (publicGrounding) active else active.filter { it.kind in setOf("weather", "github") }, includeRss = publicGrounding)
-        if (credentialGeneration.get() != startingGeneration) return@withLock RefreshOutcome()
+        // Public reading is independent of account renewal, inference and its request allowance.
+        // Commit each completed source before resolving AI credentials; never hide RSS behind AI.
+        readPublic(active, includeRss = true)
+        if (credentialGeneration.get() != startingGeneration || !samePersonalization(repository.current(), initial))
+            return@withLock RefreshOutcome(newItems = repository.current().items.count { it.id !in beforeIds })
+
+        // Resolve AI only after public results are durably readable. A paused or
+        // unavailable plan never switches to a stored API credential.
+        val credential = credentialsLock.withLock {
+            val latest = repository.current()
+            val secret = if (latest.connection != initial.connection) null
+            else if (latest.connection.mode == "chatgpt" && latest.aiPauseCode.isNotBlank() && !allowPlanRetry) {
+                failure = latest.aiPauseCode; null
+            } else try { credential(latest.connection) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { failure = (error as? FeedFailure)?.code ?: "unauthorized"; null }
+            secret to credentialGeneration.get()
+        }
+        val secret = credential.first
+        val generation = credential.second
+
         if (secret != null) {
             // Serve least recently refreshed modules first so a local request cap cannot
             // indefinitely starve modules lower in the user's catalog.
@@ -333,7 +334,6 @@ open class FeedEngine(
                         }
                     }
                     published(module.id,true)
-                    if (items.isNotEmpty()) aiServed += module.id
                     success++
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (error: Exception) {
@@ -343,9 +343,6 @@ open class FeedEngine(
                     operationDiagnostic("discovery", error, module.id)
                     if (failure in stopErrors) break
                 }
-            }
-            if (credentialGeneration.get() == generation && samePersonalization(repository.current(), initial)) {
-                readPublic(active.filter { it.id !in aiServed && it.kind != "horoscope" }, includeRss = true)
             }
         }
 

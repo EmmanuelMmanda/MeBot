@@ -1,0 +1,12 @@
+<resources>
+    <string name="settings_lock_summary_091">PIN, biometrics and automatic locking</string>
+    <string name="settings_preferences_summary_091">Appearance, language and everyday tools</string>
+    <string name="settings_data_summary_091">Reading history, imports and backups</string>
+    <string name="today_published_time_091">Published %1$s</string>
+    <string name="today_updated_time_091">Updated %1$s</string>
+    <string name="weather_range_091">Forecast · %1$s–%2$s</string>
+    <string name="weather_unknown_time_091">Forecast · time unavailable</string>
+    <string name="today_dates_091">Source dates</string>
+    <string name="today_retrieved_091">Checked %1$s</string>
+    <string name="today_zone_091">Times shown in %1$s</string>
+</resources>

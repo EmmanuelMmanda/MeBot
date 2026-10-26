@@ -171,8 +171,6 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(stringResource(R.string.today_090_scope), style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (state.lastRefreshMillis > 0) Text(stringResource(R.string.today_090_latest_refresh, relativeTime(state.lastRefreshMillis)),
-                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 if (newIds.isNotEmpty()) item(key="new-ready",contentType="notice") {
@@ -222,8 +220,8 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                         items(today.take(visibleCount), key = { "today-" + it.item.id }, contentType = { "story" }) { entry ->
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 TodayReasonLabel090(entry, state.timezone)
-                                if (entry.item.weather != null) WeatherStrip(entry.item) { onItem(entry.item.id) }
-                                else StoryRow(entry.item, entry.item.id in state.savedIds, onItem, onSave, onHide, timestampOverride = todayPublication090(entry, state.timezone))
+                                if (entry.item.weather != null) WeatherStrip(entry.item, state.timezone, showTimestamp = false) { onItem(entry.item.id) }
+                                else StoryRow(entry.item, entry.item.id in state.savedIds, onItem, onSave, onHide, timestampOverride = "")
                             }
                         }
                         if (visibleCount < today.size) item(key = "today-more", contentType = "action") {
@@ -238,7 +236,7 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                                 onExplain = { id, prompt -> if (ui.connected) onPrompt(id, prompt) else onConnect() })
                         }
                         if (weather != null) item(key = "weather-" + weather.id, contentType = "weather") {
-                            WeatherStrip(weather) { onItem(weather.id) }
+                            WeatherStrip(weather, state.timezone) { onItem(weather.id) }
                         }
                         item(key = "question", contentType = "question") { EditionQuestion(ui.connected, { onPrompt(null, askPrompt) }, onConnect) }
                         if (visible.size > 1) item(key = "closer-look", contentType = "closer-look") {
@@ -423,10 +421,10 @@ internal fun StoryRow(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
                         Text(item.sourceName.ifBlank { stringResource(moduleNameResource(item.kind)) }, style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(item.title, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                        if (timestampOverride != null) Text(timestampOverride, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        else if (item.deadline.isNotBlank()) Text(stringResource(R.string.feed_deadline, item.deadline), style = MaterialTheme.typography.labelMedium,
+                        if (timestampOverride != null && timestampOverride.isNotBlank()) Text(timestampOverride, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else if (timestampOverride == null && item.deadline.isNotBlank()) Text(stringResource(R.string.feed_deadline, item.deadline), style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary)
-                        else Text(itemTimestamp(item), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else if (timestampOverride == null) Text(itemTimestamp(item), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Box(Modifier.size(82.dp).clip(RoundedCornerShape(16.dp))) { PublisherImage(item, Modifier.fillMaxSize()) }
                 }
@@ -481,7 +479,7 @@ private fun StoryActions(item: FeedItem, saved: Boolean, onSave: (String) -> Uni
 }
 
 @Composable
-internal fun WeatherStrip(item: FeedItem, onOpen: () -> Unit) {
+internal fun WeatherStrip(item: FeedItem, timezone: String = "", showTimestamp: Boolean = true, onOpen: () -> Unit) {
     val weather = item.weather ?: return
     val palette = MeBotPalette.current
     Surface(onClick = onOpen, color = palette.blueSurface, shape = RoundedCornerShape(22.dp), modifier = Modifier.testTag("weather-" + item.id)) {
@@ -495,7 +493,7 @@ internal fun WeatherStrip(item: FeedItem, onOpen: () -> Unit) {
             }
             Text(stringResource(R.string.edition_temperature, weather.temperatureC.toInt()), style = MaterialTheme.typography.displaySmall, color = palette.onBlue)
         }
-        Text(stringResource(R.string.edition_forecast_time, itemTimestamp(item)), style = MaterialTheme.typography.labelSmall, color = palette.onBlue)
+        if (showTimestamp) Text(weatherTiming091(item, timezone), style = MaterialTheme.typography.labelSmall, color = palette.onBlue)
         }
     }
 }

@@ -32,6 +32,7 @@ open class ChatGptAuthManager internal constructor(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val signInTimeoutMillis: Long = 10 * 60_000L,
     private val callbackCopyProvider: (suspend () -> ChatGptCallbackCopy)? = null,
+    private val callbackFactory: (ChatGptCallbackCopy) -> LoopbackChatGptCallback = { LoopbackChatGptCallback(it) },
 ) {
     constructor(context: Context, language: suspend () -> String = { "system" }) : this(
         EncryptedChatGptStore(context), SecureChatGptAuthTransport(), System::currentTimeMillis,
@@ -89,7 +90,7 @@ open class ChatGptAuthManager internal constructor(
             val selected = accountId?.let { id -> before.accounts.find { it.id == id } ?: throw ChatGptAuthException("chatgpt_reauth") }
             if (selected == null && before.accounts.size >= 20) throw ChatGptAuthException("chatgpt_account_limit")
             val copy = callbackCopyProvider?.invoke() ?: callbackCopy
-            val listener = try { LoopbackChatGptCallback(copy) }
+            val listener = try { callbackFactory(copy) }
                 catch (_: Exception) { throw ChatGptAuthException("chatgpt_loopback") }
             val expectedState = randomValue()
             val nonce = randomValue()

@@ -76,7 +76,9 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     private var catalogJob: Job? = null
     private var catalogGeneration = 0
     private var providerAuthJob: Job? = null
-    private val apiConnected = MutableStateFlow(false)
+    private val apiPresence = CredentialPresence()
+    private val apiConnected = apiPresence.state
+    private val authStartupError = MutableStateFlow<String?>(null)
     private val browserChannel = Channel<String>(Channel.RENDEZVOUS)
     val browserLaunches = browserChannel.receiveAsFlow()
     private val _ui = MutableStateFlow(FeedUiState())
@@ -105,13 +107,23 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { repository.applyOptionalSeed(app) }
-                apiConnected.value = withContext(Dispatchers.IO) { runCatching { app.feedSecrets.read() != null }.getOrDefault(false) }
-                // A damaged AI vault cannot prevent access to alarms, cached reading or local settings.
-                val authError = try { withContext(Dispatchers.IO) { chatGpt.initialize() }; null }
+                // Seed migration precedes the first visible state; account storage must not.
+                // These independent children cannot hold cached/public reading behind a slow Keystore.
+                launch {
+                    val presenceEpoch = apiPresence.snapshotEpoch()
+                    val present = withContext(Dispatchers.IO) { runCatching { app.feedSecrets.read() != null }.getOrDefault(false) }
+                    apiPresence.publishSnapshot(presenceEpoch, present)
+                }
+                launch {
+                    try { withContext(Dispatchers.IO) { chatGpt.initialize() } }
                     catch (cancelled: CancellationException) { throw cancelled }
-                    catch (e: Exception) { (e as? ChatGptAuthException)?.code ?: "chatgpt_storage" }
-                combine(repository.state, chatGpt.state, apiConnected) { state, auth, hasKey -> Triple(state, auth, hasKey) }
-                    .collect { (state, auth, hasKey) ->
+                    catch (e: Exception) { authStartupError.value = (e as? ChatGptAuthException)?.code ?: "chatgpt_storage" }
+                }
+                combine(repository.state, chatGpt.state, apiConnected, authStartupError) { state, auth, hasKey, authError ->
+                    Triple(state, auth, hasKey) to authError
+                }
+                    .collect { (snapshot, authError) ->
+                        val (state, auth, hasKey) = snapshot
                         val selected = state.connection.takeIf { it.mode == "chatgpt" }?.accountId
                         val account = auth.accounts.find { it.id == selected }
                         _ui.update { it.copy(state = state, loading = false,
@@ -199,7 +211,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 cancelRefresh(); cancelAiWork()
                 withContext(Dispatchers.IO) { engine.connect(connection, key.trim().ifBlank { "local-no-key" }) }
-                apiConnected.value = true
+                apiPresence.definitive(true)
                 if (generation == connectGeneration) _ui.update { it.copy(connected = true, notice = "connected", error = null) }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (e: Exception) { if (generation == connectGeneration) _ui.update { it.copy(error = (e as? FeedFailure)?.code ?: "invalid_input") } }
@@ -235,7 +247,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     fun disconnect() = work {
         cancelConnection(); cancelRefresh(); cancelAiWork()
         withContext(Dispatchers.IO) { engine.disconnect() }
-        if (repository.current().connection.mode != "chatgpt") apiConnected.value = false
+        if (repository.current().connection.mode != "chatgpt") apiPresence.definitive(false)
         _ui.update { it.copy(connected = false, connecting = false, error = null, notice = null) }
     }
 
@@ -736,7 +748,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         // A blank plan account prevents old API credentials being used if cleanup fails.
         repository.update { candidate.copy(notifications = false, personalSeedApplied = true, modules = ModuleCatalog.mergeCatalog(candidate.modules),
             connection = AiConnection(mode = "chatgpt", model = candidate.connection.model), aiPauseCode = "") }
-        apiConnected.value = false
+        apiPresence.definitive(false)
         FeedWorker.cancel(app)
         withContext(Dispatchers.IO) { engine.clearAllCredentials() }
         _ui.update { it.copy(connected = false, activeConversationId = null, detailItemId = null, detailTurns = emptyList(),
@@ -844,7 +856,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     fun reset() = work {
         importJob?.cancel(); cancelRefresh(); cancelConnection(); cancelAiWork()
         withContext(Dispatchers.IO) { engine.clearAllCredentials() }
-        apiConnected.value = false
+        apiPresence.definitive(false)
         repository.erase(); FeedWorker.cancel(app)
         _ui.update { it.copy(connected = false, error = null, notice = null) }
     }

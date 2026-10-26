@@ -47,7 +47,7 @@ internal val LocalFeedClock = compositionLocalOf { System.currentTimeMillis() }
 
 /** One foreground clock keeps cached ages and the local date accurate without background wakeups. */
 @Composable
-fun FeedClock(timezone: String = "", content: @Composable () -> Unit) {
+fun FeedClock(timezone: String = "", noticeDismissals: Map<String, Long> = emptyMap(), content: @Composable () -> Unit) {
     val owner = LocalLifecycleOwner.current
     val context = LocalContext.current
     var clockRevision by remember { mutableStateOf(0) }
@@ -62,7 +62,8 @@ fun FeedClock(timezone: String = "", content: @Composable () -> Unit) {
         }, ContextCompat.RECEIVER_NOT_EXPORTED)
         onDispose { context.unregisterReceiver(receiver) }
     }
-    val now by produceState(initialValue = System.currentTimeMillis(), key1 = owner, key2 = clockRevision, key3 = timezone) {
+    // A just-persisted notice dismissal must not look future-dated against the previous minute tick.
+    val now by produceState(initialValue = System.currentTimeMillis(), key1 = owner, key2 = clockRevision, key3 = timezone to noticeDismissals) {
         owner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
                 value = System.currentTimeMillis()

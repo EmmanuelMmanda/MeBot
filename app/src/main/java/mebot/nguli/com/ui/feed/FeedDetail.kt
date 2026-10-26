@@ -182,7 +182,7 @@ fun FeedDetail(
                 }
                 DetailBrief(ui, item, onRetryBrief, onCancelBrief, onFollowUp, onConnect ?: onAsk)
                 item.weather?.let { weather ->
-                    WeatherStrip(item) { openSource(context, item.sourceUrl) }
+                    WeatherStrip(item, state?.timezone.orEmpty()) { openSource(context, item.sourceUrl) }
                     Text(stringResource(R.string.edition_feels_like, weather.feelsLikeC.toInt()), style = MaterialTheme.typography.bodyMedium)
                 }
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {

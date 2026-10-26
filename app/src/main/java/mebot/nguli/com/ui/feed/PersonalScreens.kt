@@ -51,9 +51,9 @@ fun YouScreen(ui: FeedUiState, onContext: () -> Unit, onConnect: () -> Unit, onD
         FeedSettingsRow(Icons.Outlined.NotificationsNone, stringResource(R.string.feed_delivery),
             if (state.backgroundEnabled || state.notifications) stringResource(R.string.feed_delivery_on, state.refreshHours) else stringResource(R.string.feed_delivery_off), onDelivery)
         onSoftwareUpdates?.let { FeedSettingsRow(Icons.Outlined.SystemUpdate, stringResource(R.string.software_updates), stringResource(R.string.update_card_body), it) }
-        FeedSettingsRow(Icons.Outlined.Lock, stringResource(R.string.app_lock_title), onClick = onAppLock)
-        FeedSettingsRow(Icons.Outlined.Palette, stringResource(R.string.mb_preferences), onClick = onSettings)
-        FeedSettingsRow(Icons.Outlined.FolderOpen, stringResource(R.string.feed_data), onClick = onData)
+        FeedSettingsRow(Icons.Outlined.Lock, stringResource(R.string.app_lock_title), stringResource(R.string.settings_lock_summary_091), onClick = onAppLock)
+        FeedSettingsRow(Icons.Outlined.Palette, stringResource(R.string.mb_preferences), stringResource(R.string.settings_preferences_summary_091), onClick = onSettings)
+        FeedSettingsRow(Icons.Outlined.FolderOpen, stringResource(R.string.feed_data), stringResource(R.string.settings_data_summary_091), onClick = onData)
         Text(stringResource(R.string.feed_about, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
     }

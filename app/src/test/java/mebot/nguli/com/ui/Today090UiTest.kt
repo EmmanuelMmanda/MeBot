@@ -96,7 +96,18 @@ class Today090UiTest {
         } } }
         compose.onNodeWithText("2030",substring=true).assertDoesNotExist()
         assertTrue(compose.onAllNodesWithText("2026",substring=true).fetchSemanticsNodes().isNotEmpty())
-        compose.onNodeWithText(compose.activity.getString(R.string.feed_hours_ago,3L),substring=true).assertExists()
+        compose.onNodeWithTag("today-why-forecast").performClick()
+        compose.onNodeWithText("9:00",substring=true).assertExists()
+    }
+
+    @Test fun unknownWeatherTimeIsNotReplacedByTheFetchTime() {
+        val forecast = item("unknown-weather", 0, false).copy(kind="weather", contentType="weather", fetchedAtMillis=now,
+            weather=FeedWeather(28.0,29.0,20,1,"Example location"))
+        compose.setContent { MeBotTheme { CompositionLocalProvider(LocalFeedClock provides now) {
+            WeatherStrip(forecast,"UTC") {}
+        } } }
+        compose.onNodeWithText(compose.activity.getString(R.string.weather_unknown_time_091)).assertExists()
+        compose.onNodeWithText(compose.activity.getString(R.string.feed_just_now),substring=true).assertDoesNotExist()
     }
 
     @Test fun compactInterestIconsInEnglish() = interestJourney("en", 1f, "interests-en")

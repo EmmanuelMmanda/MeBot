@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.1 — private reliability patch candidate
+
+Cached/public reading no longer waits for AI initialization or requests; bounded browser callback handling preserves valid responses; Today/weather times are concise; settings descriptions and honest device read-aloud labels are restored. Later notice dismissal refreshes the foreground clock immediately. Same production signer as 0.9.0 is required. No public release is claimed. [Patch notes](docs/RELEASE-0.9.1.md).
+
 ## 0.9.0 — local candidate, unreleased
 
 Measured Kotlin ranking snapshots; verified-date Today with source ownership and local-day boundaries; compact icon interests with preserved scoped custom notes; optional separate app PIN/strong biometrics and lifecycle protection. No database-encryption or phone-speed claim. Production signing, final release and device acceptance remain pending. [Candidate notes](docs/RELEASE-0.9.0.md). Earlier 0.8.3–0.8.5 candidate work remains included, without presenting it as a published release.

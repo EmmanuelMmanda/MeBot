@@ -175,7 +175,7 @@ class MainActivity : FragmentActivity() {
                     val biometricPinLabel = stringResource(R.string.app_lock_use_pin)
                     if (protection.locked) AppLockScreen(appLock) { biometricUnlock.authenticate(biometricTitle, biometricPinLabel) }
                     else protectedScreens.SaveableStateProvider("personal-navigation") {
-                        FeedClock(timezone = feedUi.state?.timezone.orEmpty()) { MeBotApp(ui, vm, feedUi, feedVm, alarmNavigationRequest, feedNavigationRequest, feedNavigationItem, chatGptNavigationRequest, softwareNavigationRequest) }
+                        FeedClock(timezone = feedUi.state?.timezone.orEmpty(), noticeDismissals = feedUi.state?.dismissedNotices.orEmpty()) { MeBotApp(ui, vm, feedUi, feedVm, alarmNavigationRequest, feedNavigationRequest, feedNavigationItem, chatGptNavigationRequest, softwareNavigationRequest) }
                     }
                     SideEffect { privacyCurtain.committed(coverEpoch, lockTicket, protection.locked) }
                 }

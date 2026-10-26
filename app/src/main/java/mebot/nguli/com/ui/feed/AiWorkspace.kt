@@ -261,7 +261,7 @@ fun AiWorkspace(
                             Icon(Icons.Outlined.MicNone, stringResource(R.string.workspace_voice_input))
                         }
                         IconButton(onClick = { showVoiceSettings = true }, modifier = Modifier.testTag("workspace-voice-options")) {
-                            Icon(Icons.Outlined.RecordVoiceOver, stringResource(R.string.rich_voice_settings))
+                            Icon(Icons.Outlined.VolumeUp, stringResource(R.string.rich_voice_settings))
                         }
                         if (speech.readingId != null) IconButton(onClick = speech.stop) { Icon(Icons.Outlined.VolumeOff, stringResource(R.string.workspace_stop_audio)) }
                         Spacer(Modifier.weight(1f))
