@@ -10,8 +10,4 @@
 
 Original sources remain accessible from story details. Suggestions do not send anything until you choose Send.
 
-## Installing
-
-The release will use the same signing identity and application package as MeBot 0.9.0–0.9.6. The older `app.mynguli` app is a separate installation lineage; do not assume an in-place upgrade from it.
-
 Build, test, source and signature evidence will be recorded separately in the release verification report. This candidate has not yet completed its release gates.

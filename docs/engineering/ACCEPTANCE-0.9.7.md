@@ -26,3 +26,6 @@ After the exact source and signed APK qualify, update the current website guide 
 
 ## Controlled screenshot fixture
 The final source also sets an explicit UTC profile timezone in the two EN/SW suggestion capture journeys rather than inheriting the runner timezone. Both focused journeys pass with the UTC assertion; the affected detail capture was regenerated. This is a test/image-only follow-up to the full local gate, with no production or signed APK change. Hosted checks must qualify the final source tree.
+
+## Hosted cancellation follow-up
+PR #19 run 40471842096 failed the strict queued-send navigation cleanup assertion after the local full gate passed. The initial signed candidate is held and must not be released. A deterministic additional assertion proved a separate real ordering defect: cancellation could synchronously clear the stored child-job reference before that child was cancelled. The narrow correction captures the child reference first. The strict cleanup/no-provider checks remain, with bounded failure diagnostics; attribution of the original cleanup timeout is not yet proven. Full local and hosted qualification and a rebuilt same-key APK are required for the corrected candidate.

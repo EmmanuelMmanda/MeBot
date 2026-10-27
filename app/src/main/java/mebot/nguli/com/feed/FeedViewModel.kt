@@ -1074,11 +1074,14 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                     originalThread = pendingSuggestionOriginalThread
                     appendedThread = pendingSuggestionAppendedThread
                 }
+                // Main.immediate (and Unconfined test dispatchers) can synchronously run the
+                // action's finally block on cancel and clear suggestionAskJob. Preserve the child.
+                val askJobToCancel = suggestionAskJob
                 job.cancel()
+                askJobToCancel?.cancel()
                 suggestionActionJob = null
                 suggestionDispatchStarted = false
                 pendingSuggestionThreadId = null
-                suggestionAskJob?.cancel()
                 suggestionAskJob = null
                 suggestionPreviousSelection = null
                 pendingSuggestionOriginalThread = null; pendingSuggestionAppendedThread = null

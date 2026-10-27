@@ -269,11 +269,32 @@ class SuggestionActions097ViewModelTest {
                         state.conversations.singleOrNull()?.turns?.lastOrNull()?.text == option.displayText
                 }
             }
+            val queuedAskJob = privateField("suggestionAskJob") as? kotlinx.coroutines.Job
+            val rollbackThreadId = privateField("pendingSuggestionThreadId") as? String
+            val rollbackOriginal = privateField("pendingSuggestionOriginalThread") as? AiConversation
+            val rollbackAppended = privateField("pendingSuggestionAppendedThread") as? AiConversation
+            val rollbackEpoch = privateField("suggestionRollbackEpoch")
+            val selectionGeneration = privateField("conversationSelectionGeneration")
+            assertNotNull("the send must own a queued engine job before navigation cancels it", queuedAskJob)
+            assertNotNull("new-thread cleanup must retain its id", rollbackThreadId)
+            assertNotNull("new-thread cleanup must retain its empty original", rollbackOriginal)
+            assertNotNull("new-thread cleanup must retain its exact appended version", rollbackAppended)
             vm.cancelConversationOpen()
+            assertTrue("navigation must cancel the captured queued ask job", queuedAskJob!!.isCancelled)
             send.join()
             // The request was conservatively reserved before entering the semaphore, but its
             // unsent user turn and action-created thread must not masquerade as a submitted chat.
-            withTimeout(10_000) { app.feedRepository.state.first { it.conversations.isEmpty() } }
+            try {
+                withTimeout(10_000) { app.feedRepository.state.first { it.conversations.isEmpty() } }
+            } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
+                val stateAtTimeout = kotlinx.coroutines.withTimeoutOrNull(1_000) { app.feedRepository.current() }
+                val current = stateAtTimeout?.conversations?.singleOrNull { it.id == rollbackThreadId }
+                throw AssertionError("rollback timeout: id=$rollbackThreadId, epoch=$rollbackEpoch, selectionGeneration=$selectionGeneration, " +
+                    "originalId=${rollbackOriginal!!.id}, appendedId=${rollbackAppended!!.id}, originalTurns=${rollbackOriginal.turns.size}, " +
+                    "appendedTurns=${rollbackAppended!!.turns.size}, currentId=${current?.id}, currentTurns=${current?.turns?.size}, " +
+                    "currentMatchesAppended=${current == rollbackAppended}, askCancelled=${queuedAskJob.isCancelled}, " +
+                    "requestsToday=${stateAtTimeout?.requestsToday ?: "unavailable"}", timeout)
+            }
             assertTrue(app.askedQuestions.isEmpty())
         } finally {
             releases.forEach { it.complete(Unit) }
@@ -462,6 +483,9 @@ class SuggestionActions097ViewModelTest {
             suggestedInteractionsGeneratedAtMillis = System.currentTimeMillis())
         return base.copy(items = listOf(cached))
     }
+
+    private fun privateField(name: String): Any? = FeedViewModel::class.java.getDeclaredField(name)
+        .apply { isAccessible = true }.get(vm)
 }
 
 /** App lock controller with deterministic storage/clock for the post-semaphore lock race test. */
