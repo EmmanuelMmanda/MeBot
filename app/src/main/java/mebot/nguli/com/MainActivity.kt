@@ -132,9 +132,9 @@ class MainActivity : FragmentActivity() {
             val vm: MeBotViewModel = viewModel(factory = remember(application) {
                 ViewModelProvider.AndroidViewModelFactory(application)
             })
-            val feedVm: FeedViewModel = viewModel(factory = remember(application) {
-                ViewModelProvider.AndroidViewModelFactory(application)
-            })
+            // Use FragmentActivity's SavedStateHandle-aware factory while keeping this
+            // Activity-scoped FeedViewModel tied to the same MeBotApplication instance.
+            val feedVm: FeedViewModel = viewModel()
             val feedUi by feedVm.ui.collectAsStateWithLifecycle()
             val ui by vm.ui.collectAsStateWithLifecycle()
             val settings = ui.state?.settings ?: Settings()
@@ -165,7 +165,7 @@ class MainActivity : FragmentActivity() {
                     val lockTicket = appLock.ticket()
                     LaunchedEffect(protection.locked) {
                         if (protection.locked) {
-                            feedVm.clearAnswer(); feedVm.cancelDetail(); feedVm.cancelSearch()
+                            feedVm.cancelConversationOpen(); feedVm.clearAnswer(); feedVm.cancelDetail(); feedVm.cancelSearch()
                         }
                     }
                     SideEffect {
@@ -325,6 +325,10 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
     // Restore an obsolete utility destination safely after the 0.8.5 upgrade.
     LaunchedEffect(page) { if (page == "compare_prices") page = "modules" }
     LaunchedEffect(page, itemId) { if (page != "item") feedVm.cancelDetail() }
+    LaunchedEffect(page) {
+        if (page == "ai") feedVm.resumeConversationOpenIfNeeded()
+        else feedVm.cancelConversationOpen()
+    }
     fun openConnection() { connectionReturn = page; feedVm.clearMessage(); screenStates.removeState("connect"); page = "connect" }
     fun openModuleCatalog(filter: String) {
         if (moduleCatalogFilter != filter) screenStates.removeState("modules")

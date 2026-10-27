@@ -141,7 +141,7 @@ fun AiWorkspace(
         }
     }
     fun send(value: String) {
-        if (!ui.connected || ui.asking || ui.importWorking || value.isBlank()) return
+        if (!ui.connected || ui.asking || ui.importWorking || ui.conversationOpening || !ui.conversationReady || value.isBlank()) return
         previousTurnId = turns.lastOrNull { it.role == "user" }?.id
         submittedKey = draftKey; submittedText = value.trim()
         onAsk(value.trim())
@@ -164,7 +164,7 @@ fun AiWorkspace(
     val currentStories = remember(state, now / 60_000) { state?.let { currentStoryCandidates095(it, now) }.orEmpty() }
     val suggestionCandidates = story?.let { listOf(it) } ?: currentStories
     val priorQuestions = turns.filter { it.role == "user" }.map { it.text }
-    val storySuggestionGroups = if (state == null || ui.asking || ui.importWorking || draft.isNotBlank()) emptyList() else suggestionCandidates.map { candidate ->
+    val storySuggestionGroups = if (state == null || ui.asking || ui.importWorking || ui.conversationOpening || !ui.conversationReady || draft.isNotBlank()) emptyList() else suggestionCandidates.map { candidate ->
         StorySuggestionGroup095(
             candidate,
             suggestionChips095(
@@ -231,7 +231,7 @@ fun AiWorkspace(
                     WorkspaceStart(
                         ui.connected, onConnect, onContext, scopeKind != null, story != null,
                         hasConfirmedAboutYou, draft.isNotBlank(),
-                        if (draft.isBlank() && suggestionCandidates.isEmpty() && ui.connected && !ui.asking && !ui.importWorking) promptChoices else emptyList(),
+                        if (draft.isBlank() && suggestionCandidates.isEmpty() && ui.connected && !ui.asking && !ui.importWorking && !ui.conversationOpening && ui.conversationReady) promptChoices else emptyList(),
                         if (draft.isBlank()) storySuggestionGroups else emptyList(),
                         onPrepareSuggestion,
                     ) { prompt -> setDraft(prompt) }
@@ -273,6 +273,9 @@ fun AiWorkspace(
             Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(22.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 Column {
+                    if (ui.conversationOpening) Text(stringResource(R.string.workspace_opening),
+                        Modifier.fillMaxWidth().padding(start = 18.dp, top = 10.dp, end = 18.dp).testTag("workspace-opening"),
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TextField(value = draft, onValueChange = ::setDraft, enabled = !ui.asking && !ui.importWorking,
                         placeholder = { Text(stringResource(R.string.workspace_question)) }, minLines = 1, maxLines = 4,
                         modifier = Modifier.fillMaxWidth().testTag("workspace-question"),
@@ -283,7 +286,7 @@ fun AiWorkspace(
                         shape = RoundedCornerShape(22.dp))
                     Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { documents.importAttachment() },
-                            enabled = !ui.asking && !ui.importWorking && conversation?.attachments.orEmpty().size < 3,
+                            enabled = !ui.asking && !ui.importWorking && !ui.conversationOpening && ui.conversationReady && conversation?.attachments.orEmpty().size < 3,
                             modifier = Modifier.testTag("workspace-attach")) { Icon(Icons.Outlined.AttachFile, stringResource(R.string.workspace_attach)) }
                         if (voiceAvailable) IconButton(onClick = {
                             speech.stop()
@@ -302,7 +305,7 @@ fun AiWorkspace(
                         Spacer(Modifier.weight(1f))
                         if (ui.asking) FilledTonalButton(onClick = onCancel, modifier = Modifier.heightIn(min = 44.dp).testTag("workspace-cancel")) {
                             Icon(Icons.Outlined.Stop, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.workspace_stop))
-                        } else FilledIconButton(onClick = { send(draft) }, enabled = ui.connected && draft.isNotBlank() && !ui.importWorking,
+                        } else FilledIconButton(onClick = { send(draft) }, enabled = ui.connected && draft.isNotBlank() && !ui.importWorking && !ui.conversationOpening && ui.conversationReady,
                             modifier = Modifier.size(44.dp).testTag("workspace-send")) { Icon(Icons.AutoMirrored.Outlined.Send, stringResource(R.string.feed_ask_send), Modifier.size(20.dp)) }
                     }
                 }

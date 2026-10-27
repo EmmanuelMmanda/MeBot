@@ -4,6 +4,7 @@
     <string name="workspace_new">Mazungumzo mapya</string>
     <string name="workspace_general">Mada zote</string>
     <string name="workspace_question">Uliza MeBot</string>
+    <string name="workspace_opening">Inafungua mazungumzo…</string>
     <string name="workspace_attach">Ongeza faili la maandishi (.txt au .md)</string>
     <string name="workspace_remove_attachment">Ondoa kiambatisho</string>
     <string name="workspace_voice_input">Ingiza sauti kwa simu</string>
