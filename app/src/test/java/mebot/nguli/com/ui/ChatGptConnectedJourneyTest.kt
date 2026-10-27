@@ -51,6 +51,7 @@ class ChatGptConnectedJourneyTest {
         app.searchItems = emptyList()
         app.checkGate = null
         app.checkFailure = null
+        app.providerDiscoveries.clear()
         waitForTag("onboarding-screen")
     }
 
@@ -98,16 +99,38 @@ class ChatGptConnectedJourneyTest {
         assertNull(shadowOf(compose.activity).nextStartedActivity)
         assertEquals(1, app.chatGptAuth.signInRequests.size)
         assertEquals(connection, state().connection)
+        val feedViewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]
+        val requestsBeforeConnectionContinue = state().requestsToday
+        val lastAiRefreshBeforeConnectionContinue = state().lastAiRefreshMillis
+        val discoveryCallsBeforeConnectionContinue = app.providerDiscoveries.size
+        assertEquals("Only the plan connection check has run before Continue", 1, requestsBeforeConnectionContinue)
         compose.onNodeWithTag("connection-continue").performScrollTo().performClick()
 
         waitForText(text(R.string.feed_you_title))
+        compose.waitUntil(15_000) {
+            // The Continue action deliberately refreshes after changing the connected plan.
+            // waitUntil alone may not drain the main-looper continuation from that refresh.
+            compose.waitForIdle()
+            val refreshed = state()
+            !feedViewModel.ui.value.refreshing &&
+                refreshed.lastAiRefreshMillis > lastAiRefreshBeforeConnectionContinue &&
+                app.providerDiscoveries.size > discoveryCallsBeforeConnectionContinue
+        }
+        assertEquals("Plan connection refresh reserves its one enabled news discovery request",
+            requestsBeforeConnectionContinue + 1, state().requestsToday)
+        assertEquals(listOf("news"), app.providerDiscoveries.drop(discoveryCallsBeforeConnectionContinue))
+
         compose.onNodeWithTag("nav-feed").performClick()
         waitForTag("feed-screen")
         val requestsBeforeEmptyFeedPrompt = state().requestsToday
+        val asksBeforeEmptyFeedPrompt = app.asked.toList()
+        val questionsBeforeEmptyFeedPrompt = app.askedQuestions.toList()
         compose.onNodeWithTag("edition-ask").performScrollTo().performClick()
         waitForTag("workspace-question")
         compose.onNodeWithTag("workspace-model").assertTextContains("Fixture quick model")
-        assertEquals("Opening the empty-feed prompt must not infer", requestsBeforeEmptyFeedPrompt, state().requestsToday)
+        assertEquals("Opening the empty-feed prompt must not reserve a request", requestsBeforeEmptyFeedPrompt, state().requestsToday)
+        assertEquals("Opening the empty-feed prompt must not infer", asksBeforeEmptyFeedPrompt, app.asked.toList())
+        assertEquals("Opening the empty-feed prompt must not submit a question", questionsBeforeEmptyFeedPrompt, app.askedQuestions.toList())
         compose.onNodeWithTag("workspace-question").performTextInput(text(R.string.edition_ask_today_prompt))
         compose.onNodeWithTag("workspace-send").performClick()
         compose.waitUntil(15_000) { state().conversations.any { it.turns.lastOrNull()?.role == "assistant" } }
@@ -319,6 +342,7 @@ class ChatGptJourneyApplication : MeBotApplication() {
     override val feedSecrets by lazy { TestVault(this) }
     val checked = CopyOnWriteArrayList<String>()
     val checkedConnections = CopyOnWriteArrayList<AiConnection>()
+    val providerDiscoveries = CopyOnWriteArrayList<String>()
     val asked = CopyOnWriteArrayList<String>()
     val askedQuestions = CopyOnWriteArrayList<String>()
     val askedContexts = CopyOnWriteArrayList<List<ContextEntry>>()
@@ -338,7 +362,10 @@ class ChatGptJourneyApplication : MeBotApplication() {
                     checkGate?.await()
                     checkFailure?.let { throw FeedFailure(it) }
                 }
-                override suspend fun feed(state: FeedState, module: FeedModule, secret: String, language: String) = emptyList<FeedItem>()
+                override suspend fun feed(state: FeedState, module: FeedModule, secret: String, language: String): List<FeedItem> {
+                    providerDiscoveries += module.id
+                    return emptyList()
+                }
                 override suspend fun ask(state: FeedState, item: FeedItem?, question: String, secret: String, language: String): AiAnswer {
                     asked += "${state.connection.mode}:$secret"
                     askedQuestions += question
