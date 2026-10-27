@@ -231,7 +231,8 @@
     "caption": "Sample stories; the feed is scrolled to the question prompt. Choosing it prepares an editable MeBot draft; it does not send.",
     "group": "read",
     "version": "0.9.5",
-    "sampleFixture": true
+    "sampleFixture": true,
+    "candidatePreview": false
   },
   {
     "file": "screenshots/v095/sw-feed.png",
@@ -240,7 +241,8 @@
     "caption": "Maudhui ya mfano; ukurasa umeshushwa hadi kwenye swali la taarifa. Kulichagua huandaa rasimu ya MeBot, si kutuma ujumbe.",
     "group": "read",
     "version": "0.9.5",
-    "sampleFixture": true
+    "sampleFixture": true,
+    "candidatePreview": false
   },
   {
     "file": "screenshots/v095/en-detail.png",
@@ -249,7 +251,8 @@
     "caption": "Sample content; detail is scrolled to the question prompt. The original source remains available as a secondary action.",
     "group": "read",
     "version": "0.9.5",
-    "sampleFixture": true
+    "sampleFixture": true,
+    "candidatePreview": false
   },
   {
     "file": "screenshots/v095/sw-detail.png",
@@ -258,7 +261,8 @@
     "caption": "Maudhui ya mfano; maelezo yamefanyiwa scroll hadi kwenye swali. Chanzo asili bado kinaweza kufunguliwa kwa hiari.",
     "group": "read",
     "version": "0.9.5",
-    "sampleFixture": true
+    "sampleFixture": true,
+    "candidatePreview": false
   },
   {
     "file": "screenshots/v095/en-mebot-prefilled.png",
@@ -267,7 +271,8 @@
     "caption": "Sample question and fixture provider label. The draft stays editable and unsent until the user chooses Send.",
     "group": "read",
     "version": "0.9.5",
-    "sampleFixture": true
+    "sampleFixture": true,
+    "candidatePreview": false
   },
   {
     "file": "screenshots/v095/sw-mebot-prefilled.png",
@@ -276,6 +281,7 @@
     "caption": "Swali na lebo ya mtoa huduma ni vya majaribio tu. Rasimu inaweza kuhaririwa na haitumwi hadi mtumiaji achague Tuma.",
     "group": "read",
     "version": "0.9.5",
-    "sampleFixture": true
+    "sampleFixture": true,
+    "candidatePreview": false
   }
 ]

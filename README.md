@@ -1,20 +1,20 @@
 <div align="center">
 <img src="docs/assets/mebot.svg" width="64" height="64" alt="MeBot robot logo">
 <h1>MeBot Daily</h1><p>Your topics, source-linked answers and optional everyday tools.</p>
-<p><a href="https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.5/mebot-0.9.5.apk"><strong>Download official APK</strong></a> · <a href="https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.5">Release files</a> · <a href="START-HERE.md">Start here</a> · <a href="docs/USER-GUIDE.md">User guide</a></p>
+<p><a href="https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.6/mebot-0.9.6.apk"><strong>Download official APK</strong></a> · <a href="https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.6">Release files</a> · <a href="START-HERE.md">Start here</a> · <a href="docs/USER-GUIDE.md">User guide</a></p>
 <p>Android 8.0+ · English &amp; Kiswahili · Kotlin + Jetpack Compose · Apache 2.0</p></div>
 
-> **Official MeBot 0.9.5 · 17.6 MB · `mebot.nguli.com`.** Install over the existing 0.9.x app without uninstalling or clearing data. Earlier 0.8.x binaries used a different signer and cannot receive this as an in-place update. Review the [installation guidance](docs/INSTALL.md).
+> **Official MeBot 0.9.6 · 17.6 MB · `mebot.nguli.com`.** Install over the existing 0.9.x app without uninstalling or clearing data. Earlier 0.8.x binaries used a different signer and cannot receive this as an in-place update. Review the [installation guidance](docs/INSTALL.md).
 
 Choose interests during onboarding, read a sourced feed, search, ask follow-ups and keep useful resources. Public information and local tools stay available without AI. No personal starter profile is baked into the app.
 
-## What’s new in 0.9.5
+## What’s new in 0.9.6
 
-- Stories open in MeBot first, with the publisher visible and a compact category label.
-- Story-specific questions appear in Feed, story details and MeBot. Review or edit the prepared question before sending.
-- The original source stays available from the story and card menu; local questions remain useful offline.
+- Start a question as soon as you open a story; it stays tied to that story while its conversation prepares.
+- Send only when the correct story conversation is ready.
+- Return to the same story conversation after rotation or reopening; lock/unlock restores it without sending a pending question.
 
-[Full experience-first release notes](docs/RELEASE-0.9.5.md). Technical verification and device/provider limits are in the separate [verification report](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.5/MeBot-0.9.5-verification.md).
+[Full experience-first release notes](docs/RELEASE-0.9.6.md). Technical verification and device/provider limits are in the separate [verification report](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.6/MeBot-0.9.6-verification.md).
 
 
 
@@ -131,13 +131,13 @@ Provider selection is explicit. No automatic switching to a separately billed pr
 
 ## Install and use
 
-[Download the official APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.5/mebot-0.9.5.apk). Updating from a 0.9.x release preserves your existing installation; do not uninstall or clear app data. Choose interests, connect a provider when ready, then open Feed. Test any configured alarm on your phone before overnight reliance. [Start here](START-HERE.md).
+[Download the official APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.6/mebot-0.9.6.apk). Updating from a 0.9.x release preserves your existing installation; do not uninstall or clear app data. Choose interests, connect a provider when ready, then open Feed. Test any configured alarm on your phone before overnight reliance. [Start here](START-HERE.md).
 
 ## Verification and release files
 
-[Verification report](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.5/MeBot-0.9.5-verification.md) · [Exact source snapshot](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.5/MeBot-0.9.5-source.zip) · [Release notes](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.5/RELEASE-NOTES.md) · [Checksums](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.5/SHA256SUMS.txt) · [Native gallery](docs/screenshots/README.md).
+[Verification report](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.6/MeBot-0.9.6-verification.md) · [Exact source snapshot](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.6/MeBot-0.9.6-source.zip) · [Release notes](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.6/RELEASE-NOTES.md) · [Checksums](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.6/SHA256SUMS.txt) · [Native gallery](docs/screenshots/README.md).
 
-The current application source is commit `eb6d2a12815cbf68decb2996eed9c1f0e0581e41` (tree `aa67a099156d52cce6677fedf9d01bad36878237`). The source archive preserves its original local build commit; see the verification report for the mapping.
+The current application source is commit `b7c85878653321d184377cd4fed6c68502f4cb3b` (tree `2cceb13a1c647da3aa1ac6c67b3347a9fb186aef`). The source archive preserves its original local build commit; see the verification report for the mapping.
 
 Tests use controlled providers and native Android host journeys. Real account eligibility, physical playback, file-picker behavior and overnight alarms need device checks. Historical releases are preserved. No private profile or signing key is published.
 

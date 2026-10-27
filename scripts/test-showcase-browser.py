@@ -21,6 +21,7 @@ base = f'http://127.0.0.1:{server.server_port}/'
 r = json.loads((ROOT / 'docs/assets/release.json').read_text())
 published = r["status"] == "published"
 official = r if published else next(x for x in r['releases'] if x.get('status')=='published' and x.get('apk') is True)
+candidate_page = f"preview-{r['version'].replace('.', '')}.html"
 apk = f"https://github.com/EmmanuelMmanda/MeBot/releases/download/{official['tag']}/{official['filename']}"
 guide_pages = ['guide.html','guides/install.html','guides/personal-context.html','guides/feed-and-ai.html','guides/troubleshooting.html']
 checks = []
@@ -53,7 +54,7 @@ try:
                 page = context.new_page()
                 errors = []
                 page.on('pageerror', lambda e: errors.append(str(e)))
-                for name in ['index.html', 'screenshots.html', 'download.html', 'releases.html', 'tour.html', 'preview-083.html', 'preview-084.html', 'preview-085.html', 'preview-090.html']:
+                for name in ['index.html', 'screenshots.html', 'download.html', 'releases.html', 'tour.html', 'preview-083.html', 'preview-084.html', 'preview-085.html', 'preview-090.html', candidate_page]:
                     load(page,name,wait_until='networkidle')
                     assert page.locator('h1').count() == 1, name
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), f'Overflow {width} {theme} {name}'
@@ -79,6 +80,15 @@ try:
                         assert page.locator('.shot img[src$="onboarding-en-chooser.png"]').count() == 1
                         assert page.locator('.shot img[src$="onboarding-sw-chooser.png"]').count() == 1
                         assert page.locator('.shot img[src*="small-sw-large"]').count() == 0
+                    if name == candidate_page:
+                        text = page.locator('main').inner_text().lower()
+                        assert 'keep your question with its story' in text
+                        assert 'send waits until it is ready' in text
+                        if not published:
+                            assert 'not yet a public download' in text
+                            assert page.locator('a[href*="/releases/download/"]').count() == 0
+                        else:
+                            assert 'available in the official release' in text
                     if name == 'screenshots.html':
                         assert page.locator('#screen-gallery .shot img[src*="imported-notes-en.png"]').count() == 1
                         assert page.locator('#screen-gallery .shot img[src*="imported-notes-sw.png"]').count() == 1
@@ -90,11 +100,11 @@ try:
                         details.locator('summary').click()
                         assert details.evaluate('node => node.open')
                         identity = details.inner_text()
-                        for field in [r['filename'],r['sourceCommit'],r['sourceTree'],r['certificateSha256'],r['sha256']]:
+                        for field in [official['filename'],official['sourceCommit'],official['sourceTree'],official['certificateSha256'],official['sha256']]:
                             assert field in identity, f'Missing expanded identity: {field}'
                         # Source/report filenames belong to resource links, not the APK identity panel.
-                        for filename in [r['sourceFilename'],r['verificationFilename']]:
-                            resource = page.locator(f'#resources a[href="https://github.com/EmmanuelMmanda/MeBot/releases/download/{r["tag"]}/{filename}"]')
+                        for filename in [official['sourceFilename'],official['verificationFilename']]:
+                            resource = page.locator(f'#resources a[href="https://github.com/EmmanuelMmanda/MeBot/releases/download/{official["tag"]}/{filename}"]')
                             assert resource.count() == 1 and resource.is_visible(), f'Missing accessible resource: {filename}'
                     for link in page.locator('[data-release-apk]').all():
                         assert link.is_visible() and link.get_attribute('href') == apk
@@ -151,10 +161,15 @@ try:
         context.close()
         context = browser.new_context(java_script_enabled=False, viewport={'width':390,'height':844})
         page = context.new_page()
-        for name in ('index.html','download.html','releases.html'):
+        for name in ('index.html','download.html','releases.html',candidate_page):
             load(page,name)
-            assert page.locator('[data-release-apk]').first.is_visible()
-            assert page.locator('[data-release-apk]').first.get_attribute('href') == apk
+            if name != candidate_page:
+                assert page.locator('[data-release-apk]').first.is_visible()
+                assert page.locator('[data-release-apk]').first.get_attribute('href') == apk
+            elif not published:
+                assert page.locator('a[href*="/releases/download/"]').count() == 0
+            else:
+                assert page.locator('[data-release-apk]').first.get_attribute('href') == apk
             if not published:
                 assert page.locator('.release-hold').is_visible()
                 assert page.locator(f'a[href*="/releases/download/{r["tag"]}/"]').count() == 0
