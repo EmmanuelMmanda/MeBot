@@ -31,6 +31,9 @@ import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.FeedUiState
 import mebot.nguli.com.feed.AiActivity
 import mebot.nguli.com.feed.ResourceChecks
+import mebot.nguli.com.feed.SuggestionOptionSnapshot097
+import mebot.nguli.com.feed.SuggestionTargetSnapshot097
+import mebot.nguli.com.feed.SuggestionTargets097
 import kotlinx.coroutines.launch
 import mebot.nguli.com.ui.*
 import java.net.URI
@@ -58,6 +61,9 @@ fun FeedDetail(
     onFollowUp: ((String) -> Unit)? = null,
     onConnect: (() -> Unit)? = null,
     onPrepareSuggestion: (String, String) -> Unit = { _, _ -> },
+    onUseSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> },
+    onEditSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> },
+    onSuggestionOptions: (SuggestionTargetSnapshot097, String) -> List<SuggestionOptionSnapshot097> = { _, _ -> emptyList() },
 ) {
     val state = ui.state
     val item = state?.items?.find { it.id == id }
@@ -91,10 +97,10 @@ fun FeedDetail(
             }
             val originalAvailable = FeedLogic.safeUrl(item.sourceUrl)
             val appLanguage = if (LocalConfiguration.current.locales[0]?.language == "sw") "sw" else "en"
-            val suggestedQuestions = suggestionChips095(
-                ui, state, item, now, appLanguage, LocalSuggestionFallback095.DETAIL,
-                priorUserQuestions = ui.detailTurns.filter { it.role == "user" }.map { it.text },
-            )
+            val suggestionTarget = remember(state, item.id, appLanguage) { SuggestionTargets097.item(state, item.id, appLanguage) }
+            val suggestionOptions = remember(state, ui.connected, suggestionTarget, appLanguage, now / 60_000) {
+                suggestionTarget?.let { onSuggestionOptions(it, appLanguage) }.orEmpty()
+            }
             val related = remember(state.items, state.hiddenIds, state.modules, state.timezone, item.id, now / 60_000) {
                 FeedLogic.visible(state, now).filter { it.id != item.id && it.moduleId == item.moduleId }
                     .sortedByDescending { it.publishedAtMillis.takeIf { date -> date > 0 } ?: it.fetchedAtMillis }.take(6)
@@ -233,13 +239,22 @@ fun FeedDetail(
                         }
                     }
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onAsk, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp).testTag("detail-ask"), shape = RoundedCornerShape(16.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(onClick = onAsk, modifier = Modifier.weight(1f).heightIn(min = 50.dp).testTag("detail-ask"), shape = RoundedCornerShape(16.dp)) {
                         Icon(Icons.Outlined.ChatBubbleOutline, null, Modifier.size(19.dp)); Spacer(Modifier.width(9.dp)); Text(stringResource(R.string.detail_discuss))
                     }
-                    SuggestionRail095(suggestedQuestions, "detail-question") { stableId ->
-                        onPrepareSuggestion(item.id, stableId)
-                    }
+                    SuggestionAction097(
+                        target = suggestionTarget,
+                        options = suggestionOptions,
+                        contextLabel = item.title,
+                        language = appLanguage,
+                        connected = ui.connected,
+                        busy = ui.asking || ui.importWorking || ui.suggestionWorking,
+                        onConnect = { onConnect?.invoke() },
+                        onUse = onUseSuggestion,
+                        onEdit = onEditSuggestion,
+                        testTag = "detail-suggestions-${item.id}",
+                    )
                 }
                 if (module != null && onModule != null) Surface(onClick = { onModule(module.id) },
                     color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(18.dp), modifier = Modifier.testTag("detail-module")) {

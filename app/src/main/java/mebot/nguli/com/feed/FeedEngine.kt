@@ -38,6 +38,13 @@ open class FeedEngine(
     private val discovery: PublicDiscovery? = null,
     private val enricher: FeedEnricher? = null,
 ) {
+    private data class AnswerRequestSnapshot(
+        val secret: String,
+        val credentialGeneration: Long,
+        val state: FeedState,
+        val language: String,
+    )
+
     private val _progress=MutableStateFlow(RefreshProgress())
     val progress=_progress.asStateFlow()
     private val refreshLock = Mutex()
@@ -167,7 +174,8 @@ open class FeedEngine(
         }
     }
 
-    private suspend fun reserveRequest(): FeedState = repository.update { state ->
+    private suspend fun reserveRequest(expectedState: (FeedState) -> Boolean = { true }): FeedState = repository.update { state ->
+        if (!expectedState(state)) throw FeedFailure("invalid_input")
         RequestBudget.reserve(state) ?: throw FeedFailure("limit_reached")
     }
 
@@ -463,6 +471,19 @@ open class FeedEngine(
     open suspend fun askConversation(conversationId: String, question: String, onText: (String) -> Unit): AiAnswer =
         runAnswer(null, conversationId, question, onText)
 
+    /** Guarded overload used by explicitly selected suggestions; legacy callers keep the 3-arg path. */
+    open suspend fun askConversation(
+        conversationId: String,
+        question: String,
+        onText: (String) -> Unit,
+        expectedCurrent: (FeedState) -> Boolean,
+        expectedLanguage: String,
+        staleFailureCode: String = "suggestion_changed",
+        excludeUnusedAttachments: Boolean = false,
+        onRequestDispatch: () -> Unit,
+    ): AiAnswer = runAnswer(null, conversationId, question, onText, expectedCurrent, expectedLanguage,
+        staleFailureCode, onRequestDispatch, excludeUnusedAttachments)
+
     open suspend fun explain(itemId: String, onText: (String) -> Unit): AiAnswer = runAnswer(itemId, null,
         "Explain this item so I can understand it here. In about 220 words, state what happened or what this resource offers, " +
             "the useful background, and what it changes or what I can do next. Open and verify the linked source using web search where available. " +
@@ -470,24 +491,64 @@ open class FeedEngine(
             "If only an excerpt is available, be explicit; never pretend to have read the full article. Paraphrase rather than reproduce it. " +
             "Use my explicitly shared module context only when relevant. For horoscope content, treat it as entertainment without factual predictions.", onText)
 
-    private suspend fun runAnswer(itemId: String?, conversationId: String?, question: String, onText: ((String) -> Unit)?): AiAnswer {
+    private suspend fun runAnswer(
+        itemId: String?,
+        conversationId: String?,
+        question: String,
+        onText: ((String) -> Unit)?,
+        expectedCurrent: ((FeedState) -> Boolean)? = null,
+        expectedLanguage: String? = null,
+        staleFailureCode: String = "invalid_input",
+        onRequestDispatch: (() -> Unit)? = null,
+        excludeUnusedAttachments: Boolean = false,
+    ): AiAnswer {
         if (question.isBlank() || question.length > 2000) throw FeedFailure("invalid_input")
         val snapshot = credentialsLock.withLock {
             val current = repository.current()
             if (itemId != null && current.items.none { it.id == itemId }) throw FeedFailure("invalid_input")
             if (conversationId != null && current.conversations.none { it.id == conversationId }) throw FeedFailure("invalid_input")
+            if (expectedCurrent?.invoke(current) == false) throw FeedFailure(staleFailureCode)
             val secret = credential(current.connection) ?: throw FeedFailure("unauthorized")
-            Triple(secret, credentialGeneration.get(), reserveRequest())
+            // Read language after credential retrieval, immediately before the atomic feed-state
+            // reservation; explicit suggestion actions reject if the selected locale changed.
+            val requestLanguage = language()
+            if (expectedLanguage != null && requestLanguage != expectedLanguage) throw FeedFailure(staleFailureCode)
+            val reserved = reserveRequest { latest ->
+                if (latest.connection != current.connection || expectedCurrent?.invoke(latest) == false) throw FeedFailure(staleFailureCode)
+                true
+            }
+            AnswerRequestSnapshot(secret, credentialGeneration.get(), reserved, requestLanguage)
         }
-        val secret = snapshot.first; val generation = snapshot.second; val current = snapshot.third
+        val secret = snapshot.secret
+        val generation = snapshot.credentialGeneration
+        val current = snapshot.state
+        val requestLanguage = snapshot.language
         val savedThread = conversationId?.let { id -> current.conversations.find { it.id == id } ?: throw FeedFailure("invalid_input") }
+        val requestThread = savedThread?.let { thread ->
+            if (excludeUnusedAttachments) thread.copy(attachments = thread.attachments.filter { it.usedAtMillis > 0L }) else thread
+        }
+        // The selected chat is also represented inside FeedState. Sanitize both views so a
+        // provider cannot accidentally serialize an unsent attachment through either argument.
+        val requestState = if (excludeUnusedAttachments && savedThread != null && requestThread != null) {
+            current.copy(conversations = current.conversations.map { thread ->
+                if (thread.id == savedThread.id) requestThread else thread
+            })
+        } else current
         val selectedItemId = savedThread?.itemId ?: itemId
         val item = selectedItemId?.let { id -> current.items.find { it.id == id } }
         val thread = savedThread ?: AiConversation(itemId = selectedItemId, moduleId = item?.moduleId)
         val module = thread.moduleId?.let { id -> current.modules.find { it.id == id } }
         val answer = try { AiActivityRegistry.run(selectedItemId ?: savedThread?.id ?: "general", module?.kind ?: item?.kind ?: "general", "answer") {
-            if (onText == null) provider.ask(current, item, question.trim(), secret, language())
-            else provider.streamConversation(current, item, thread, question.trim(), secret, language()) { text ->
+            // Semaphore wait can be long. Revalidate exact suggestion content/scope again before
+            // authorizing external I/O; only then acknowledge dispatch to navigation cancellation.
+            val latest = repository.current()
+            if (latest.connection != current.connection || credentialGeneration.get() != generation ||
+                expectedCurrent?.invoke(latest) == false || expectedLanguage != null && language() != expectedLanguage)
+                throw FeedFailure(staleFailureCode)
+            currentCoroutineContext().ensureActive()
+            onRequestDispatch?.invoke()
+            if (onText == null) provider.ask(requestState, item, question.trim(), secret, requestLanguage)
+            else provider.streamConversation(requestState, item, requestThread ?: thread, question.trim(), secret, requestLanguage) { text ->
                 if (credentialGeneration.get() == generation) onText(text.take(24000))
             }
         } }

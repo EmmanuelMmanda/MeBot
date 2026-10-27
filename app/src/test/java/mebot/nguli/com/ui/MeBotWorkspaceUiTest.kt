@@ -1,6 +1,7 @@
 package mebot.nguli.com.ui
 
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Handler
@@ -30,6 +31,10 @@ import mebot.nguli.com.R
 import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.FeedUiState
 import mebot.nguli.com.feed.SuggestedConversationDraft
+import mebot.nguli.com.feed.SuggestionOptionSnapshot097
+import mebot.nguli.com.feed.SuggestionOptionSource097
+import mebot.nguli.com.feed.SuggestionTargetKind097
+import mebot.nguli.com.feed.SuggestionTargetSnapshot097
 import mebot.nguli.com.ui.feed.AiWorkspace
 import mebot.nguli.com.ui.feed.FeedDetail
 import java.io.File
@@ -39,6 +44,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowDialog
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
@@ -49,6 +55,7 @@ import org.robolectric.annotation.GraphicsMode
 class MeBotWorkspaceUiTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val restoration = StateRestorationTester(compose)
+    private lateinit var suggestionResourcesContext: Context
     private val now = System.currentTimeMillis()
     private val story = FeedItem("guide", "technology", "Preview: a useful deployment guide", "A synthetic source summary for interface verification.",
         sourceName = "Preview publisher", sourceUrl = "https://example.com/guide", kind = "technology", publishedAtMillis = now - 3_600_000,
@@ -69,8 +76,10 @@ class MeBotWorkspaceUiTest {
     private val deleted = mutableListOf<String>()
     private val scopes = mutableListOf<String?>()
     private val removedAttachments = mutableListOf<String>()
-    private val preparedSuggestions = mutableListOf<Pair<String, String>>()
+    private val usedSuggestions = mutableListOf<Pair<SuggestionTargetSnapshot097, String>>()
+    private val editedSuggestions = mutableListOf<Pair<SuggestionTargetSnapshot097, String>>()
     private val appliedSuggestionDrafts = mutableListOf<String>()
+    private var showSyntheticCachedSuggestions = false
     private var loaded = 0
     private var cancelled = 0
     private var retry = 0
@@ -150,24 +159,71 @@ class MeBotWorkspaceUiTest {
         assertEquals(listOf("preview"), deleted)
     }
 
-    @Test fun rootMeBotOffersCurrentStoryQuestionsThatOnlyPrepareAnEditableDraft() {
-        ui.value = ui.value.copy(activeConversationId = null)
+    @Test fun chatSuggestionsRequireAnExplicitActionAndPrimarySendStaysInTheCurrentConversation() {
         show()
-        compose.onNodeWithTag("workspace-start-suggestions").assertIsDisplayed()
-        compose.onNodeWithTag("workspace-start-suggestions-story-0").assertIsDisplayed()
-        compose.onNodeWithText(story.title).assertIsDisplayed()
-        compose.onNodeWithTag("workspace-start-suggestions-question-0-0").assertIsDisplayed().performClick()
-        assertTrue(preparedSuggestions.single().first in setOf("guide", "related"))
-        assertEquals("local:explain", preparedSuggestions.single().second)
-        assertTrue("Selecting a story suggestion must not send or infer", questions.isEmpty())
+        compose.onNodeWithTag("workspace-suggestions-open").performClick()
+        compose.onNodeWithTag("workspace-suggestions-question-0").assertTextContains("discussion about", substring = true)
+        compose.onNodeWithTag("workspace-suggestions-close").performClick()
+        assertTrue("Opening and cancelling the sheet is UI-only", usedSuggestions.isEmpty() && editedSuggestions.isEmpty())
+
+        compose.onNodeWithTag("workspace-suggestions-open").performClick()
+        compose.runOnIdle { ShadowDialog.getLatestDialog().onBackPressed() }
+        compose.waitForIdle()
+        compose.onNodeWithTag("workspace-suggestions-close").assertDoesNotExist()
+        assertTrue("Back dismisses without using a suggestion", usedSuggestions.isEmpty() && editedSuggestions.isEmpty())
+
+        compose.onNodeWithTag("workspace-suggestions-open").performClick()
+        compose.onNodeWithTag("workspace-suggestions-send-0").performTouchInput { click(); click() }
+        assertEquals(1, usedSuggestions.size)
+        assertEquals(SuggestionTargetKind097.CONVERSATION, usedSuggestions.single().first.kind)
+        assertEquals(thread.id, usedSuggestions.single().first.targetId)
+        assertEquals("local097:chat:next", usedSuggestions.single().second)
+        assertTrue("The UI dispatches a selected action, not an implicit or duplicate send", questions.isEmpty())
+
+        compose.onNodeWithTag("workspace-suggestions-open").performClick()
+        compose.onNodeWithTag("workspace-suggestions-edit-0").performClick()
+        assertEquals(1, editedSuggestions.size)
+        assertEquals(SuggestionTargetKind097.CONVERSATION, editedSuggestions.single().first.kind)
+        assertTrue("Pencil is distinct from Send", usedSuggestions.size == 1 && questions.isEmpty())
     }
 
-    @Test fun genericWorkspaceStarterPrefillsInsteadOfSending() {
+    @Test fun disconnectedGeneralSuggestionsAreHonestLocalEditsAndCannotSend() {
         ui.value = ui.value.copy(activeConversationId = null, state = state.copy(items = emptyList(), conversations = emptyList()))
+        ui.value = ui.value.copy(connected = false)
         show()
-        compose.onNodeWithTag("workspace-starter-0").assertIsDisplayed().performClick()
-        compose.onNodeWithTag("workspace-question").assertTextContains("What matters for me today?")
-        assertTrue("Static starter chips must remain editable", questions.isEmpty())
+        compose.onNodeWithTag("workspace-suggestions-open").performClick()
+        compose.onNodeWithTag("workspace-suggestions-offline-note").assertIsDisplayed()
+        compose.onNodeWithTag("workspace-suggestions-question-0").assertTextContains("enabled modules", substring = true)
+        compose.onNodeWithTag("workspace-suggestions-source-0").assertTextEquals(text(R.string.suggestions_source_local))
+        compose.onNodeWithTag("workspace-suggestions-send-0").assertIsNotEnabled()
+        compose.onNodeWithTag("workspace-suggestions-edit-0").assertIsEnabled().performClick()
+        assertEquals(SuggestionTargetKind097.GENERAL, editedSuggestions.single().first.kind)
+        assertEquals("local097:general:fit", editedSuggestions.single().second)
+        assertTrue(usedSuggestions.isEmpty() && questions.isEmpty())
+    }
+
+    @Test fun disconnectWhileSheetIsOpenKeepsSnapshotVisibleButRequiresReopenToUseFreshLocalFallback() {
+        showSyntheticCachedSuggestions = true
+        show()
+        compose.onNodeWithTag("workspace-suggestions-open").performClick()
+        compose.onNodeWithTag("workspace-suggestions-question-0").assertTextContains("cached preview", substring = true)
+        compose.onNodeWithTag("workspace-suggestions-source-0").assertTextEquals(text(R.string.suggestions_source_cached))
+        ui.value = ui.value.copy(connected = false)
+        compose.waitForIdle()
+        compose.onNodeWithTag("workspace-suggestions-stale-note").assertIsDisplayed()
+        compose.onNodeWithTag("workspace-suggestions-offline-note").assertIsDisplayed()
+        compose.onNodeWithTag("workspace-suggestions-send-0").assertIsNotEnabled()
+        compose.onNodeWithTag("workspace-suggestions-edit-0").assertIsNotEnabled()
+        assertTrue(usedSuggestions.isEmpty() && editedSuggestions.isEmpty())
+
+        compose.onNodeWithTag("workspace-suggestions-close").performClick()
+        compose.onNodeWithTag("workspace-suggestions-open").performClick()
+        compose.onNodeWithTag("workspace-suggestions-question-0").assertTextContains("discussion about", substring = true)
+        compose.onNodeWithTag("workspace-suggestions-source-0").assertTextEquals(text(R.string.suggestions_source_local))
+        compose.onNodeWithTag("workspace-suggestions-send-0").assertIsNotEnabled()
+        compose.onNodeWithTag("workspace-suggestions-edit-0").assertIsEnabled().performClick()
+        assertEquals("local097:chat:next", editedSuggestions.single().second)
+        assertTrue(usedSuggestions.isEmpty() && questions.isEmpty())
     }
 
     @Test fun openingConversationKeepsDraftEditableAndDisablesSendUntilReady() {
@@ -191,7 +247,7 @@ class MeBotWorkspaceUiTest {
         assertEquals(listOf("What should I check first?"), questions)
     }
 
-    @Test fun suggestionDraftUsesItsNewThreadAndKeepsThePreviousUnsentDraft() {
+    @Test fun pencilToANewItemThreadPreservesAnUnrelatedGeneralDraft() {
         ui.value = ui.value.copy(activeConversationId = null, state = state.copy(conversations = emptyList()))
         show()
         compose.onNodeWithTag("workspace-question").performTextInput("Keep this unsent note")
@@ -202,9 +258,69 @@ class MeBotWorkspaceUiTest {
             suggestionDraft = SuggestedConversationDraft("draft-event", target.id, "Explain this current update in simple terms."),
         )
         compose.waitForIdle()
+        compose.onNodeWithText(text(R.string.suggestions_replace_title)).assertDoesNotExist()
+        compose.onNodeWithTag("workspace-question").assertTextContains("Explain this current update in simple terms.")
+        assertTrue("The unrelated draft in the general composer must not make this story-scoped edit replace it", questions.isEmpty())
+        assertTrue("A dismissed pencil draft never sends", questions.isEmpty())
+        assertEquals(listOf("draft-event"), appliedSuggestionDrafts)
+        ui.value = ui.value.copy(activeConversationId = null, suggestionDraft = null,
+            state = ui.value.state!!.copy(conversations = ui.value.state!!.conversations.filterNot { it.id == target.id }))
+        compose.waitForIdle()
+        compose.onNodeWithTag("workspace-question").assertTextContains("Keep this unsent note")
+    }
+
+    @Test fun primaryStorySendKeepsTheGeneralComposerDraftOnItsOriginalKey() {
+        ui.value = ui.value.copy(activeConversationId = null, state = state.copy(conversations = emptyList()))
+        show()
+        compose.onNodeWithTag("workspace-question").performTextInput("Keep my general question")
+        val storyThread = AiConversation(id = "sent-story-thread", title = "A useful deployment guide", moduleId = "technology", itemId = story.id)
+        ui.value = ui.value.copy(
+            activeConversationId = storyThread.id,
+            conversationReady = true,
+            suggestionWorking = true,
+            state = state.copy(conversations = listOf(storyThread)),
+        )
+        compose.waitForIdle()
         compose.onNodeWithTag("workspace-question").assert(SemanticsMatcher.expectValue(
-            SemanticsProperties.EditableText, AnnotatedString("Explain this current update in simple terms."),
+            SemanticsProperties.EditableText, AnnotatedString(""),
         ))
+        ui.value = ui.value.copy(suggestionWorking = false)
+        compose.waitForIdle()
+        compose.onNodeWithTag("workspace-question").assert(SemanticsMatcher.expectValue(
+            SemanticsProperties.EditableText, AnnotatedString(""),
+        ))
+        ui.value = ui.value.copy(activeConversationId = null)
+        compose.waitForIdle()
+        compose.onNodeWithTag("workspace-question").assertTextContains("Keep my general question")
+        assertTrue("Primary suggestion Send must not send or migrate the unrelated draft", questions.isEmpty())
+    }
+
+    @Test fun replacingAChatDraftRequiresTheProtectedConfirmation() {
+        show()
+        compose.onNodeWithTag("workspace-question").performTextInput("Keep this chat draft")
+        ui.value = ui.value.copy(suggestionDraft = SuggestedConversationDraft("replace-event", thread.id, "From the current discussion, what should I verify first?"))
+        compose.waitForIdle()
+        compose.onNodeWithText(text(R.string.suggestions_replace_title)).assertIsDisplayed()
+        compose.onNodeWithTag("workspace-question").assertTextContains("Keep this chat draft")
+        assertTrue(questions.isEmpty())
+        compose.onNodeWithTag("workspace-suggestion-replace").performClick()
+        compose.onNodeWithTag("workspace-question").assertTextContains("what should I verify first", substring = true)
+        assertEquals(listOf("replace-event"), appliedSuggestionDrafts)
+        assertTrue("Editing a suggestion never sends it", questions.isEmpty())
+    }
+
+    @Test fun emptyNewThreadPencilDraftPrefillsWithoutSending() {
+        ui.value = ui.value.copy(activeConversationId = null, state = state.copy(conversations = emptyList()))
+        show()
+        val target = AiConversation(id = "suggestion-thread", title = "", moduleId = "technology", itemId = story.id)
+        ui.value = ui.value.copy(
+            activeConversationId = target.id,
+            state = state.copy(conversations = listOf(target)),
+            suggestionDraft = SuggestedConversationDraft("draft-event", target.id, "Explain this current update in simple terms."),
+        )
+        compose.waitForIdle()
+        compose.onNodeWithTag("workspace-question").assertTextContains("Explain this current update in simple terms.")
+        compose.onNodeWithText(text(R.string.suggestions_replace_title)).assertDoesNotExist()
         compose.onNodeWithText(text(R.string.workspace_item_draft_title)).assertExists()
         compose.onNodeWithText(text(R.string.workspace_item_draft_help)).assertExists()
         compose.onNodeWithText(text(R.string.workspace_confirmed_about_you_available)).assertDoesNotExist()
@@ -225,7 +341,9 @@ class MeBotWorkspaceUiTest {
         ui.value = ui.value.copy(activeConversationId = null, suggestionDraft = null,
             state = withProfileAndSuggestionThread.copy(conversations = withProfileAndSuggestionThread.conversations.filterNot { it.id == target.id }))
         compose.waitForIdle()
-        compose.onNodeWithTag("workspace-question").assertTextContains("Keep this unsent note")
+        compose.onNodeWithTag("workspace-question").assert(SemanticsMatcher.expectValue(
+            SemanticsProperties.EditableText, AnnotatedString(""),
+        ))
     }
 
     @Test fun workspaceStreamsTruthfullyKeepsCompletedTurnsAndStopsWithoutFakeAnswers() {
@@ -262,6 +380,14 @@ class MeBotWorkspaceUiTest {
         assertWorkspaceControlsStacked(true)
         assertLabelFits(text(R.string.feed_connect))
         assertLabelFits(text(R.string.module_technology))
+        compose.onNodeWithTag("workspace-suggestions-open").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("workspace-suggestions-offline-note").assertIsDisplayed()
+        compose.onNodeWithTag("workspace-suggestions-send-0").assertIsNotEnabled()
+        val suggestionQuestion = compose.onNodeWithTag("workspace-suggestions-question-0").assertIsDisplayed()
+        assertLabelFits(suggestionQuestion.fetchSemanticsNode().config[SemanticsProperties.Text].joinToString("") { it.text })
+        val suggestionButtonBounds = compose.onNodeWithTag("workspace-suggestions-edit-0").getUnclippedBoundsInRoot()
+        assertTrue("The pencil remains a 48dp target with larger text", suggestionButtonBounds.bottom - suggestionButtonBounds.top >= 48.dp)
+        compose.onNodeWithTag("workspace-suggestions-close").performClick()
         compose.onNodeWithTag("workspace-question").assertIsDisplayed().performTextInput("Swali langu la mfano")
         compose.onNodeWithTag("workspace-send").assertIsNotEnabled()
         message("turn-a1").assertExists()
@@ -295,6 +421,9 @@ class MeBotWorkspaceUiTest {
     }
 
     private fun show(detail: Boolean = false, settings: Settings = Settings(), fontScale: Float = 1f) {
+        // The option callback runs while Compose is measuring; avoid ActivityScenario's
+        // synchronous main-thread drain by keeping an application Context for string lookup.
+        suggestionResourcesContext = compose.activity.applicationContext
         restoration.setContent {
             MeBotTheme(settings) {
                 CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
@@ -310,14 +439,66 @@ class MeBotWorkspaceUiTest {
                             else AiWorkspace(ui.value, onNew = { scopes += it }, onSelect = { selected += it }, onDelete = { deleted += it },
                                 onAsk = { questions += it }, onCancel = { cancelled++ }, onConnect = { connected++ }, onContext = {},
                                 onImportText = {}, onRemoveAttachment = { removedAttachments += it },
-                                onPrepareSuggestion = { id, stableId -> preparedSuggestions += id to stableId },
-                                onSuggestionDraftApplied = { appliedSuggestionDrafts += it })
+                                onSuggestionDraftApplied = { appliedSuggestionDrafts += it },
+                                onUseSuggestion = { target, id, _ -> usedSuggestions += target to id },
+                                onEditSuggestion = { target, id, _ -> editedSuggestions += target to id },
+                                onSuggestionOptions = ::suggestionOptions)
                         }
                     }
                 }
             }
         }
         if (!detail && fontScale == 1f) screenshot("48-mebot-workspace-v06")
+    }
+
+    private fun suggestionOptions(target: SuggestionTargetSnapshot097, language: String): List<SuggestionOptionSnapshot097> {
+        val current = ui.value.state ?: return emptyList()
+        fun local(id: String, label: Int, question: String) = SuggestionOptionSnapshot097(
+            id, suggestionResourcesContext.getString(label), question, SuggestionOptionSource097.LOCAL,
+        )
+        val storyForScope = target.itemId?.let { id -> current.items.singleOrNull { it.id == id } }
+        if (showSyntheticCachedSuggestions && target.kind == SuggestionTargetKind097.CONVERSATION &&
+            target.itemId == null && ui.value.connected) {
+            return listOf(SuggestionOptionSnapshot097("cached:preview", "Preview from connected AI",
+                "A cached preview question about this conversation.", SuggestionOptionSource097.CACHED_AI))
+        }
+        if (storyForScope != null) return listOf(
+            local("local097:item:verify", R.string.suggestion097_label_verify,
+                suggestionResourcesContext.getString(R.string.suggestion097_item_verify, storyForScope.title)),
+            local("local097:item:next", R.string.suggestion097_label_next,
+                suggestionResourcesContext.getString(R.string.suggestion097_item_next, storyForScope.title)),
+        )
+        return when (target.kind) {
+            SuggestionTargetKind097.CONVERSATION -> {
+                val conversation = current.conversations.singleOrNull { it.id == target.targetId } ?: return emptyList()
+                val topic = conversation.turns.lastOrNull { it.role == "user" }?.text ?: conversation.title
+                listOf(
+                    local("local097:chat:next", R.string.suggestion097_label_next,
+                        suggestionResourcesContext.getString(R.string.suggestion097_chat_next, topic)),
+                    local("local097:chat:verify", R.string.suggestion097_label_verify,
+                        suggestionResourcesContext.getString(R.string.suggestion097_chat_verify, topic)),
+                )
+            }
+            SuggestionTargetKind097.MODULE -> {
+                val module = current.modules.singleOrNull { it.id == target.moduleId } ?: return emptyList()
+                listOf(
+                    local("local097:module:verify", R.string.suggestion097_label_verify,
+                        suggestionResourcesContext.getString(R.string.suggestion097_module_default_verify, module.title)),
+                    local("local097:module:next", R.string.suggestion097_label_next,
+                        suggestionResourcesContext.getString(R.string.suggestion097_module_default_next, module.title)),
+                )
+            }
+            SuggestionTargetKind097.GENERAL -> {
+                val hasGlobal = current.context.any { it.confirmed && PersonalProfile085.isGlobal(it) && it.text.isNotBlank() }
+                listOf(
+                    local("local097:general:fit", R.string.suggestion097_label_fit,
+                        suggestionResourcesContext.getString(if (hasGlobal) R.string.suggestion097_general_fit else R.string.suggestion097_general_no_context)),
+                    local("local097:general:next", R.string.suggestion097_label_next,
+                        suggestionResourcesContext.getString(R.string.suggestion097_general_next)),
+                )
+            }
+            SuggestionTargetKind097.ITEM -> emptyList()
+        }
     }
 
     private fun detail(tag: String) = compose.onNodeWithTag(tag).performScrollTo()

@@ -192,7 +192,13 @@ class FeedNetworkTest {
         val publicCandidate = input["publicCandidates"]!!.jsonArray.single().jsonObject
         listOf("suggestedInteractions", "suggestedInteractionsContentDigest", "suggestedInteractionsScopeProviderDigest",
             "suggestedInteractionsGeneratedAtMillis").forEach { assertFalse(publicCandidate.containsKey(it)) }
-        assertTrue(body["instructions"]!!.jsonPrimitive.content.contains("user-click questions only"))
+        val instructions = body["instructions"]!!.jsonPrimitive.content
+        assertTrue(instructions.contains("user-click questions only"))
+        assertTrue(instructions.contains("genuine decision value"))
+        assertTrue(instructions.contains("eligibility or application checklist"))
+        assertTrue(instructions.contains("costs, risks, versions or trade-offs"))
+        assertTrue(instructions.contains("Avoid merely paraphrasing the summary"))
+        assertTrue(instructions.contains("concrete verification, eligibility, cost/risk, practical-use or next-decision question"))
     }
 
     @Test fun malformedCandidateQuestionsAreIgnoredAsAWholeAndNeverCoerced() = runBlocking {

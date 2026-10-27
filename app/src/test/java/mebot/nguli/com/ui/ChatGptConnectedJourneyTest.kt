@@ -336,7 +336,7 @@ class ChatGptConnectedJourneyTest {
 }
 
 /** No network or Android Keystore operations. All values below are synthetic test fixtures. */
-class ChatGptJourneyApplication : MeBotApplication() {
+open class ChatGptJourneyApplication : MeBotApplication() {
     override fun onCreate() { super.onCreate(); androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(this) }
     override val chatGptAuth by lazy { UiFixtureChatGptAuth(this) }
     override val feedSecrets by lazy { TestVault(this) }

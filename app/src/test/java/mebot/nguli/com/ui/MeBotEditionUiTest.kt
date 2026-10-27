@@ -1,6 +1,7 @@
 package mebot.nguli.com.ui
 
 import android.content.Intent
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Handler
@@ -29,6 +30,10 @@ import mebot.nguli.com.MeBotNavigation
 import mebot.nguli.com.R
 import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.FeedUiState
+import mebot.nguli.com.feed.SuggestionOptionSnapshot097
+import mebot.nguli.com.feed.SuggestionOptionSource097
+import mebot.nguli.com.feed.SuggestionTargetKind097
+import mebot.nguli.com.feed.SuggestionTargetSnapshot097
 import mebot.nguli.com.ui.feed.FeedDetail
 import mebot.nguli.com.ui.feed.FeedHome
 import mebot.nguli.com.ui.feed.LocalPublisherImageLoader
@@ -55,9 +60,11 @@ import org.robolectric.annotation.GraphicsMode
 class MeBotEditionUiTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val restoration = StateRestorationTester(compose)
+    private lateinit var suggestionResourcesContext: Context
     private val ui = mutableStateOf(FeedUiState(state = fixtureState(), loading = false, connected = true))
     private val prompts = mutableListOf<Pair<String?, String>>()
-    private val preparedSuggestions = mutableListOf<Pair<String, String>>()
+    private val usedSuggestions = mutableListOf<Pair<SuggestionTargetSnapshot097, String>>()
+    private val editedSuggestions = mutableListOf<Pair<SuggestionTargetSnapshot097, String>>()
     private val selectedItems = mutableListOf<String>()
     private val saved = mutableListOf<String>()
     private val imageRequests = mutableListOf<String>()
@@ -81,15 +88,14 @@ class MeBotEditionUiTest {
         assertEquals(Intent.ACTION_VIEW, opened.action)
         assertEquals(GOOGLE_SOURCE, opened.dataString)
         compose.onNodeWithTag("source-google").assertDoesNotExist()
-        feedNode("explain-google").performClick()
-        assertEquals("google" to "local:explain", preparedSuggestions.last())
-        val expectedId = AiSuggestedInteractions095.suggestionId(
-            ui.value.state!!.items.single { it.id == "google" },
-            ui.value.state!!.items.single { it.id == "google" }.suggestedInteractions.single(),
-        )
-        feedNode("feed-story-suggestion-chip-0").assertTextContains("Ask about the AI details").performClick()
-        assertEquals("google" to expectedId, preparedSuggestions.last())
-        assertTrue("Suggestion selection only opens an editable draft", prompts.isEmpty())
+        feedNode("feed-suggestions-google-open").performClick()
+        compose.onNodeWithText(text(R.string.suggestions_title)).assertIsDisplayed()
+        compose.onNodeWithTag("feed-suggestions-google-question-0")
+            .assertTextContains("What does AI change in this story?", substring = true)
+        compose.onNodeWithTag("feed-suggestions-google-edit-0").performClick()
+        assertEquals(SuggestionTargetKind097.ITEM, editedSuggestions.last().first.kind)
+        assertEquals("google", editedSuggestions.last().first.itemId)
+        assertTrue("Pencil editing does not send", usedSuggestions.isEmpty() && prompts.isEmpty())
         feedNode("save-google").performClick()
         assertEquals(listOf("google"), saved)
         feedNode("item-nasa").assertIsDisplayed()
@@ -127,17 +133,40 @@ class MeBotEditionUiTest {
         assertTrue(ui.value.state!!.items.any { it.id == "weather" })
     }
 
+    @Test fun todayRowsOfferContextBoundSuggestionsAlongsideExistingStoryActions() {
+        val now = System.currentTimeMillis()
+        ui.value = ui.value.copy(state = ui.value.state!!.copy(items = ui.value.state!!.items.map {
+            it.copy(publishedAtMillis = now, fetchedAtMillis = now,
+                temporal = FeedTemporal(TemporalProvenance.PUBLISHER, publishedAtMillis = now))
+        }))
+        show()
+        compose.onNodeWithTag("filter-today").performScrollTo().performClick()
+        feedNode("today-suggestions-google-open").assertIsDisplayed()
+        feedNode("save-google").assertIsDisplayed()
+        feedNode("story-menu-google").assertIsDisplayed()
+        feedNode("today-suggestions-google-open").performClick()
+        compose.onNodeWithTag("today-suggestions-google-question-0")
+            .assertTextContains("What", substring = true)
+        compose.onNodeWithTag("today-suggestions-google-edit-0").assertIsDisplayed().performClick()
+        assertEquals(SuggestionTargetKind097.ITEM, editedSuggestions.single().first.kind)
+        assertEquals("google", editedSuggestions.single().first.itemId)
+        assertTrue("Today Suggestions stays explicit and does not send on open/edit", usedSuggestions.isEmpty() && prompts.isEmpty())
+    }
+
     @Test fun cachedEditionAndResourceLinksRemainUsableWhenAiIsDisconnectedOrRefreshFails() {
         ui.value = ui.value.copy(connected = false, error = "offline")
         show()
         feedNode("story-menu-google").performClick()
         compose.onNodeWithTag("source-google").assertIsDisplayed().performClick()
         assertEquals(GOOGLE_SOURCE, shadowOf(compose.activity).nextStartedActivity.dataString)
-        feedNode("explain-google").performClick()
-        assertEquals("google" to "local:explain", preparedSuggestions.single())
         assertEquals(0, connectionsOpened)
         assertTrue(prompts.isEmpty())
-        feedNode("feed-story-suggestion-chip-0").assertTextEquals(text(R.string.feed_ask_explain))
+        feedNode("feed-suggestions-google-open").performClick()
+        compose.onNodeWithTag("feed-suggestions-google-offline-note").assertIsDisplayed()
+        compose.onNodeWithTag("feed-suggestions-google-send-0").assertIsNotEnabled()
+        compose.onNodeWithTag("feed-suggestions-google-edit-0").assertIsEnabled().performClick()
+        assertEquals("google", editedSuggestions.single().first.itemId)
+        assertTrue(usedSuggestions.isEmpty())
         compose.runOnIdle { ui.value = ui.value.copy(refreshing = true, error = null) }
         feedNode("feed-refresh").assertIsNotEnabled()
         compose.onNodeWithTag("item-google").assertExists()
@@ -221,19 +250,17 @@ class MeBotEditionUiTest {
         feedNode("story-menu-google").assertIsDisplayed().performClick()
         compose.onNodeWithTag("source-google").assertIsDisplayed().performClick()
         assertEquals(GOOGLE_SOURCE, shadowOf(compose.activity).nextStartedActivity.dataString)
-        feedNode("explain-google").assertIsDisplayed().performClick()
+        feedNode("feed-suggestions-google-open").assertIsDisplayed()
         feedNode("save-google").assertIsDisplayed().performClick()
         assertEquals(listOf("google"), saved)
-        assertEquals("google" to "local:explain", preparedSuggestions.single())
         val selectedStory = FeedLogic.edition(ui.value.state!!, System.currentTimeMillis()).first()
-        val storyQuestion = feedNode("feed-story-suggestion-chip-0").assertIsDisplayed()
-        compose.onNodeWithTag("feed-story-suggestion-title").assertTextEquals(selectedStory.title).assertIsDisplayed()
-        val storyQuestionBounds = storyQuestion.getUnclippedBoundsInRoot()
-        assertTrue("large-text suggestion remains a comfortable touch target",
-            storyQuestionBounds.bottom - storyQuestionBounds.top >= 48.dp)
-        storyQuestion.performClick()
-        assertEquals("A compact-feed story suggestion opens an item-grounded editable draft",
-            selectedStory.id to "local:explain", preparedSuggestions.last())
+        val suggestionIcon = feedNode("feed-suggestions-google-open").assertIsDisplayed()
+        val iconBounds = suggestionIcon.getUnclippedBoundsInRoot()
+        assertTrue("large-text suggestion target stays at least 48dp high", iconBounds.bottom - iconBounds.top >= 48.dp)
+        suggestionIcon.performClick()
+        compose.onNodeWithTag("feed-suggestions-google-question-0").assertIsDisplayed()
+        compose.onNodeWithTag("feed-suggestions-google-edit-0").assertIsDisplayed().performClick()
+        assertEquals("A compact-feed pencil opens the item's editable draft", selectedStory.id, editedSuggestions.last().first.itemId)
         feedNode("category-github").assertIsDisplayed()
         feedNode("story-menu-github").performClick()
         compose.onNodeWithTag("source-github").assertIsDisplayed().performClick()
@@ -254,12 +281,12 @@ class MeBotEditionUiTest {
         compose.onNodeWithText(ui.value.state!!.items.first { it.id == "google" }.summary).performScrollTo().assertIsDisplayed()
         val story = ui.value.state!!.items.single { it.id == "google" }
         val expectedId = AiSuggestedInteractions095.suggestionId(story, story.suggestedInteractions.single())
-        compose.onNodeWithTag("detail-screen").performScrollToNode(hasTestTag("detail-question-0"))
-        compose.onNodeWithTag("detail-screen").performTouchInput { swipeUp() }
-        compose.onNodeWithTag("detail-question-0").assertIsDisplayed()
-        compose.onNodeWithTag("detail-question-0").assertTextContains("Ask about the AI details").performClick()
-        assertEquals("google" to expectedId, preparedSuggestions.last())
-        assertTrue("Suggestion selection only prepares a draft", selectedItems.isEmpty())
+        compose.onNodeWithTag("detail-suggestions-google-open").performScrollTo().performClick()
+        compose.onNodeWithTag("detail-suggestions-google-question-0").assertIsDisplayed()
+        compose.onNodeWithTag("detail-suggestions-google-send-0").assertIsEnabled().performClick()
+        assertEquals("google", usedSuggestions.last().first.itemId)
+        assertEquals(expectedId, usedSuggestions.last().second)
+        assertTrue("Explicit Send is the only suggestion action that uses the primary callback", selectedItems.isEmpty())
         compose.onNodeWithTag("detail-tab-sources").performScrollTo().performClick()
         compose.onNodeWithTag("detail-citation-0").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("detail-citation-0").performClick()
@@ -292,6 +319,9 @@ class MeBotEditionUiTest {
     }
 
     private fun show(settings: Settings = Settings(), fontScale: Float = 1f, detail: Boolean = false) {
+        // A Compose callback is invoked during layout; use a stable application Context rather
+        // than compose.activity (ActivityScenario) from inside that callback.
+        suggestionResourcesContext = compose.activity.applicationContext
         val imageLoader: suspend (String) -> Bitmap? = { url ->
             imageRequests += url
             val directory = System.getenv("MEBOT_PREVIEW_MEDIA_DIR")
@@ -310,16 +340,39 @@ class MeBotEditionUiTest {
                     ) { padding ->
                         Box(Modifier.fillMaxSize().padding(padding)) {
                             if (detail) FeedDetail(ui.value, "google", onSave = { saved += it }, onAsk = { selectedItems += "google" }, onFeed = {},
-                                onPrepareSuggestion = { id, stableId -> preparedSuggestions += id to stableId })
+                                onUseSuggestion = { target, id, _ -> usedSuggestions += target to id },
+                                onEditSuggestion = { target, id, _ -> editedSuggestions += target to id },
+                                onSuggestionOptions = ::suggestionOptions)
                             else FeedHome(ui.value, onItem = { selectedItems += it }, onModules = { modulesOpened++ }, onYou = {},
                                 onConnect = { connectionsOpened++ }, onAsk = {}, onRefresh = { refreshed++ }, onSave = { saved += it },
                                 onHide = {}, onDismissError = {}, nextAlarm = null, onAlarms = {}, onPrompt = { id, question -> prompts += id to question },
-                                onPrepareSuggestion = { id, stableId -> preparedSuggestions += id to stableId })
+                                onUseSuggestion = { target, id, _ -> usedSuggestions += target to id },
+                                onEditSuggestion = { target, id, _ -> editedSuggestions += target to id },
+                                onSuggestionOptions = ::suggestionOptions)
                         }
                     }
                 }
             }
         }
+    }
+
+    private fun suggestionOptions(target: SuggestionTargetSnapshot097, language: String): List<SuggestionOptionSnapshot097> {
+        val state = ui.value.state ?: return emptyList()
+        val item = target.itemId?.let { id -> state.items.singleOrNull { it.id == id } }
+        if (item != null && ui.value.connected && AiSuggestedInteractions095.isApplicable(state, item, System.currentTimeMillis(), language)) {
+            return item.suggestedInteractions.map { interaction ->
+                SuggestionOptionSnapshot097(
+                    AiSuggestedInteractions095.suggestionId(item, interaction), interaction.label,
+                    interaction.prompt, SuggestionOptionSource097.CACHED_AI,
+                )
+            }
+        }
+        val question = item?.let { suggestionResourcesContext.getString(R.string.suggestion097_item_verify, it.title) }
+            ?: suggestionResourcesContext.getString(R.string.suggestion097_general_no_context)
+        val id = if (item != null) "local097:item:verify" else "local097:general:fit"
+        return listOf(SuggestionOptionSnapshot097(
+            id, suggestionResourcesContext.getString(R.string.suggestion097_label_verify), question, SuggestionOptionSource097.LOCAL,
+        ))
     }
 
     private fun feedNode(tag: String): SemanticsNodeInteraction {

@@ -37,6 +37,9 @@ import androidx.compose.ui.unit.dp
 import mebot.nguli.com.R
 import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.FeedUiState
+import mebot.nguli.com.feed.SuggestionOptionSnapshot097
+import mebot.nguli.com.feed.SuggestionTargetSnapshot097
+import mebot.nguli.com.feed.SuggestionTargets097
 import mebot.nguli.com.ui.*
 import kotlinx.coroutines.launch
 import java.time.LocalTime
@@ -53,7 +56,10 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
     onRefreshModule: ((String?) -> Unit)? = null,
     onContext: (() -> Unit)? = null, onDismissNotice: ((String) -> Unit)? = null,
     onLoadMore: ((String?) -> Unit)? = null,
-    onPrepareSuggestion: (String, String) -> Unit = { _, _ -> }) {
+    onPrepareSuggestion: (String, String) -> Unit = { _, _ -> },
+    onUseSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> },
+    onEditSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> },
+    onSuggestionOptions: (SuggestionTargetSnapshot097, String) -> List<SuggestionOptionSnapshot097> = { _, _ -> emptyList() }) {
     val state = ui.state ?: return
     var filter by rememberSaveable { mutableStateOf("all") }
     val enabled = remember(state.modules) { state.modules.filter { it.enabled } }
@@ -90,9 +96,17 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
         val presented=remember(stories,acceptedIds){FeedPaging.ordered(stories, acceptedIds)}
         val visible=remember(presented,visibleCount){presented.take(visibleCount)}
         val suggestionItem = visible.firstOrNull() ?: weather
-        val contentSuggestions = suggestionItem?.let {
-            suggestionChips095(ui, state, it, now, appLanguage, LocalSuggestionFallback095.CONTENT)
-        }.orEmpty()
+        val filteredModule = state.modules.find { it.id == filter }
+        val suggestionTarget = remember(state, suggestionItem?.id, filter, appLanguage) {
+            suggestionItem?.let { SuggestionTargets097.item(state, it.id, appLanguage) }
+                ?: filteredModule?.let { SuggestionTargets097.module(state, it.id, appLanguage) }
+                ?: if (filter == "all") SuggestionTargets097.general(state, appLanguage) else null
+        }
+        val suggestionOptions = remember(state, ui.connected, suggestionTarget, appLanguage, now / 60_000) {
+            suggestionTarget?.let { onSuggestionOptions(it, appLanguage) }.orEmpty()
+        }
+        val suggestionContext = suggestionItem?.title ?: filteredModule?.let { moduleName(it) }
+            ?: stringResource(R.string.workspace_general)
         var autoDiscoveryUsed by rememberSaveable { mutableStateOf(false) }
         val nearEnd by remember { derivedStateOf {
             val info = listState.layoutInfo
@@ -222,10 +236,38 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                     }
                     filter == "today" -> {
                         items(today.take(visibleCount), key = { "today-" + it.item.id }, contentType = { "story" }) { entry ->
+                            val todayTarget = remember(state, entry.item.id, appLanguage) {
+                                SuggestionTargets097.item(state, entry.item.id, appLanguage)
+                            }
+                            val todayOptions = remember(state, ui.connected, todayTarget, appLanguage, now / 60_000) {
+                                todayTarget?.let { onSuggestionOptions(it, appLanguage) }.orEmpty()
+                            }
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 TodayReasonLabel090(entry, state.timezone)
                                 if (entry.item.weather != null) WeatherStrip(entry.item, state.timezone, showTimestamp = false) { onItem(entry.item.id) }
-                                else StoryRow(entry.item, entry.item.id in state.savedIds, onItem, onSave, onHide, timestampOverride = "")
+                                else StoryRow(entry.item, entry.item.id in state.savedIds, onItem, onSave, onHide, timestampOverride = "",
+                                    suggestionTarget = todayTarget,
+                                    suggestionOptions = todayOptions,
+                                    suggestionLanguage = appLanguage,
+                                    suggestionsConnected = ui.connected,
+                                    suggestionsBusy = ui.asking || ui.importWorking || ui.suggestionWorking,
+                                    onConnect = onConnect,
+                                    onUseSuggestion = onUseSuggestion,
+                                    onEditSuggestion = onEditSuggestion)
+                                if (entry.item.weather != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                    SuggestionAction097(
+                                        target = todayTarget,
+                                        options = todayOptions,
+                                        contextLabel = entry.item.title,
+                                        language = appLanguage,
+                                        connected = ui.connected,
+                                        busy = ui.asking || ui.importWorking || ui.suggestionWorking,
+                                        onConnect = onConnect,
+                                        onUse = onUseSuggestion,
+                                        onEdit = onEditSuggestion,
+                                        testTag = "today-suggestions-${entry.item.id}",
+                                    )
+                                }
                             }
                         }
                         if (visibleCount < today.size) item(key = "today-more", contentType = "action") {
@@ -237,16 +279,18 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                     else -> {
                         if (visible.isNotEmpty()) item(key = "story-" + visible.first().id, contentType = "lead") {
                             LeadStory(visible.first(), visible.first().id in state.savedIds, onItem, onSave, onHide,
-                                onExplain = { id, _ -> onPrepareSuggestion(id, "local:explain") },
-                                onExplainEnabled = !ui.asking && !ui.importWorking)
+                                suggestionsTarget = suggestionTarget,
+                                suggestionOptions = suggestionOptions,
+                                suggestionLanguage = appLanguage,
+                                suggestionsConnected = ui.connected,
+                                suggestionsBusy = ui.asking || ui.importWorking || ui.suggestionWorking,
+                                onConnect = onConnect,
+                                onUseSuggestion = onUseSuggestion,
+                                onEditSuggestion = onEditSuggestion,
+                            )
                         }
                         if (weather != null) item(key = "weather-" + weather.id, contentType = "weather") {
                             WeatherStrip(weather, state.timezone) { onItem(weather.id) }
-                        }
-                        suggestionItem?.takeIf { contentSuggestions.isNotEmpty() }?.let { story ->
-                            item(key = "feed-story-suggestion-" + story.id, contentType = "question") {
-                                FeedStorySuggestionPanel(story, contentSuggestions) { stableId -> onPrepareSuggestion(story.id, stableId) }
-                            }
                         }
                         if (visible.size > 1) item(key = "closer-look", contentType = "closer-look") {
                             Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
@@ -287,7 +331,23 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                         }
                     }
                 }
-                if (filter != "today" && items.isEmpty() && ui.connected) item(key = "question", contentType = "question") { EditionQuestion(true, onAsk, onConnect) }
+                if (filter != "today" && items.isEmpty()) item(key = "question", contentType = "question") {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(Modifier.weight(1f)) { EditionQuestion(ui.connected, onAsk, onConnect) }
+                        SuggestionAction097(
+                            target = suggestionTarget,
+                            options = suggestionOptions,
+                            contextLabel = suggestionContext,
+                            language = appLanguage,
+                            connected = ui.connected,
+                            busy = ui.asking || ui.importWorking || ui.suggestionWorking,
+                            onConnect = onConnect,
+                            onUse = onUseSuggestion,
+                            onEdit = onEditSuggestion,
+                            testTag = "feed-suggestions-empty",
+                        )
+                    }
+                }
                 item(key = "modules", contentType = "modules") { ModuleDiscoveryTile(onExploreModules) }
                 if (nextAlarm != null) item(key = "alarm", contentType = "alarm") {
                     Surface(onClick = onAlarms, color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(18.dp)) {
@@ -323,29 +383,17 @@ private fun EditionQuestion(connected: Boolean, onAsk: () -> Unit, onConnect: ()
 }
 
 @Composable
-private fun FeedStorySuggestionPanel(item: FeedItem, suggestions: List<SuggestionChip095>, onPrepare: (String) -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier.fillMaxWidth().testTag("feed-story-suggestion"),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                Icon(Icons.Outlined.ChatBubbleOutline, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Text(stringResource(R.string.feed_story_question_title), style = MaterialTheme.typography.titleSmall)
-            }
-            Text(item.title, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.testTag("feed-story-suggestion-title"))
-            SuggestionRail095(suggestions, "feed-story-suggestion-chip", onPrepare)
-        }
-    }
-}
-
-@Composable
 private fun LeadStory(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, onSave: (String) -> Unit,
-    onHide: (String) -> Unit, onExplain: (String, String) -> Unit, onExplainEnabled: Boolean) {
-    val explain = stringResource(R.string.feed_ask_explain)
+    onHide: (String) -> Unit,
+    suggestionsTarget: SuggestionTargetSnapshot097?,
+    suggestionOptions: List<SuggestionOptionSnapshot097>,
+    suggestionLanguage: String,
+    suggestionsConnected: Boolean,
+    suggestionsBusy: Boolean,
+    onConnect: () -> Unit,
+    onUseSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit,
+    onEditSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit,
+) {
     val hasMedia = item.media != null
     val configuration = LocalConfiguration.current
     val compact = configuration.screenWidthDp < 360 || configuration.fontScale > 1.15f
@@ -387,17 +435,18 @@ private fun LeadStory(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 // The story itself is the primary tap target; source access is in detail and overflow.
                 Spacer(Modifier.weight(1f))
-                if (!compact) {
-                IconButton(onClick = { onExplain(item.id, explain) }, enabled = onExplainEnabled, modifier = Modifier.testTag("explain-" + item.id)) {
-                    Icon(Icons.Outlined.ChatBubbleOutline, stringResource(R.string.edition_explain), Modifier.size(21.dp))
-                }
-                StoryActions(item, saved, onSave, onHide)
-                }
-            }
-            if (compact) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { onExplain(item.id, explain) }, enabled = onExplainEnabled, modifier = Modifier.testTag("explain-" + item.id)) {
-                    Icon(Icons.Outlined.ChatBubbleOutline, stringResource(R.string.edition_explain), Modifier.size(21.dp))
-                }
+                SuggestionAction097(
+                    target = suggestionsTarget,
+                    options = suggestionOptions,
+                    contextLabel = item.title,
+                    language = suggestionLanguage,
+                    connected = suggestionsConnected,
+                    busy = suggestionsBusy,
+                    onConnect = onConnect,
+                    onUse = onUseSuggestion,
+                    onEdit = onEditSuggestion,
+                    testTag = "feed-suggestions-${item.id}",
+                )
                 StoryActions(item, saved, onSave, onHide)
             }
             }
@@ -431,7 +480,15 @@ private fun CompactStory(item: FeedItem, modifier: Modifier, saved: Boolean, onS
 }
 
 @Composable
-internal fun StoryRow(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, onSave: (String) -> Unit, onHide: ((String) -> Unit)?, timestampOverride: String? = null) {
+internal fun StoryRow(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, onSave: (String) -> Unit, onHide: ((String) -> Unit)?, timestampOverride: String? = null,
+    suggestionTarget: SuggestionTargetSnapshot097? = null,
+    suggestionOptions: List<SuggestionOptionSnapshot097> = emptyList(),
+    suggestionLanguage: String = "en",
+    suggestionsConnected: Boolean = true,
+    suggestionsBusy: Boolean = false,
+    onConnect: () -> Unit = {},
+    onUseSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> },
+    onEditSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> }) {
     Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface) {
         Column {
             Surface(onClick = { onItem(item.id) }, color = Color.Transparent, modifier = Modifier.fillMaxWidth().testTag("item-" + item.id)) {
@@ -451,6 +508,18 @@ internal fun StoryRow(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
             Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 8.dp, top = 2.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 StoryCategoryTag(item, Modifier.testTag("category-${item.id}"))
                 Spacer(Modifier.weight(1f))
+                if (suggestionTarget != null) SuggestionAction097(
+                    target = suggestionTarget,
+                    options = suggestionOptions,
+                    contextLabel = item.title,
+                    language = suggestionLanguage,
+                    connected = suggestionsConnected,
+                    busy = suggestionsBusy,
+                    onConnect = onConnect,
+                    onUse = onUseSuggestion,
+                    onEdit = onEditSuggestion,
+                    testTag = "today-suggestions-${item.id}",
+                )
                 StoryActions(item, saved, onSave, onHide)
             }
         }

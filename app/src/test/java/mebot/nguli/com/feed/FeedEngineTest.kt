@@ -5,9 +5,11 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.test.core.app.ApplicationProvider
 import mebot.nguli.com.core.*
+import mebot.nguli.com.feed.auth.ChatGptAuthManager
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.*
+import kotlinx.serialization.json.*
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -308,6 +310,95 @@ class FeedEngineTest {
         assertEquals(3, provider.askCalls.get())
         assertEquals(3, repository.current().requestsToday)
         assertTrue(results.filter { it.isFailure }.all { (it.exceptionOrNull() as? FeedFailure)?.code == "limit_reached" })
+    }
+
+    @Test fun staleSuggestionScopeAtReservationBoundaryConsumesNoRequestAndCallsNoProvider() = runBlocking {
+        val enteredCredential = CompletableDeferred<Unit>()
+        val releaseCredential = CompletableDeferred<Unit>()
+        val auth = object : ChatGptAuthManager(context) {
+            override suspend fun accessToken(id: String): String {
+                enteredCredential.complete(Unit)
+                releaseCredential.await()
+                return "synthetic-access-token"
+            }
+        }
+        val item = article("suggestion-boundary")
+        val thread = AiConversation(id = "suggestion-boundary-thread", moduleId = news.id, itemId = item.id)
+        val confirmed = ContextEntry(id = "boundary-context", text = "A confirmed synthetic topic", scopes = setOf(news.kind))
+        repository.update { it.copy(
+            modules = listOf(news), items = listOf(item), conversations = listOf(thread), context = listOf(confirmed),
+            connection = AiConnection(mode = "chatgpt", model = "fixture-model", accountId = "synthetic-account"),
+            dailyRequestLimit = 20, requestsToday = 0, usageDate = FeedLogic.dateAt(System.currentTimeMillis(), "UTC"),
+            timezone = "UTC",
+        ) }
+        val expectedThread = repository.current().conversations.single()
+        val expectedContext = repository.current().context
+        val guarded = FeedEngine(repository, vault, provider = provider, chatGpt = auth, language = { "en" })
+        val request = async {
+            runCatching {
+                guarded.askConversation(thread.id, "Which item detail should I verify?", {}, expectedCurrent = { latest ->
+                    latest.context == expectedContext && latest.conversations.singleOrNull { it.id == thread.id } == expectedThread &&
+                        latest.items.singleOrNull { it.id == item.id }?.summary == item.summary
+                }, expectedLanguage = "en", onRequestDispatch = {})
+            }
+        }
+        withTimeout(5_000) { enteredCredential.await() } // Initial validation passed; request has not been reserved yet.
+        repository.update { it.copy(context = listOf(confirmed.copy(text = "Changed confirmed topic"))) }
+        releaseCredential.complete(Unit)
+
+        val failure = request.await().exceptionOrNull() as? FeedFailure
+        assertEquals("suggestion_changed", failure?.code)
+        assertEquals("changed scope must be rejected before the budget is reserved", 0, repository.current().requestsToday)
+        assertEquals("stale suggestion must not reach the provider", 0, provider.askCalls.get())
+    }
+
+    @Test fun guardedSuggestionPayloadExcludesUnsentAttachmentBytesAndStoredDraftIsUnchanged() = runBlocking {
+        vault.value = "synthetic-test-credential"
+        val item = article("attachment-guard")
+        val alreadyUsed = AiAttachment(id = "used-attachment", name = "shared.txt", text = "Previously sent context", usedAtMillis = 7L)
+        val pending = AiAttachment(id = "unsent-attachment", name = "private-draft.txt", text = "PRIVATE UNSENT FIXTURE BODY", usedAtMillis = 0L)
+        val thread = AiConversation(id = "attachment-guard-chat", moduleId = news.id, itemId = item.id,
+            turns = listOf(AiTurn(id = "earlier-question", role = "user", text = "Earlier explicit request.")),
+            attachments = listOf(alreadyUsed, pending))
+        repository.update { it.copy(modules = listOf(news), items = listOf(item), conversations = listOf(thread),
+            connection = AiConnection(mode = "direct", model = "fixture-model"), timezone = "UTC",
+            dailyRequestLimit = 20, requestsToday = 0, usageDate = FeedLogic.dateAt(System.currentTimeMillis(), "UTC")) }
+        val requests = mutableListOf<JsonObject>()
+        val transport = object : ChatGptResponses {
+            override suspend fun complete(body: JsonObject, accessToken: String): JsonObject {
+                requests += body
+                return buildJsonObject {
+                    put("status", "completed")
+                    put("output", buildJsonArray { add(buildJsonObject {
+                        put("type", "message"); put("role", "assistant"); put("status", "completed")
+                        put("content", buildJsonArray { add(buildJsonObject { put("type", "output_text"); put("text", "Fixture answer.") }) })
+                    }) })
+                }
+            }
+        }
+        val networkProvider = OpenAiFeedProvider(directStream = transport)
+        var providerState: FeedState? = null
+        var providerThread: AiConversation? = null
+        val provider = object : AiProvider by networkProvider {
+            override suspend fun streamConversation(state: FeedState, item: FeedItem?, conversation: AiConversation,
+                question: String, secret: String, language: String, onText: (String) -> Unit): AiAnswer {
+                providerState = state
+                providerThread = conversation
+                return networkProvider.streamConversation(state, item, conversation, question, secret, language, onText)
+            }
+        }
+        val engine = FeedEngine(repository, vault, provider = provider, language = { "en" })
+        engine.askConversation(thread.id, "Check one source detail.", {}, expectedCurrent = { latest ->
+            latest.conversations.singleOrNull { it.id == thread.id } == thread
+        }, expectedLanguage = "en", excludeUnusedAttachments = true, onRequestDispatch = {})
+
+        val input = Json.parseToJsonElement(requests.single()["input"]!!.jsonArray.single().jsonObject["content"]!!.jsonPrimitive.content).jsonObject
+        assertEquals(listOf("shared.txt"), input["attachments"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content })
+        assertFalse("unsent private text must never reach the serialized provider body", requests.single().toString().contains("PRIVATE UNSENT FIXTURE BODY"))
+        assertEquals(listOf(alreadyUsed), requireNotNull(providerThread).attachments)
+        assertEquals(listOf(alreadyUsed), requireNotNull(providerState).conversations.single().attachments)
+        assertEquals("Provider filtering never mutates the locally preserved draft attachment list",
+            listOf(alreadyUsed, pending), repository.current().conversations.single().attachments)
     }
 
     @Test fun aNewLocalDateResetsUsageBeforeTheNextRequest() = runBlocking {
