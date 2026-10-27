@@ -4,6 +4,7 @@ from pathlib import Path
 from html.parser import HTMLParser
 import json
 import re
+import hashlib
 from datetime import date, datetime, timezone
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,7 +44,7 @@ if published:
         assert r[catalog_field] == integrity[integrity_field], f'Published identity mismatch: {catalog_field}'
 if not published:
     assert r.get('privateCandidate') is True and r.get('localArtifactsVerified') is True
-    assert official['version'] == '0.9.4' and official['status'] == 'published'
+    assert official['version'] == '0.9.5' and official['status'] == 'published'
     assert 'publishedDate' not in r and 'publishedAt' not in r
     assert integrity['publication_status'] == 'pending'
     assert integrity['publication_date'] is None and integrity['published_at'] is None
@@ -61,8 +62,12 @@ for s in screens:
     assert s['alt'] and s['caption'] and s['version']
     assert (DOCS / s['file']).is_file()
     assert 'evidence' not in s['file'], 'Stress evidence must remain outside the normal gallery'
-current_screens = [s for s in screens if s['version'] == r['version']]
-assert current_screens, 'The current version needs at least one explicitly versioned capture'
+candidate_page = f"preview-{r['version'].replace('.', '')}.html"
+visual_release_order = [official, *r.get('releases', [])]
+visual_versions = {s['version'] for s in screens}
+visual_release_version = next((entry['version'] for entry in visual_release_order if entry.get('status')=='published' and entry.get('version') in visual_versions), None)
+assert visual_release_version, 'At least one published version must have labelled app captures'
+current_screens = [s for s in screens if s['version'] == visual_release_version]
 
 class Inspect(HTMLParser):
     def __init__(self):
@@ -82,14 +87,14 @@ class Inspect(HTMLParser):
         if 'data-screen-group' in a:
             self.groups += 1
 
-main_pages = ('index.html', 'screenshots.html', 'download.html', 'releases.html', 'tour.html', 'preview-095.html')
+main_pages = ('index.html', 'screenshots.html', 'download.html', 'releases.html', 'tour.html', candidate_page)
 for name in main_pages:
     text = (DOCS / name).read_text()
     p = Inspect(); p.feed(text)
     assert '/releases/latest' not in text, 'GitHub latest omits prereleases'
     assert '/blob/master/' not in text, 'Wrong branch link'
     assert r['version'] in text
-    if name not in ('screenshots.html', 'tour.html', 'preview-095.html'):
+    if name not in ('screenshots.html', 'tour.html', candidate_page):
         assert p.downloads, f'Missing official download: {name}'
     for a in p.downloads:
         assert a.get('href') == expected_apk and 'hidden' not in a, name
@@ -114,10 +119,12 @@ for name in main_pages:
     if name == 'releases.html':
         assert r['version'] in text and 'What changed in' in text
         assert 'Historical signed · superseded' in text
-        if published and r['version'] == '0.9.5':
+        if published and r['version'] == '0.9.6':
+            assert 'MeBot 0.9.5 is superseded by 0.9.6' in text and 'general chat' in text
+        elif published and r['version'] == '0.9.5':
             assert 'MeBot 0.9.4 is superseded by 0.9.5' in text
         elif not published:
-            assert 'A successful context import could still leave the screen on the import flow' in text
+            assert 'MeBot 0.9.6' in text and 'not offered' in text
 
 readme = (ROOT / 'README.md').read_text()
 start = (ROOT / 'START-HERE.md').read_text()
@@ -130,6 +137,8 @@ if official['version'] == '0.9.4':
     assert 'imported notes' in readme.lower() and 'expired' in readme.lower()
 elif official['version'] == '0.9.5':
     assert 'category label' in readme.lower() and 'story-specific questions' in readme.lower() and 'offline' in readme.lower()
+elif official['version'] == '0.9.6':
+    assert 'correct story conversation' in readme.lower() and 'send only when' in readme.lower()
 assert 'synthetic fixtures' in readme
 assert expected_apk in start and official['tag'] in start
 assert 'imported-notes-en.png' in start and 'synthetic notes' in start
@@ -150,32 +159,106 @@ if published and r['version'] == '0.9.5':
     assert re.findall(r'href="(docs/screenshots/[^"]+)"', gallery)[:3] == ['docs/screenshots/v095/en-feed.png', 'docs/screenshots/v095/sw-feed.png', 'docs/screenshots/v095/en-detail.png']
     assert 'candidate' not in (ROOT/'README.md').read_text().lower()
     assert 'not yet released' not in (ROOT/'START-HERE.md').read_text().lower()
-if not published:
-    candidate_preview = (DOCS / 'preview-095.html').read_text()
-    assert 'not publicly released' in candidate_preview.lower()
-    assert 'does not send' in candidate_preview.lower() or 'not send' in candidate_preview.lower()
-    assert 'fixture provider label' in candidate_preview.lower()
+if published and r['version']=='0.9.6':
+    current_pages = [DOCS / name for name in (*main_pages, 'guide.html', 'guides/feed-and-ai.html')]
+    for page_path in current_pages:
+        page_text=page_path.read_text().lower()
+        for stale in ('not yet publicly released', 'no candidate download', 'in preparation · 0.9.6', 'prepared candidate'):
+            assert stale not in page_text, f'Stale candidate copy in {page_path.name}: {stale}'
+    assert '0.9.5 is superseded by 0.9.6' in (DOCS/'releases.html').read_text()
+    assert 'could land in a general chat' in (DOCS/'releases.html').read_text().lower()
+    assert '0.9.6 · story-conversation update' in (DOCS/candidate_page).read_text().lower()
+    assert 'not yet a public download' not in (DOCS/candidate_page).read_text().lower()
+    assert 'MeBot 0.9.6' in (ROOT/'README.md').read_text()
+    hub = (DOCS/'guide.html').read_text()
+    assert 'New in the current release · 0.9.6' in hub
+    assert 'New in the current release · 0.9.5' not in hub
+    assert 'href="preview-096.html">Read the 0.9.6 story-conversation guide' in hub
+    user_guide = (DOCS/'USER-GUIDE.md').read_text()
+    assert '# MeBot user guide — 0.9.6' in user_guide
+    assert '[Current release notes](RELEASE-0.9.6.md)' in user_guide
+    assert 'MeBot 0.9.6 updates production 0.9.0–0.9.5' in user_guide
+    assert 'the current 0.9.6 release is offered to production installations on 0.9.0–0.9.5' in user_guide
+    assert 'the current 0.9.5 release is offered' not in user_guide
+    assert 'current story-conversation guide](preview-096.html)' in user_guide
+    public_notes = (DOCS/'PUBLIC-RELEASES.md').read_text()
+    assert 'The current 0.9.6 release keeps the `mebot.nguli.com` package and established 0.9.x production certificate, and updates production 0.9.0–0.9.5' in public_notes
+    assert '**0.9.0 through 0.9.6** use package' in public_notes
+    assert 'MeBot 0.9.6 can update production 0.9.0–0.9.5 in place.' in public_notes
+    assert 'MeBot 0.9.5 can update 0.9.0–0.9.4 in place.' not in public_notes
+    historical_095 = (DOCS/'preview-095.html').read_text()
+    historical_095_lower = historical_095.lower()
+    assert 'historical signed release · 2026-10-26' in historical_095_lower
+    assert 'mebot 0.9.5 is superseded by mebot 0.9.6' in historical_095_lower
+    assert 'could land in a general chat instead of that story' in historical_095_lower
+    assert 'view historical 0.9.5 release files' in historical_095_lower
+    assert 'the current official release is mebot 0.9.5' not in historical_095_lower
+    assert 'mebot 0.9.5 is the current official android release' not in historical_095_lower
+    assert 'mebot 0.9.6 is the current official release' in historical_095_lower
+    previous_entry=next(e for e in r['releases'] if e['version']=='0.9.5')
+    assert previous_entry.get('recommendation')=='superseded'
+    assert 'superseded by mebot 0.9.6' in previous_entry['notes'].lower()
+    assert previous_entry['filename']=='mebot-0.9.5.apk' and previous_entry['sourceFilename']=='MeBot-0.9.5-source.zip'
+    assert (DOCS/'releases/v0.9.5.json').is_file()
+    integrity_095=json.loads((DOCS/'releases/v0.9.5.json').read_text())
+    assert integrity_095['version']=='0.9.5' and integrity_095['publication_status']=='published'
+    assert hashlib.sha256((DOCS/'releases/v0.9.5.json').read_bytes()).hexdigest() == '3eb625d5bbd60b89aa1a91d674c6c8625ba380554f8a05daa43028714b4b47be'
+    assert hashlib.sha256((DOCS/'RELEASE-0.9.5.md').read_bytes()).hexdigest() == '19808c5b6c1cf2e8b0ea1ff0242e14799a0a563df31ffeadc9fb7375b08cd7cf'
+    assert visual_release_version=='0.9.5', 'Use the verified 0.9.5 story captures without implying new 0.9.6 UI'
+if r['version']=='0.9.6':
+    assert r['versionCode']==23 and r['applicationId']=='mebot.nguli.com'
+    assert r['sourceCommit']=='b7c85878653321d184377cd4fed6c68502f4cb3b'
+    assert r['sourceTree']=='2cceb13a1c647da3aa1ac6c67b3347a9fb186aef'
+    assert r.get('sourceArchiveOriginalVerifiedCommit')=='0ec24f495dd013b815678dbac24d19b7f5887399'
+    assert r['certificateSha256']=='c665c578ecf64f33541670d94f099ee435db1e55790395ff0339f2bdf231d007'
+if not published and r['version']=='0.9.6':
+    candidate_preview = (DOCS / candidate_page).read_text()
+    assert 'not yet publicly released' in candidate_preview.lower()
+    assert 'send waits until it is ready' in candidate_preview.lower()
+    assert 'rotation or reopening restores the same story conversation' in candidate_preview.lower()
+    assert 'locking stops a pending question' in candidate_preview.lower()
+    assert 'not yet a public download' in candidate_preview.lower()
+    assert 'do not sideload local candidate files' in candidate_preview.lower()
     assert f'/releases/download/v{r["version"]}/' not in candidate_preview
-    assert 'Historical preview.' not in candidate_preview
-    assert 'Get MeBot 0.9.4' in (DOCS / 'index.html').read_text()
-    assert 'Get MeBot 0.9.5' not in (DOCS / 'index.html').read_text()
-    assert 'in-app updates' in candidate_preview.lower()
-    assert 'intentionally scrolled' in candidate_preview.lower()
-    assert 'physical-phone acceptance evidence' in candidate_preview.lower()
-    assert 'not a public download' in (DOCS / 'download.html').read_text().lower()
-    assert 'not offered' in (DOCS / 'releases.html').read_text().lower()
-    assert r['sourceCommit'] in integrity['source_code_commit']
+    assert 'historical mebot 0.9.5' not in candidate_preview.lower()
+    assert official['version']=='0.9.5' and 'Get MeBot 0.9.5' in (DOCS/'index.html').read_text()
+    assert 'Scope warning for 0.9.5' in (DOCS/'index.html').read_text()
+    assert 'general chat' in (DOCS/'download.html').read_text().lower()
+    assert 'MeBot 0.9.5 is superseded by 0.9.6' not in (DOCS/'releases.html').read_text()
+    assert 'Current official' in (DOCS/'releases.html').read_text()
+    assert r['publishedDate'] if 'publishedDate' in r else True
+    assert 'publishedDate' not in r and 'publishedAt' not in r and 'publishedDate' not in integrity
+    assert integrity['publication_status']=='pending'
+    assert integrity['publication_date'] is None and integrity['published_at'] is None
+    assert integrity['public_assets_available'] is False and integrity['in_app_update_available'] is False
+    assert integrity['public_release_assets_verified'] is False
+    assert r.get('publicAssetsAvailable') is False and r.get('inAppUpdateAvailable') is False
+    assert 'pending' in (DOCS/'RELEASE-0.9.6.md').read_text().lower() or 'not yet public' in (DOCS/'RELEASE-0.9.6.md').read_text().lower()
+    assert '2026-' not in (DOCS/'RELEASE-0.9.6.md').read_text()
+    assert r['sourceCommit']==integrity['source_code_commit']
+    assert r['sourceTree']==integrity['source_tree']
+    assert r['sha256']==integrity['apk_sha256'] and r['sizeBytes']==integrity['apk_size_bytes']
+    assert r['sourceSha256']==integrity['source_sha256'] and r['sourceSizeBytes']==integrity['source_size_bytes']
+    assert r['verificationSha256']==integrity['verification_sha256']
+    assert r['releaseNotesSha256']==integrity['release_notes_sha256']
+    assert r['checksumSha256']==integrity['checksums_sha256']
+    assert r['releaseMetadataSha256']==integrity['release_metadata_sha256']
+    assert 'not publicly available yet' in (DOCS/'PUBLIC-RELEASES.md').read_text().lower()
+    assert 'wait for its conversation' in (DOCS/'INSTALL.md').read_text().lower()
     sample_screens = [s for s in screens if s.get('candidatePreview') is True]
-    assert len(sample_screens) == 6
-    assert {Path(s['file']).name for s in sample_screens} == {
-        'en-feed.png', 'sw-feed.png', 'en-detail.png', 'sw-detail.png',
-        'en-mebot-prefilled.png', 'sw-mebot-prefilled.png',
-    }
-    assert all(s.get('sampleFixture') is True and s['version'] == r['version'] and 'captureDate' not in s for s in sample_screens)
+    assert sample_screens == [], 'The published 0.9.5 captures are not 0.9.6 candidate captures'
+    assert all(s['version']==official['version'] for s in current_screens)
     for name in main_pages:
         page_text = (DOCS / name).read_text()
         assert f'/releases/download/v{r["version"]}/' not in page_text, f'{name} links to an unreleased candidate asset'
-    assert 'local question suggestions remain available offline' in (DOCS / 'preview-095.html').read_text().lower()
+    assert '0.9.5 captures show the earlier visual flow' in candidate_preview.lower()
+    assert 'scope warning' in (ROOT/'README.md').read_text().lower()
+elif not published:
+    candidate_preview = (DOCS / candidate_page).read_text()
+    assert 'not yet publicly released' in candidate_preview.lower()
+    assert f'/releases/download/v{r["version"]}/' not in candidate_preview
+    for name in main_pages:
+        assert f'/releases/download/v{r["version"]}/' not in (DOCS/name).read_text(), f'{name} links to an unreleased candidate asset'
 for current in (ROOT/'README.md', ROOT/'START-HERE.md', DOCS/'USER-GUIDE.md'):
     assert 'offline price comparison tool' not in current.read_text().lower()
 

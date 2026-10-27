@@ -1,10 +1,20 @@
 # Public releases and artifact verification
 
-**MeBot 0.9.5 is the recommended current release**, published for package `mebot.nguli.com` and signed with the established 0.9.x production certificate. It updates production 0.9.0–0.9.4 installations in place. MeBot 0.9.4 is superseded but its verified historical release remains available. Versions 0.9.0–0.9.2 had an external-launch defect; 0.9.3 corrected those crashes, and 0.9.4 improved the return after context import. The [release catalog](assets/release.json) and [release directory](releases.html) distinguish signed APK releases from historical source-only checkpoints.
+**MeBot 0.9.6 is the current official release**, published 2026-10-27T03:33:03Z and anonymously asset-verified 2026-10-27T03:34:19.563440Z. It fixes the story-conversation opening, restore and lock/unlock edge case. **Scope warning for superseded 0.9.5:** after opening a story, wait for its conversation to finish opening before sending a question; sending earlier could land in a general chat instead of that story. The fix is available in 0.9.6.
 
-## Current 0.9.5 release
+**MeBot 0.9.5 is a superseded historical signed release**; its original APK, source and integrity record remain unchanged. The current 0.9.6 release keeps the `mebot.nguli.com` package and established 0.9.x production certificate, and updates production 0.9.0–0.9.5 installations in place. MeBot 0.9.4 is superseded but its verified historical release remains available. Versions 0.9.0–0.9.2 had an external-launch defect; 0.9.3 corrected those crashes, and 0.9.4 improved the return after context import. The [release catalog](assets/release.json) and [release directory](releases.html) distinguish signed APK releases from historical source-only checkpoints.
 
-MeBot 0.9.5 was published on 26 October 2026 at 23:35:05 UTC. Stories open in MeBot first; compact category labels and item-grounded questions keep the next step close. Suggested questions are editable and never send automatically. The original source remains available, and local questions work offline.
+## Current official 0.9.6 release
+
+User-facing change: start typing as soon as a story is opened; the draft stays attached to that story while its conversation prepares, and Send waits for the correct conversation to be ready. Rotation/reopening restores the same story; locking stops pending question opening, and unlocking restores the story without sending it. The separate release notes are [experience-first](RELEASE-0.9.6.md). The accompanying technical verification report is a separate release asset and does not claim physical-device, OEM, live-account/provider or overnight acceptance.
+
+Release identity: package `mebot.nguli.com`, version code 23, APK `mebot-0.9.6.apk` (17,580,200 bytes), SHA-256 `61a4c0cc57dcd0482f987184398aa251cddcce0cb57bf8b22565110c64282bcd`. Existing production signer SHA-256 remains `c665c578ecf64f33541670d94f099ee435db1e55790395ff0339f2bdf231d007`. Exact public source identity is commit `b7c85878653321d184377cd4fed6c68502f4cb3b`, tree `2cceb13a1c647da3aa1ac6c67b3347a9fb186aef`; the source archive preserves original verified commit `0ec24f495dd013b815678dbac24d19b7f5887399`. The exact APK, source archive and report hashes are in [site integrity metadata](releases/v0.9.6.json).
+
+Publication timestamp: `2026-10-27T03:33:03Z`. Anonymous public asset verification: `2026-10-27T03:34:19.563440Z` (release ID `424973991`). The 0.9.5 APK, source archive and `releases/v0.9.5.json` remain untouched.
+
+## Historical 0.9.5 release (superseded)
+
+MeBot 0.9.5 was published on 26 October 2026 at 23:35:05 UTC and is superseded by 0.9.6. Its story-first flow, compact category labels and item-grounded editable questions remain available in the historical release. Scope warning: a question sent before the story conversation opens may land in a general chat instead of that story; wait until it is ready, or update to 0.9.6. The original source and signed APK remain unchanged.
 
 The public source is commit `eb6d2a12815cbf68decb2996eed9c1f0e0581e41`, tree `aa67a099156d52cce6677fedf9d01bad36878237`. The signed APK retains package `mebot.nguli.com` and the current production certificate. See the [official release](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.5), [experience-first notes](RELEASE-0.9.5.md), and [integrity record](releases/v0.9.5.json). All public release assets were anonymously downloaded and matched to their verified bytes and digests before the site switch.
 
@@ -68,7 +78,7 @@ apksigner verify --verbose --print-certs MeBot-0.9.2.apk
 
 ## Signing lineages and updates
 
-**0.9.0 through 0.9.5** use package `mebot.nguli.com` and the same production certificate shown above. MeBot 0.9.5 can update 0.9.0–0.9.4 in place. **Do not uninstall or clear data to update.**
+**0.9.0 through 0.9.6** use package `mebot.nguli.com` and the same production certificate shown above. MeBot 0.9.6 can update production 0.9.0–0.9.5 in place. **Do not uninstall or clear data to update.**
 
 Earlier public releases used certificate SHA-256:
 
