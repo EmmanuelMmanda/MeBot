@@ -26,6 +26,9 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
+import java.util.concurrent.atomic.AtomicLong
+
+data class SuggestedConversationDraft(val id: String, val conversationId: String, val text: String)
 
 data class FeedUiState(
     val state: FeedState? = null, val loading: Boolean = true,
@@ -37,6 +40,7 @@ data class FeedUiState(
     val chatGptVerifying: Boolean = false,
     val question: String? = null,
     val activeConversationId: String? = null,
+    val suggestionDraft: SuggestedConversationDraft? = null,
     val contextSaving: Boolean = false,
     val deliverySaving: Boolean = false,
     val moduleSavingId: String? = null,
@@ -81,6 +85,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     private val authStartupError = MutableStateFlow<String?>(null)
     private val browserChannel = Channel<String>(Channel.RENDEZVOUS)
     val browserLaunches = browserChannel.receiveAsFlow()
+    private val suggestionGeneration = AtomicLong(0)
     private val _ui = MutableStateFlow(FeedUiState())
     val ui = _ui.asStateFlow()
     private var refreshJob: Job? = null
@@ -153,7 +158,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     fun clearMessage() { _ui.update { it.copy(error = null, notice = null) } }
     fun clearImportSummary() { _ui.update { it.copy(importSummary = null) } }
     fun clearNotice() { _ui.update { it.copy(notice = null) } }
-    fun clearAnswer() { askGeneration++; askJob?.cancel(); _ui.update { it.copy(asking = false, answer = null, question = null, answerCitations = emptyList()) } }
+    fun clearAnswer() { suggestionGeneration.incrementAndGet(); _ui.update { it.copy(suggestionDraft = null) }; askGeneration++; askJob?.cancel(); _ui.update { it.copy(asking = false, answer = null, question = null, answerCitations = emptyList()) } }
     private fun cancelRefresh() { refreshGeneration++; refreshJob?.cancel(); _ui.update { it.copy(refreshing = false, refreshingModuleId = null) } }
     private fun cancelConnection() { connectGeneration++; connectJob?.cancel(); chatGpt.cancelSignIn(); _ui.update { it.copy(connecting = false, chatGptVerifying = false) } }
     private fun cancelAiWork() { clearAnswer(); cancelDetail(); cancelSearch() }
@@ -409,15 +414,24 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun saveModule(module: FeedModule, sharedContextIds: Set<String>? = null) = changeModule(module.id) { s ->
         FeedLogic.validateModule(module)
+        val priorModule = s.modules.firstOrNull { it.id == module.id }
         if (sharedContextIds != null) require(sharedContextIds.all { id -> s.context.any { it.id == id && it.confirmed && !PersonalProfile085.isGlobal(it) } })
         val context = if (sharedContextIds == null) s.context else s.context.map { entry ->
             if (!entry.confirmed || PersonalProfile085.isGlobal(entry)) entry else entry.copy(scopes = if (entry.id in sharedContextIds) entry.scopes + module.kind else entry.scopes - module.kind)
         }
+        val scopeChanged = context != s.context || priorModule != module
         s.copy(modules = if (s.modules.any { it.id == module.id }) s.modules.map { if (it.id == module.id) module else it } else s.modules + module,
             context = context, lastRefreshMillis = 0,
-            items = if (context == s.context) s.items else s.items.map { if (it.kind == module.kind) it.copy(why = "", relevance = 0) else it })
+            items = if (!scopeChanged) s.items else s.items.map { item ->
+                val contextAffected = context != s.context && item.kind == module.kind
+                val moduleAffected = priorModule != module && item.moduleId == module.id
+                if (contextAffected || moduleAffected) AiSuggestedInteractions095.clear(
+                    if (contextAffected) item.copy(why = "", relevance = 0) else item)
+                else item
+            })
     }
-    fun removeModule(id: String) = changeModule(id) { s -> s.copy(modules = s.modules.filterNot { it.id == id }) }
+    fun removeModule(id: String) = changeModule(id) { s -> s.copy(modules = s.modules.filterNot { it.id == id },
+        items = s.items.map { if (it.moduleId == id) AiSuggestedInteractions095.clear(it) else it }) }
     fun saveContext(name: String, region: String, timezone: String, entries: List<ContextEntry>): Job? {
         if (_ui.value.contextSaving) return null
         _ui.update { it.copy(contextSaving = true, error = null) }
@@ -425,7 +439,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 cancelRefresh(); cancelAiWork(); lastAutomaticAttemptMillis = 0L
                 val saved = repository.update { s -> s.copy(name = name.trim(), region = region.trim(), timezone = timezone.trim(), context = entries,
-                    items = s.items.map { it.copy(why = "", relevance = 0) }, lastAiRefreshMillis = 0, lastRefreshMillis = 0) }
+                    items = s.items.map { AiSuggestedInteractions095.clear(it.copy(why = "", relevance = 0)) }, lastAiRefreshMillis = 0, lastRefreshMillis = 0) }
                 _ui.update { it.copy(state = saved, notice = "saved", error = null) }
             } finally {
                 _ui.update { it.copy(contextSaving = false) }
@@ -512,6 +526,42 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         val thread = existing ?: createConversation(item?.moduleId, itemId)
         _ui.update { it.copy(activeConversationId = thread.id, error = null) }
         if (!question.isNullOrBlank()) sendConversation(question)
+    }
+
+    /** Resolve against current persisted content, then prepare a new scoped draft; never infer here. */
+    fun prepareSuggestion(itemId: String, stableSuggestionId: String, appLanguage: String) = work {
+        clearAnswer()
+        val generation = suggestionGeneration.get()
+        val language = appLanguage.takeIf { it == "sw" } ?: "en"
+        val configuration = android.content.res.Configuration(app.resources.configuration).apply {
+            setLocale(java.util.Locale.forLanguageTag(language))
+        }
+        val localized = app.createConfigurationContext(configuration)
+        var prepared: SuggestedConversationDraft? = null
+        repository.update { state ->
+            if (generation != suggestionGeneration.get()) return@update state
+            val item = state.items.find { it.id == itemId } ?: return@update state
+            val prompt = if (stableSuggestionId.startsWith("local:")) {
+                val resource = localSuggestionPromptResource095(item.kind, stableSuggestionId) ?: return@update state
+                localized.getString(resource, item.title)
+            } else {
+                if (!_ui.value.connected) return@update state
+                AiSuggestedInteractions095.resolve(state, itemId, stableSuggestionId,
+                    System.currentTimeMillis(), language)?.prompt ?: return@update state
+            }
+            if (state.conversations.size >= ConversationLogic.maxConversations) throw FeedFailure("conversation_limit")
+            // A new thread preserves any unsent text in the previous conversation.
+            val thread = AiConversation(moduleId = item.moduleId, itemId = item.id)
+            prepared = SuggestedConversationDraft(java.util.UUID.randomUUID().toString(), thread.id, prompt)
+            state.copy(conversations = state.conversations + thread)
+        }
+        if (generation == suggestionGeneration.get()) prepared?.let { draft ->
+            _ui.update { it.copy(activeConversationId = draft.conversationId, suggestionDraft = draft, error = null) }
+        }
+    }
+
+    fun suggestionDraftApplied(id: String) {
+        _ui.update { if (it.suggestionDraft?.id == id) it.copy(suggestionDraft = null) else it }
     }
 
     private suspend fun appendQuestion(id: String, question: String): AiConversation {
@@ -761,7 +811,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         val saved = repository.update { s -> s.copy(name = imported.name, region = imported.region, timezone = imported.timezone,
             context = imported.entries.map { it.copy(origin = "imported", global = false) },
             modules = ModuleCatalog.mergeCatalog(imported.modules.ifEmpty { s.modules }),
-            items = s.items.map { it.copy(why = "", relevance = 0, aiRelevance = null) },
+            items = s.items.map { AiSuggestedInteractions095.clear(it.copy(why = "", relevance = 0, aiRelevance = null)) },
             briefs = emptyList(), lastAiRefreshMillis = 0, lastRefreshMillis = 0) }
         // Publish the exact DataStore result before the completion signal returns to the editor.
         // The repository collector will converge on the same snapshot; this avoids briefly
@@ -773,7 +823,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         // Commit the data first. A failed store write must not erase a working account.
         // A blank plan account prevents old API credentials being used if cleanup fails.
         repository.update { candidate.copy(notifications = false, personalSeedApplied = true, modules = ModuleCatalog.mergeCatalog(candidate.modules),
-            items = candidate.items.map { it.copy(aiRelevance = null) },
+            items = candidate.items.map { AiSuggestedInteractions095.clear(it.copy(aiRelevance = null)) },
             connection = AiConnection(mode = "chatgpt", model = candidate.connection.model), aiPauseCode = "") }
         apiPresence.definitive(false)
         FeedWorker.cancel(app)
@@ -883,6 +933,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     fun reset(): Job {
         // Invalidate staged objects synchronously; a later confirmation must not resurrect erased data.
         cancelImport()
+        clearAnswer()
         return work {
             cancelRefresh(); cancelConnection(); cancelAiWork()
             withContext(Dispatchers.IO) { engine.clearAllCredentials() }

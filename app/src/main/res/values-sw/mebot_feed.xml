@@ -30,9 +30,12 @@
     <string name="feed_more_updates">Taarifa nyingine</string>
     <string name="feed_read">Soma taarifa</string>
     <string name="feed_open_source">Fungua chanzo</string>
+    <string name="feed_category_technology">Teknolojia</string>
+    <string name="feed_category_ai">AI</string>
     <string name="feed_source">Chanzo</string>
     <string name="feed_sources">Vyanzo</string>
     <string name="feed_why">Kwa nini hii inakuhusu</string>
+    <string name="feed_story_question_title">Swali kuhusu taarifa hii</string>
     <string name="feed_save">Hifadhi taarifa</string>
     <string name="feed_unsave">Ondoa kwenye hifadhi</string>
     <string name="feed_more">Chaguo zaidi</string>
@@ -71,6 +74,7 @@
     <string name="feed_ask_why">Kwa nini inanihusu?</string>
     <string name="feed_ask_next">Ninapaswa kuzingatia nini?</string>
     <string name="feed_ask_explain">Nielezee kwa urahisi</string>
+    <string name="feed_local_prompt_explain">Nieleze “%1$s” kwa lugha rahisi, kwa kutumia chanzo chake.</string>
     <string name="feed_ask_connect">Unganisha AI kuuliza maswali na kubinafsisha taarifa zako.</string>
     <string name="feed_answer">MeBot</string>
     <string name="feed_connect">Unganisha AI</string>

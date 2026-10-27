@@ -30,9 +30,12 @@
     <string name="feed_more_updates">More to know</string>
     <string name="feed_read">Read update</string>
     <string name="feed_open_source">Open source</string>
+    <string name="feed_category_technology">Technology</string>
+    <string name="feed_category_ai">AI</string>
     <string name="feed_source">Source</string>
     <string name="feed_sources">Sources</string>
     <string name="feed_why">Why this matters to you</string>
+    <string name="feed_story_question_title">A question about this story</string>
     <string name="feed_save">Save update</string>
     <string name="feed_unsave">Remove from saved</string>
     <string name="feed_more">More options</string>
@@ -71,6 +74,7 @@
     <string name="feed_ask_why">Why is this relevant?</string>
     <string name="feed_ask_next">What should I consider?</string>
     <string name="feed_ask_explain">Explain this simply</string>
+    <string name="feed_local_prompt_explain">Explain “%1$s” in simple terms, using its source.</string>
     <string name="feed_ask_connect">Connect AI to ask questions and personalize your briefing.</string>
     <string name="feed_answer">MeBot</string>
     <string name="feed_connect">Connect AI</string>
