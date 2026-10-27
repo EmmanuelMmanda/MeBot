@@ -383,7 +383,10 @@ class MeBotFeedJourneyTest {
 
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         waitForTag("detail-screen")
-        compose.onNodeWithTag("detail-source").assertIsDisplayed()
+        // Detail's per-story scroll position is saveable; returning from MeBot
+        // restores the suggestion's lower scroll position, so bring the source
+        // action back into view before asserting it remains available.
+        compose.onNodeWithTag("detail-source").performScrollTo().assertIsDisplayed().assertIsEnabled()
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         waitForTag("feed-screen")
 
