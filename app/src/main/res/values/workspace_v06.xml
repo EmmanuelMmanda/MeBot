@@ -4,6 +4,7 @@
     <string name="workspace_new">New conversation</string>
     <string name="workspace_general">All topics</string>
     <string name="workspace_question">Ask MeBot</string>
+    <string name="workspace_opening">Opening conversation…</string>
     <string name="workspace_attach">Attach a text file (.txt or .md)</string>
     <string name="workspace_remove_attachment">Remove attachment</string>
     <string name="workspace_voice_input">Phone voice input</string>

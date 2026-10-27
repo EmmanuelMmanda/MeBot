@@ -10,6 +10,7 @@ class FeedTestApplication : MeBotApplication() {
     var sourceItems: List<FeedItem> = emptyList()
     var sourceFailure: String? = null
     var answerText = "This test update relates to your approved technical interests."
+    @Volatile var answerCalls = 0
     override val feedSecrets by lazy { TestVault(this) }
     override val feedEngine by lazy {
         FeedEngine(feedRepository, feedSecrets, object : SourceReader {
@@ -22,8 +23,10 @@ class FeedTestApplication : MeBotApplication() {
                 if (secret == "invalid-test-credential") throw FeedFailure("unauthorized")
             }
             override suspend fun feed(state: FeedState, module: FeedModule, secret: String, language: String) = emptyList<FeedItem>()
-            override suspend fun ask(state: FeedState, item: FeedItem?, question: String, secret: String, language: String) =
-                AiAnswer(answerText, item?.citations.orEmpty())
+            override suspend fun ask(state: FeedState, item: FeedItem?, question: String, secret: String, language: String): AiAnswer {
+                answerCalls++
+                return AiAnswer(answerText, item?.citations.orEmpty())
+            }
         }, language = { repository.current().settings.language })
     }
 }

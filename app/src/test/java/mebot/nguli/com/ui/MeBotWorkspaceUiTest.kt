@@ -170,6 +170,27 @@ class MeBotWorkspaceUiTest {
         assertTrue("Static starter chips must remain editable", questions.isEmpty())
     }
 
+    @Test fun openingConversationKeepsDraftEditableAndDisablesSendUntilReady() {
+        val pending = AiConversation(id = "pending-story-thread", moduleId = "technology", itemId = story.id)
+        ui.value = ui.value.copy(activeConversationId = null, conversationOpening = true, conversationReady = false,
+            state = state.copy(conversations = listOf(pending)))
+        show()
+
+        compose.onNodeWithTag("workspace-opening").assertTextEquals(text(R.string.workspace_opening))
+        compose.onNodeWithTag("workspace-question").performTextInput("What should I check first?")
+        compose.onNodeWithTag("workspace-question").assertTextContains("What should I check first?")
+        compose.onNodeWithTag("workspace-send").assertIsNotEnabled()
+        compose.onNodeWithTag("workspace-attach").assertIsNotEnabled()
+        assertTrue("Typing while a scoped conversation opens must not call send", questions.isEmpty())
+
+        ui.value = ui.value.copy(activeConversationId = pending.id, conversationOpening = false, conversationReady = true)
+        compose.waitForIdle()
+        compose.onNodeWithTag("workspace-opening").assertDoesNotExist()
+        compose.onNodeWithTag("workspace-question").assertTextContains("What should I check first?")
+        compose.onNodeWithTag("workspace-send").assertIsEnabled().performClick()
+        assertEquals(listOf("What should I check first?"), questions)
+    }
+
     @Test fun suggestionDraftUsesItsNewThreadAndKeepsThePreviousUnsentDraft() {
         ui.value = ui.value.copy(activeConversationId = null, state = state.copy(conversations = emptyList()))
         show()
