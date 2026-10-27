@@ -248,16 +248,49 @@ class MeBotFeedJourneyTest {
         waitForState { it.briefs.any { brief -> brief.itemId == "toolkit" } }
         compose.onNodeWithTag("detail-brief-answer").performScrollTo().assertTextEquals(app.answerText)
         assertEquals(requestsBeforeQuestion + 1, state().requestsToday)
+        val feedViewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[mebot.nguli.com.feed.FeedViewModel::class.java]
+        assertSame("Saved-state factory keeps the Activity's production Application", app, feedViewModel.getApplication())
         compose.onNodeWithTag("detail-ask").performScrollTo().performClick()
         waitForTag("workspace-question")
         compose.onNodeWithTag("workspace-send").assertIsNotEnabled()
+        try {
+            compose.waitUntil(15_000) {
+                // waitUntil advances the Compose test clock but does not drain Robolectric's paused
+                // Android main looper; the open coroutine returns from DataStore on that looper.
+                compose.waitForIdle()
+                val latest = feedViewModel.ui.value
+                !latest.conversationOpening && latest.conversationReady && latest.state?.conversations
+                    ?.find { it.id == latest.activeConversationId }?.itemId == "toolkit"
+            }
+        } catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
+            val latest = feedViewModel.ui.value
+            val persistedThreads = runBlocking { app.feedRepository.current().conversations.map { thread ->
+                "${thread.id}:${thread.moduleId}/${thread.itemId}:${thread.turns.map { it.role }}"
+            } }
+            val renderedStory = compose.onAllNodesWithText(stories().first().title).fetchSemanticsNodes().isNotEmpty()
+            val renderedOpening = compose.onAllNodesWithTag("workspace-opening").fetchSemanticsNodes().isNotEmpty()
+            throw AssertionError("Scoped-open readiness timed out; active=${latest.activeConversationId}, " +
+                "opening=${latest.conversationOpening}, ready=${latest.conversationReady}, error=${latest.error}, " +
+                "renderedStory=${renderedStory}, renderedOpening=${renderedOpening}, persistedThreads=${persistedThreads}", timeout)
+        }
+        val selectedThreadId = feedViewModel.ui.value.activeConversationId
         compose.onNodeWithTag("workspace-question").performTextInput("How could I use this in a small project?")
         compose.activityRule.scenario.recreate()
         waitForTag("workspace-question")
         compose.onNodeWithTag("workspace-question").assertTextContains("How could I use this in a small project?")
-        compose.onNodeWithTag("workspace-send").performClick()
+        val restoredFeedViewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[mebot.nguli.com.feed.FeedViewModel::class.java]
+        assertSame("Activity recreation must retain Application identity", app, restoredFeedViewModel.getApplication())
+        compose.waitUntil(15_000) {
+            val latest = restoredFeedViewModel.ui.value
+            latest.activeConversationId == selectedThreadId && latest.conversationReady && !latest.conversationOpening
+        }
+        compose.onNodeWithTag("workspace-opening").assertDoesNotExist()
+        compose.onNodeWithTag("workspace-send").assertIsEnabled().performClick()
         waitForState { it.conversations.any { thread -> thread.itemId == "toolkit" && thread.turns.lastOrNull()?.role == "assistant" } }
         val conversation = state().conversations.single { it.itemId == "toolkit" }
+        assertEquals("The same selected thread survives a normal Activity recreation", selectedThreadId, conversation.id)
+        assertEquals(1, state().conversations.size)
+        assertTrue(state().conversations.none { it.itemId == null })
         assertEquals("news", conversation.moduleId)
         assertEquals(listOf("user", "assistant"), conversation.turns.map { it.role })
         assertEquals("How could I use this in a small project?", conversation.turns.first().text)
