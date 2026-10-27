@@ -255,6 +255,9 @@ class MeBotFeedJourneyTest {
         compose.onNodeWithTag("workspace-send").assertIsNotEnabled()
         try {
             compose.waitUntil(15_000) {
+                // waitUntil advances the Compose test clock but does not drain Robolectric's paused
+                // Android main looper; the open coroutine returns from DataStore on that looper.
+                compose.waitForIdle()
                 val latest = feedViewModel.ui.value
                 !latest.conversationOpening && latest.conversationReady && latest.state?.conversations
                     ?.find { it.id == latest.activeConversationId }?.itemId == "toolkit"
