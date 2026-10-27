@@ -12,6 +12,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -37,6 +38,7 @@ class SuggestionActions097ViewModelTest {
     private lateinit var app: ChatGptJourneyApplication
     private lateinit var stores: ViewModelStore
     private lateinit var vm: FeedViewModel
+    private lateinit var mainTestDispatcher: TestDispatcher
 
     private val module = FeedModule(id = "tech", kind = "technology", title = "Technology",
         query = "public technology pilot", sources = listOf(
@@ -48,7 +50,8 @@ class SuggestionActions097ViewModelTest {
         prompt = "Which publication date does this source show?")
 
     @Before fun setUp(): Unit = runBlocking {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
+        mainTestDispatcher = UnconfinedTestDispatcher()
+        Dispatchers.setMain(mainTestDispatcher)
         app = ApplicationProvider.getApplicationContext()
         app.chatGptAuth.clearAll()
         app.chatGptAuth.restoreSavedAccount()
@@ -246,6 +249,8 @@ class SuggestionActions097ViewModelTest {
     }
 
     @Test fun navigationWhileSendWaitsForProviderSlotRollsBackUnsentTurnAndThread() = runBlocking {
+        val rollbackTrace = java.util.concurrent.CopyOnWriteArrayList<SuggestionRollbackTrace097>()
+        vm.suggestionRollbackTraceForTest = rollbackTrace::add
         val releases = List(2) { CompletableDeferred<Unit>() }
         val entered = List(2) { CompletableDeferred<Unit>() }
         val blockers = releases.indices.map { index ->
@@ -287,14 +292,20 @@ class SuggestionActions097ViewModelTest {
             try {
                 withTimeout(10_000) { app.feedRepository.state.first { it.conversations.isEmpty() } }
             } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
-                val stateAtTimeout = kotlinx.coroutines.withTimeoutOrNull(1_000) { app.feedRepository.current() }
-                val current = stateAtTimeout?.conversations?.singleOrNull { it.id == rollbackThreadId }
+                val beforeDrive = boundedFeedSnapshot()
+                val current = beforeDrive?.conversations?.singleOrNull { it.id == rollbackThreadId }
+                val beforeDriveTrace = rollbackTrace.takeLast(8).joinToString()
+                mainTestDispatcher.scheduler.runCurrent()
+                val afterDrive = boundedFeedSnapshot()
                 throw AssertionError("rollback timeout: id=$rollbackThreadId, epoch=$rollbackEpoch, selectionGeneration=$selectionGeneration, " +
                     "originalId=${rollbackOriginal!!.id}, appendedId=${rollbackAppended!!.id}, originalTurns=${rollbackOriginal.turns.size}, " +
                     "appendedTurns=${rollbackAppended!!.turns.size}, currentId=${current?.id}, currentTurns=${current?.turns?.size}, " +
                     "currentMatchesAppended=${current == rollbackAppended}, askCancelled=${queuedAskJob.isCancelled}, " +
-                    "requestsToday=${stateAtTimeout?.requestsToday ?: "unavailable"}", timeout)
+                    "requestsToday=${beforeDrive?.requestsToday ?: "unavailable"}, conversations=${beforeDrive?.conversations?.joinToString { "${it.id}:${it.turns.size}:${it.attachments.size}" } ?: "unavailable"}, " +
+                    "traceBeforeRunCurrent=$beforeDriveTrace, stateBeforeRunCurrent=${summarizeFeedSnapshot(beforeDrive, rollbackThreadId)}, " +
+                    "stateAfterRunCurrent=${summarizeFeedSnapshot(afterDrive, rollbackThreadId)}, traceAfterRunCurrent=${rollbackTrace.takeLast(8).joinToString()}", timeout)
             }
+            println("new-thread rollback trace: ${rollbackTrace.takeLast(8).joinToString()}")
             assertTrue(app.askedQuestions.isEmpty())
         } finally {
             releases.forEach { it.complete(Unit) }
@@ -304,6 +315,8 @@ class SuggestionActions097ViewModelTest {
     }
 
     @Test fun navigationWhileSendWaitsForProviderSlotRestoresExistingChatHistory() = runBlocking {
+        val rollbackTrace = java.util.concurrent.CopyOnWriteArrayList<SuggestionRollbackTrace097>()
+        vm.suggestionRollbackTraceForTest = rollbackTrace::add
         val item = app.feedRepository.current().items.single()
         val originalThread = AiConversation(id = "existing-chat-097", moduleId = module.id, itemId = item.id,
             turns = listOf(AiTurn(id = "old-user", role = "user", text = "Compare the source's stated costs.")))
@@ -334,11 +347,35 @@ class SuggestionActions097ViewModelTest {
                         state.conversations.singleOrNull()?.turns?.lastOrNull()?.text == option.displayText
                 }
             }
+            val queuedAskJob = privateField("suggestionAskJob") as? kotlinx.coroutines.Job
+            val rollbackOriginal = privateField("pendingSuggestionOriginalThread") as? AiConversation
+            val rollbackAppended = privateField("pendingSuggestionAppendedThread") as? AiConversation
+            val rollbackEpoch = privateField("suggestionRollbackEpoch")
+            val selectionGeneration = privateField("conversationSelectionGeneration")
+            assertNotNull("existing-chat send must own a queued ask job", queuedAskJob)
+            assertEquals(originalThread.id, rollbackOriginal?.id)
+            assertEquals(originalThread.id, rollbackAppended?.id)
             vm.cancelConversationOpen()
+            assertTrue("navigation must cancel the captured existing-chat ask job", queuedAskJob!!.isCancelled)
             send.join()
-            withTimeout(10_000) {
-                app.feedRepository.state.first { it.conversations.singleOrNull() == originalThread }
+            try {
+                withTimeout(10_000) { app.feedRepository.state.first { it.conversations.singleOrNull() == originalThread } }
+            } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
+                val beforeDrive = boundedFeedSnapshot()
+                val current = beforeDrive?.conversations?.singleOrNull { it.id == originalThread.id }
+                val beforeDriveTrace = rollbackTrace.takeLast(8).joinToString()
+                mainTestDispatcher.scheduler.runCurrent()
+                val afterDrive = boundedFeedSnapshot()
+                throw AssertionError("existing-chat rollback timeout: epoch=$rollbackEpoch, selectionGeneration=$selectionGeneration, " +
+                    "originalId=${rollbackOriginal?.id}, appendedId=${rollbackAppended?.id}, originalTurns=${rollbackOriginal?.turns?.size}, " +
+                    "appendedTurns=${rollbackAppended?.turns?.size}, persistedOriginalId=${originalThread.id}, " +
+                    "currentId=${current?.id}, currentTurns=${current?.turns?.size}, currentMatchesOriginal=${current == originalThread}, " +
+                    "currentMatchesAppended=${current == rollbackAppended}, askCancelled=${queuedAskJob.isCancelled}, " +
+                    "requestsToday=${beforeDrive?.requestsToday ?: "unavailable"}, conversations=${beforeDrive?.conversations?.joinToString { "${it.id}:${it.turns.size}:${it.attachments.size}" } ?: "unavailable"}, " +
+                    "traceBeforeRunCurrent=$beforeDriveTrace, stateBeforeRunCurrent=${summarizeFeedSnapshot(beforeDrive, originalThread.id)}, " +
+                    "stateAfterRunCurrent=${summarizeFeedSnapshot(afterDrive, originalThread.id)}, traceAfterRunCurrent=${rollbackTrace.takeLast(8).joinToString()}", timeout)
             }
+            println("existing-chat rollback trace: ${rollbackTrace.takeLast(8).joinToString()}")
             assertTrue(app.askedQuestions.isEmpty())
         } finally {
             releases.forEach { it.complete(Unit) }
@@ -486,6 +523,16 @@ class SuggestionActions097ViewModelTest {
 
     private fun privateField(name: String): Any? = FeedViewModel::class.java.getDeclaredField(name)
         .apply { isAccessible = true }.get(vm)
+
+    private suspend fun boundedFeedSnapshot(): FeedState? =
+        kotlinx.coroutines.withTimeoutOrNull(1_000) { app.feedRepository.current() }
+
+    private fun summarizeFeedSnapshot(state: FeedState?, targetId: String?): String {
+        if (state == null) return "unavailable"
+        val target = state.conversations.singleOrNull { it.id == targetId }
+        return "requests=${state.requestsToday}, target=${target?.id}:${target?.turns?.size}:${target?.attachments?.size}, " +
+            "conversations=${state.conversations.take(ConversationLogic.maxConversations).joinToString { "${it.id}:${it.turns.size}:${it.attachments.size}" }}"
+    }
 }
 
 /** App lock controller with deterministic storage/clock for the post-semaphore lock race test. */

@@ -47,6 +47,22 @@ private data class SuggestionRollback097(
     val epoch: Long,
 )
 
+/** Bounded unit-test trace for suggestion cleanup; never includes prompt/turn text. */
+internal data class SuggestionRollbackTrace097(
+    val phase: String,
+    val threadId: String?,
+    val epochMatches: Boolean?,
+    val selectionGenerationMatches: Boolean?,
+    val originalThreadId: String?,
+    val appendedThreadId: String?,
+    val currentThreadId: String?,
+    val currentTurnCount: Int?,
+    val currentMatchesOriginal: Boolean?,
+    val currentMatchesAppended: Boolean?,
+    val conversations: List<String>,
+    val restoreApplied: Boolean? = null,
+)
+
 data class FeedUiState(
     val state: FeedState? = null, val loading: Boolean = true,
     val refreshing: Boolean = false, val refreshingModuleId: String? = null, val connecting: Boolean = false,
@@ -131,6 +147,8 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     private var pendingSuggestionAppendedThread: AiConversation? = null
     /** Fences delayed suggestion cleanup from restoring/deleting rows after backup/reset replacement. */
     @Volatile private var suggestionRollbackEpoch = 0L
+    /** Optional unit-test observer; production leaves null. Trace contains IDs/counts only. */
+    internal var suggestionRollbackTraceForTest: ((SuggestionRollbackTrace097) -> Unit)? = null
     private var lastSuggestionSendKey: String? = null
     private var lastSuggestionSendAtElapsed: Long = 0L
     private var connectJob: Job? = null
@@ -1090,26 +1108,57 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         }
         if (!cancelled) return
         _ui.update { it.copy(suggestionWorking = false) }
+        val rollback = SuggestionRollback097(cancelledThreadId, originalThread, appendedThread,
+            selectionToRestore, rollbackEpochAtCancel)
+        traceSuggestionRollback097("scheduled", rollback, selectionGenerationAtCancel)
         viewModelScope.launch {
-            val updated = repository.update { state ->
-                var conversations = state.conversations
-                val id = cancelledThreadId
-                val original = originalThread
-                val appended = appendedThread
-                if (rollbackBeforeDispatch && rollbackEpochAtCancel == suggestionRollbackEpoch && original != null && appended != null &&
-                    conversations.singleOrNull { it.id == original.id } == appended) {
-                    conversations = conversations.map { if (it.id == original.id) original else it }
+            traceSuggestionRollback097("entered", rollback, selectionGenerationAtCancel)
+            var restoredOriginal = false
+            var removedNewThread = false
+            try {
+                val updated = repository.update { state ->
+                    var conversations = state.conversations
+                    val id = cancelledThreadId
+                    val original = originalThread
+                    val appended = appendedThread
+                    val epochMatches = rollbackEpochAtCancel == suggestionRollbackEpoch
+                    if (rollbackBeforeDispatch && epochMatches && original != null && appended != null &&
+                        conversations.singleOrNull { it.id == original.id } == appended) {
+                        conversations = conversations.map { if (it.id == original.id) original else it }
+                        restoredOriginal = true
+                    }
+                    if (rollbackBeforeDispatch && epochMatches && id != null) {
+                        val pending = conversations.singleOrNull { it.id == id }
+                        if (pending != null && pending.turns.isEmpty() && pending.attachments.isEmpty()) {
+                            conversations = conversations.filterNot { it.id == id }
+                            removedNewThread = true
+                        }
+                    }
+                    traceSuggestionRollback097("transform", rollback, selectionGenerationAtCancel,
+                        state = state, restoreApplied = restoredOriginal || removedNewThread)
+                    if (conversations != state.conversations) state.copy(conversations = conversations) else state
                 }
-                if (rollbackBeforeDispatch && rollbackEpochAtCancel == suggestionRollbackEpoch && id != null) {
-                    val pending = conversations.singleOrNull { it.id == id }
-                    if (pending != null && pending.turns.isEmpty() && pending.attachments.isEmpty())
-                        conversations = conversations.filterNot { it.id == id }
+                traceSuggestionRollback097("committed", rollback, selectionGenerationAtCancel, updated,
+                    restoreApplied = restoredOriginal || removedNewThread)
+                val mayRestoreSelection = rollbackBeforeDispatch && rollbackEpochAtCancel == suggestionRollbackEpoch &&
+                    conversationSelectionGeneration == selectionGenerationAtCancel
+                var selectionRestored = false
+                if (mayRestoreSelection) selectionToRestore?.let {
+                    restoreSuggestionSelection(it, updated)
+                    selectionRestored = true
                 }
-                if (conversations != state.conversations) state.copy(conversations = conversations) else state
+                traceSuggestionRollback097(if (selectionRestored) "finished-restored" else "finished-skipped",
+                    rollback, selectionGenerationAtCancel, updated,
+                    restoreApplied = restoredOriginal || removedNewThread || selectionRestored)
+            } catch (cancelled: CancellationException) {
+                traceSuggestionRollback097("cleanup-cancelled", rollback, selectionGenerationAtCancel,
+                    restoreApplied = restoredOriginal || removedNewThread)
+                throw cancelled
+            } catch (failure: Exception) {
+                traceSuggestionRollback097("cleanup-failed:${failure::class.simpleName}", rollback,
+                    selectionGenerationAtCancel, restoreApplied = restoredOriginal || removedNewThread)
+                throw failure
             }
-            if (rollbackBeforeDispatch && rollbackEpochAtCancel == suggestionRollbackEpoch &&
-                conversationSelectionGeneration == selectionGenerationAtCancel)
-                selectionToRestore?.let { restoreSuggestionSelection(it, updated) }
         }
     }
 
@@ -1133,6 +1182,36 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                     conversationReady = false, error = it.error ?: "invalid_input") }
             }
         }
+    }
+
+    private fun traceSuggestionRollback097(
+        phase: String,
+        rollback: SuggestionRollback097,
+        expectedSelectionGeneration: Long?,
+        state: FeedState? = null,
+        restoreApplied: Boolean? = null,
+    ) {
+        val observer = suggestionRollbackTraceForTest ?: return
+        val targetId = rollback.createdThreadId ?: rollback.originalThread?.id
+        val current = targetId?.let { id -> state?.conversations?.singleOrNull { it.id == id } }
+        val trace = SuggestionRollbackTrace097(
+            phase = phase,
+            threadId = targetId,
+            epochMatches = rollback.epoch == suggestionRollbackEpoch,
+            selectionGenerationMatches = expectedSelectionGeneration?.let { it == conversationSelectionGeneration },
+            originalThreadId = rollback.originalThread?.id,
+            appendedThreadId = rollback.appendedThread?.id,
+            currentThreadId = current?.id,
+            currentTurnCount = current?.turns?.size,
+            currentMatchesOriginal = rollback.originalThread?.let { current == it },
+            currentMatchesAppended = rollback.appendedThread?.let { current == it },
+            conversations = state?.conversations.orEmpty().take(ConversationLogic.maxConversations).map {
+                "${it.id}:${it.turns.size}:${it.attachments.size}"
+            },
+            restoreApplied = restoreApplied,
+        )
+        // Test-only observer must never alter rollback semantics.
+        runCatching { observer(trace) }
     }
 
     /** Primary next-step action: re-resolve the displayed ID and immediately send exactly once. */
