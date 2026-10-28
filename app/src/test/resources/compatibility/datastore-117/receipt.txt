@@ -1,0 +1,4 @@
+writer=androidx.datastore:datastore:1.1.7
+fixture=synthetic FeedState + AppState only; no owner data or credentials
+feed_sha256=8dafa7a8c420340a64705a5b94356f32ba9fb0132c3c85c9fe159ff455adfabb
+app_state_sha256=e97525c1969bde8cbf9f57d0297d1d499aa26869cf97fd2178e85e7f82da0407

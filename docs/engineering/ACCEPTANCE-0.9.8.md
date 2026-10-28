@@ -30,7 +30,11 @@ Hosted qualification exposed intermittent cold-flow observation timeouts despite
 
 An Apache-attributed adaptation of the upstream serializer-barrier regression receives the initial value but misses the committed update on 1.1.7; the identical regression passes on stable DataStore 1.3.0. The dependency correction is narrow: no storage schema, migration, application API or permission change. The diagnostic-only reflection trace and targeted CI workflow are excluded from this release source. This establishes the dependency defect and fix; it does not retrospectively prove every earlier UI/PDF synchronization failure had that cause.
 
-Full local and hosted gates, rebuilt unsigned identity, same-key signing and anonymous updater verification are required again for these changed runtime bytes. Earlier APK hashes above identify historical checkpoints, not this corrected build. Stable release provenance: [official DataStore release notes](https://developer.android.com/jetpack/androidx/releases/datastore#1.3.0).
+The corrected runtime passed 759 Android and 245 core tests plus debug/release lint and assembly. Debug lint reported 276 warnings and 2 hints; release lint reported 277 warnings and 3 hints, with no errors. Resolved dependencies are DataStore 1.3.0, coroutines 1.10.2 and Kotlin stdlib 2.2.21. App minimum API remains 26; DataStore minimum API is 24. All four packaged native ABIs have 16 KiB ELF LOAD alignment and APK ZIP alignment passes.
+
+Actual DataStore 1.1.7 FeedRepository/AppRepository writers produced the checked-in synthetic compatibility fixtures and closed their scopes. The 1.3.0 reader regression verified exact fixture hashes, preserved feed/context/Read/conversation and language/theme/settings data, then updated, closed and reopened both stores without losing the checked values. Writer and reader focused tests passed. The final full suite including this additional compatibility regression and hosted gates remain required.
+
+Corrected unsigned APK checkpoint: SHA-256 `5878ea579f070aee46b855225fb34ffe815b166bb6125accfea5fc9b4dd9705a`, 17,731,844 bytes. Same-key signing and anonymous updater verification are required again for these changed runtime bytes. Earlier APK hashes above identify historical checkpoints, not this corrected build. Stable release provenance: [official DataStore release notes](https://developer.android.com/jetpack/androidx/releases/datastore#1.3.0).
 
 ## Remaining gates
 
