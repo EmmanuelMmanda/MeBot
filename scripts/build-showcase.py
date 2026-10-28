@@ -1,364 +1,158 @@
 #!/usr/bin/env python3
-"""Render MeBot's static product surface from reviewed release data and captures.
-No external requests; download links and image originals work without JavaScript.
-"""
+"""Render current MeBot presentation; release records and dated archives are inputs only."""
 from pathlib import Path
 from html import escape as esc
-import json,re,struct
-ROOT=Path(__file__).resolve().parents[1];DOCS=ROOT/'docs'
-REPO='https://github.com/EmmanuelMmanda/MeBot';SITE='https://emmanuelmmanda.github.io/MeBot/'
-r=json.loads((DOCS/'assets/release.json').read_text());v=r['version'];tag=r['tag']
-assert r['status'] in ('published','pending') and tag=='v'+v and re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9.]+)?',v)
-published=r['status']=='published'
-if published:
- assert r['filename'] and r['sha256'] and r['sourceCommit'] and r['sizeBytes']
-official=r if published else next(x for x in r['releases'] if x.get('status')=='published' and x.get('apk') is True)
-candidate_preview=not published and r.get('privateCandidate') is True
-published_versions={x['version'] for x in r.get('releases',[]) if x.get('status')=='published'}
-site_footer_version=v if published else official['version']
-candidate_preview_page=f'preview-{v.replace(".","")}.html'
-base=f'{REPO}/releases/download/{official["tag"]}/';apk=base+official['filename'];notes=f'{REPO}/releases/tag/{official["tag"]}'
-source=base+official['sourceFilename'];verification=base+official['verificationFilename'];checksums=base+official.get('checksumFilename','SHA256SUMS.txt')
-size=f"{official['sizeBytes']/1000000:.1f} MB";candidate_notes=f'RELEASE-{v}.md'
+import json, re, struct
+ROOT=Path(__file__).resolve().parents[1]; DOCS=ROOT/'docs'
+REPO='https://github.com/EmmanuelMmanda/MeBot'; SITE='https://emmanuelmmanda.github.io/MeBot/'
+r=json.loads((DOCS/'assets/release.json').read_text()); v=r['version']; pending=r['status']!='published'
+official=r if not pending else next(x for x in r['releases'] if x.get('status')=='published' and x.get('apk') is True)
+base=f'{REPO}/releases/download/{official["tag"]}/'; apk=base+official['filename']; release_url=f'{REPO}/releases/tag/{official["tag"]}'
+preview=f'preview-{v.replace(".","")}.html'; size=f'{official["sizeBytes"]/1000000:.1f} MB'
 screens=json.loads((DOCS/'assets/screens.json').read_text())
-visible_release_order=[official,*r.get('releases',[])]
-available_screen_versions={screen['version'] for screen in screens}
-visual_release_version=next((entry['version'] for entry in visible_release_order if entry.get('status')=='published' and entry.get('version') in available_screen_versions),next(iter(available_screen_versions)))
+assert len(screens)>=5 and {s.get('locale') for s in screens}>={'en','sw'}, 'Reviewed bilingual capture set required before rendering'
 for s in screens:
- p=(DOCS/s['file']).resolve();assert p.is_relative_to(DOCS.resolve()) and p.is_file()
- raw=p.read_bytes();assert raw[:8]==b'\x89PNG\r\n\x1a\n';s['width'],s['height']=struct.unpack('>II',raw[16:24])
-by={Path(s['file']).stem:s for s in screens}
-shell=(DOCS/'index.html').read_text();footer=shell[shell.index('<footer'):]
-footer=re.sub(r'MeBot 0\.[0-9.]+(?:-beta\.[0-9]+)? ·',f'MeBot {site_footer_version} ·',footer)
-footer=footer.replace('Native screens with example content','Native Android host captures with dated public stories and labelled synthetic examples. No live personal accounts or physical-phone capture is implied.').replace('Dated public content · native captures','Native Android host captures with dated public stories and labelled synthetic examples. No live personal accounts or physical-phone capture is implied.').replace('Dated public stories · labelled synthetic examples · native captures','Native Android host captures with dated public stories and labelled synthetic examples. No live personal accounts or physical-phone capture is implied.')
-shell=re.sub(r'<aside class="wrap release-hold">.*?</aside>', '', shell, flags=re.S)
-shell=re.sub(r'<!-- preview-[0-9]+:start -->.*?<!-- preview-[0-9]+:end -->', '', shell, flags=re.S)
-header=shell[shell.index('<a class="skip-link"'):shell.index('<main')].replace(' aria-current="page"','')
+    assert s['file'].startswith('screenshots/v098-showcase/'), 'Current imagery must come from the reviewed fresh showcase'
+    p=(DOCS/s['file']).resolve(); assert p.is_relative_to(DOCS.resolve()) and p.is_file(), p
+    raw=p.read_bytes(); assert raw[:8]==b'\x89PNG\r\n\x1a\n'; s['width'],s['height']=struct.unpack('>II',raw[16:24])
+    assert (s.get('sourceUrls') or s['group']=='appearance') and s.get('locale') and s.get('theme'), 'Capture provenance, locale and theme required'
+shell=(DOCS/'index.html').read_text()
+header=shell[shell.index('<a class="skip-link"'):shell.index('<main')]
+header=re.sub(r'<aside class="[^"]*release-hold[^"]*".*?</aside>','',header,flags=re.S).replace(' aria-current="page"','')
+header=re.sub(r'Official 0\.\d+\.\d+',f'Published {official["version"]}',header)
+footer=shell[shell.index('<footer'):]
+footer=re.sub(r'MeBot 0\.[0-9.]+(?:-beta\.[0-9]+)?(?: preview)? ·',f'MeBot {v} preview ·' if pending else f'MeBot {v} ·',footer)
+footer=re.sub(r'Native Android host captures.*?(?= · <a href=|</span>)','Native Android host renders with source-verified public examples. Not live accounts or physical-phone acceptance evidence.',footer)
+footer=re.sub(r'<p class="image-note">.*?</p>','<p class="image-note">Native Android host render. Public source examples keep their dates; no live account or physical-phone capture is implied. <a id="image-original">Open original image</a></p>',footer,flags=re.S)
+notice=(f'<aside class="wrap release-hold beta-note"><strong>MeBot {v} preview — not yet a public download.</strong> The published {official["version"]} APK does not include this corrected five-question and Original Read experience. <a href="download.html">Check release availability →</a></aside>' if pending else '')
+provenance='Native Android host renders of the 0.9.8 debug preview build using a static editorial fixture built from source-verified public facts; no live feed refresh is shown. Sources were checked on 28 October 2026; a checked date is not a publication date. These are not live provider responses, personal accounts or physical-device acceptance evidence.'
+identity='Install an eligible update over your existing production 0.9.x app. Do not uninstall or clear data. Older separately installed builds have different package or signing identities; see the installation guide before replacing them.'
+experience='Open Suggestions when you want another angle. Explicit generation prepares five distinct questions with your connected AI. Send asks the selected question; the pencil lets you edit first. Opening or closing the sheet never sends a question. Without AI, questions are unavailable, while public reading and saved items remain usable.'
+reads='Original Reads are clearly labelled AI-authored, with Created dates rather than publisher dates. Read the complete sections, inspect evidence, and explore optional further reading separately. Today keeps your personal selection distinct from verified source-day stories; an undated source is not relabelled as published today.'
+def shot(s,hero=False):
+    label=f'{s["version"]} debug host capture · {s["locale"]} · {s["theme"]}'
+    links=' · '.join(f'<a href="{esc(u,quote=True)}">Source {i+1}</a>' for i,u in enumerate(s['sourceUrls']))
+    return f'<figure class="shot" data-screen-group="{esc(s["group"])}"><a href="{s["file"]}" data-lightbox data-title="{esc(s["title"],quote=True)}" aria-label="Enlarge: {esc(s["title"],quote=True)}"><img src="{s["file"]}" width="{s["width"]}" height="{s["height"]}" alt="{esc(s["alt"],quote=True)}" {"fetchpriority=\"high\"" if hero else "loading=\"lazy\""} decoding="async"></a><figcaption><span class="shot-version">{esc(label)}</span><strong>{esc(s["title"])}</strong><span>{esc(s["caption"])}</span><span>{links}</span></figcaption></figure>'
+def gallery(items): return '<div class="screen-grid three">'+''.join(shot(s) for s in items)+'</div>'
+def selected(group,limit=3): return [s for s in screens if s['group']==group][:limit]
+def download(label=None): return f'<a class="button" data-release-apk href="{apk}">{label or "Download published "+official["version"]+" APK ↓"}</a>'
+def publication_copy(text):
+    """Promote availability copy only; capture provenance and historical evidence stay dated."""
+    if pending:
+        return text
+    substitutions = {
+        f'{v} is a preview. Published {official["version"]} is an earlier experience and does not contain the corrections illustrated here.': f'MeBot {v} is available as the official Android release and through in-app update checks.',
+        f'The preview is {v}. The published APK is {official["version"]}.': f'MeBot {v} is the current official Android release.',
+        f'<aside class="beta-note"><strong>Wait for the next verified update for the experience shown here.</strong> The earlier {official["version"]} APK includes the older suggestion flow, not the corrected AI-only five-question flow or Original Reads. Its original verification report must be read with that limitation; it is not evidence for the preview.</aside>': '<aside class="beta-note"><strong>Your next reading experience is ready.</strong> Update for five AI-prepared question angles, Original Reads, clearer source dates and your preferred colours. Your phone still asks you to approve installation.</aside>',
+        f'Published {official["version"]} · earlier experience': f'Official {official["version"]} · available now',
+        f'<h2>Preview availability</h2><p>There is no public {v} APK or in-app update yet. Source review and release qualification are separate from installation.</p><a href="{REPO}/pull/19">Follow source review →</a>': f'<h2>Update in the app</h2><p>MeBot {v} is available through Software Updates for compatible production installations. Check for updates, review the download, then approve Android’s installation prompt. Your existing data stays in place.</p><a href="guides/install.html">Installation and update guide →</a>',
+        '<strong>Not offered as a public APK yet.</strong> No historical asset is relabelled as the new preview.': f'<strong>Available in the official {v} release.</strong> Historical files retain their original identities.',
+        '<h2>Not yet a public download</h2><p>The source is under review. This page does not offer a signed preview APK or claim physical-device acceptance. The earlier published APK has a different experience.</p><a href="'+REPO+'/pull/19">Source review →</a>': '<h2>Available in the official release</h2><p>Install the current release or use Software Updates in your compatible production app. Host screenshots remain illustrative, not physical-device acceptance evidence.</p>'+download(),
+        'These screens show the preview, not the older published APK.': 'These are native debug-build captures of the 0.9.8 experience, not photographs of the signed release on a physical phone.',
+        f'> **MeBot {v} preview — not yet a public download.** Published {official["version"]} is an earlier experience, without the corrected AI-only five-question flow or Original Reads shown here. [Version availability](docs/download.html) · [Source review]({REPO}/pull/19).': f'> **MeBot {v} is available now.** Update in the app or [download the official APK]({apk}). [Installation and verification](docs/download.html).',
+        f'**Not yet a public download.** The [published {official["version"]} APK]({apk}) does not contain the full preview experience. [Version availability](docs/download.html).': f'**MeBot {v} is available now.** [Download the official APK]({apk}) or check Software Updates in your compatible production app. [Installation and verification](docs/download.html).',
+        'This identifies the earlier APK, not the preview images.': 'This identifies the published APK; the gallery retains its separate debug-build capture provenance.',
+        '## Explore the next experience': '## Explore MeBot',
+        '## See the current preview': '## See MeBot',
+        'The next MeBot reading experience': 'The MeBot reading experience',
+        'Preview five deliberate question angles': 'Explore five deliberate question angles',
+        'MeBot preview availability': 'MeBot release availability',
+        'Separate the unreleased MeBot preview from the existing published APK and its exact release files.': 'Download the official MeBot Android release and verify its matching source and release files.',
+        'MeBot preview screens': 'MeBot debug-build screens',
+        'in the MeBot preview.': 'in MeBot.',
+        'Explore the preview →': 'Explore the experience →',
+        f'Explore the {v} preview →': f'Explore MeBot {v} →',
+        f'What changed in the {v} preview': f'What changed in MeBot {v}',
+        f'MeBot {v} preview · new native captures': f'MeBot {v} · native debug-build captures',
+        f'MeBot {v} preview</p>': f'MeBot {v}</p>',
+        f'{v} preview</p>': f'MeBot {v}</p>',
+        f'{v} preview · step': f'{v} · step',
+        f'# Start here — MeBot {v} preview': f'# Start here — MeBot {v}',
+        f'Explore the MeBot {v} preview:': f'Explore MeBot {v}:',
+    }
+    for before, after in substitutions.items():
+        text=text.replace(before,after)
+    return text
 
 def page(name,title,desc,body,current=None):
- nav=header
- if current:nav=nav.replace(f'href="{current}"',f'href="{current}" aria-current="page"',1)
- head=f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{esc(title)} · MeBot</title><meta name="description" content="{esc(desc,quote=True)}"><meta name="theme-color" content="#f7f8fa"><meta name="color-scheme" content="light dark"><meta name="referrer" content="strict-origin-when-cross-origin"><link rel="canonical" href="{SITE}{name}"><link rel="icon" href="assets/mebot.svg" type="image/svg+xml"><meta property="og:type" content="website"><meta property="og:title" content="{esc(title,quote=True)} · MeBot"><meta property="og:description" content="{esc(desc,quote=True)}"><meta property="og:url" content="{SITE}{name}"><meta property="og:image" content="{SITE}screenshots/v082/feed.png"><meta property="og:image:alt" content="MeBot feed with dated public reporting"><link rel="stylesheet" href="site.css"><link rel="stylesheet" href="showcase.css"><script src="site.js" defer></script><script src="showcase.js" defer></script></head><body data-release-manifest="assets/release.json">'''
- (DOCS/name).write_text(head+nav+'<main id="main">'+body+'</main>'+footer)
-
-def shot(key,hero=False):
- s=by[key] if isinstance(key,str) else key;load='fetchpriority="high"' if hero else 'loading="lazy"'
- label=(f"{s['version']} · sample content" if s.get('sampleFixture') else f"{s['version']} · {s.get('captureDate','sample content')}")
- if s.get('candidatePreview') and s['version'] not in published_versions: label=f"{s['version']} · candidate preview"
- return f'''<figure class="shot" data-screen-group="{s['group']}"><a href="{s['file']}" data-lightbox data-title="{esc(s['title'],quote=True)}" aria-label="Enlarge: {esc(s['title'],quote=True)}"><img src="{s['file']}" width="{s['width']}" height="{s['height']}" alt="{esc(s['alt'],quote=True)}" {load} decoding="async"></a><figcaption><span class="shot-version">{esc(label)}</span><strong>{esc(s['title'])}</strong><span>{esc(s['caption'])}</span></figcaption></figure>'''
-
-def download(label='Download MeBot APK ↓'):
- return f'<a class="button" data-release-apk href="{apk}">{label}</a>'
-identity='<p class="beta-note"><strong>Updating an existing MeBot 0.9.x installation?</strong> Install this APK over your current app. Do not uninstall or clear data. Older 0.8.x builds used a different signing identity; Android will not accept this as an in-place update to those builds.</p>'
-provenance='<p class="image-provenance wrap">Native Android host captures with dated public stories and labelled synthetic examples. No live personal accounts or physical-phone capture is implied. <a href="screenshots.html#image-notes">Capture notes and image credits →</a></p>'
-candidate_gallery_ids=['en-feed','en-detail','en-mebot-prefilled']
-candidate_copy=('A question stays tied to the story you opened, even if you start typing immediately. MeBot records that scope before the conversation opens, keeps your draft while it prepares, and waits for the correct conversation before enabling Send. Rotation or reopening returns to the same story; locking stops a pending question, and unlocking restores the story without sending it.' if r['version']=='0.9.6' else 'Open a story in MeBot first, with its publisher visible and the original source close at hand. Suggested questions follow that item from the feed to details and MeBot; you can edit the draft before choosing to send. Local questions still work offline.')
-preview_status=(f'<p class="micro">MeBot {v} is in preparation, not publicly available. The download above remains official MeBot {official["version"]}.</p>' if candidate_preview else '')
-preview_heading='A question that stays with its story.' if r['version']=='0.9.6' else 'A question that stays with the story.'
-preview_section=f'''<section class="section wrap hairline" id="story-questions"><div class="section-heading"><div><p class="eyebrow">{'In preparation · ' if candidate_preview else 'A better next step · '}{v}</p><h2>{preview_heading}</h2><p>{candidate_copy}</p>{preview_status}</div><a class="text-link" href="{candidate_preview_page}">Explore the story flow →</a></div><div class="screen-grid three">{''.join(shot(k) for k in candidate_gallery_ids)}</div></section>'''
-next_step_title=f"Get MeBot {official['version']}" if candidate_preview else f"Get MeBot {v}"
-next_step_copy=(f"The official {official['version']} APK and its source, release notes and verification files are available." if candidate_preview else "The signed APK, matching source, release notes, checksums and verification report are linked together.")
-page('index.html','MeBot Daily for Android','Explore your interests, read sourced information, ask MeBot and keep useful resources. Download the official Android release.',f'''
-<section class="hero wrap"><div class="hero-copy"><p class="eyebrow">Android · Open source <span class="version">{official['version']}</span></p><h1>MeBot Daily</h1><p class="hero-lead">Your interests shape a useful feed. Bring context when you want it, see imported notes right away, and keep stories you still need.</p><div class="actions">{download()}<a class="button secondary" href="tour.html">Take a look inside →</a></div><p class="micro">Android 8.0+ · {size} · English &amp; Kiswahili · Package <code>{official['applicationId']}</code></p>{identity}<div class="connection-intro"><h2>AI is your choice</h2><p>Connect an eligible provider or personal service when you want help finding relevant public stories. Public-source reading, saved items and local tools remain useful without AI.</p><a class="text-link" href="guides/ai-connections.html">Providers and capabilities →</a></div></div><div class="hero-phones">{shot('news',True)}{shot('detail-answer')}</div></section>
-{preview_section}
-<section class="section wrap hairline"><div class="section-heading"><div><p class="eyebrow">A smoother context import</p><h2>Your notes are visible when you return.</h2><p>Review the replacement, confirm, and land back on your details with the imported notes in view. Invalid files and a cancelled review leave your draft alone.</p></div><a class="text-link" href="guides/personal-context.html#after-import">See how imports work →</a></div><div class="screen-grid three">{''.join(shot(k) for k in ['imported-notes-en','imported-notes-sw','context-import-sw'])}</div></section>
-<section class="section wrap hairline"><div class="section-heading"><div><p class="eyebrow">Start with what matters</p><h2>Choose interests. Add context only if it helps.</h2><p>Onboarding preferences are enough to start; a JSON file is optional.</p></div><a class="text-link" href="tour.html">A short guided start →</a></div><div class="screen-grid three">{''.join(shot(k) for k in ['onboarding-en-chooser','onboarding-sw-chooser','personalization-sw'])}</div></section>
-<section class="section wrap hairline"><div class="section-heading"><div><p class="eyebrow">Read, ask and refine</p><h2>A fresher feed without losing your place.</h2><p>Expired source-verified forecasts and events leave active reading. Saved and starred items stay yours; useful evergreen stories have more room.</p></div></div><div class="feature-pair">{shot('mebot')}<div class="feature-copy"><h3>Keep relevance in your hands</h3><div class="feature-line"><strong>Relevant / Not relevant</strong><p>Adjust a module's future suggestions. Change a choice, undo it or reset feedback separately.</p></div><div class="feature-line"><strong>Optional AI assistance</strong><p>Your selected AI can help match a small shortlist of public stories to confirmed, in-scope notes and explicit feedback during the existing refresh. It is a qualitative hint, not a promise or probability.</p></div><div class="feature-line"><strong>Steady reading order</strong><p>Completed modules update as they finish. Results do not interrupt the item you are reading or remove saved and starred records.</p></div><a class="text-link" href="screenshots.html">Explore all {len(screens)} screens →</a></div></div></section>
-<section class="section wrap hairline"><div class="section-heading"><div><p class="eyebrow">You stay in control</p><h2>Clear settings. Useful actions.</h2><p>Choose a connection, keep usage in view and check the release identity before Android installs.</p></div></div><div class="screen-grid three">{''.join(shot(k) for k in ['connection-sw','starred-sw','software-updates'])}</div></section>
-<section class="next-step wrap"><div><h2>{next_step_title}</h2><p>{next_step_copy}</p></div><div class="actions">{download()}<a class="button secondary" href="releases.html">Release files →</a></div></section>{provenance}''','index.html')
-filters=''.join(f'<button type="button" data-screen-filter="{k}" aria-pressed="{str(k=="all").lower()}">{t}</button>' for k,t in [('all','All screens'),('start','Getting started'),('read','Feed & MeBot'),('organize','Your preferences'),('tools','Everyday tools')])
-page('screenshots.html','Inside MeBot','MeBot Android screens, full-size previews, captions and image provenance.',f'''
-<section class="section wrap"><p class="eyebrow">{'Current app gallery' if visual_release_version==official['version'] else 'Latest illustrated capture set'} · {visual_release_version}{f' · 0.9.6 is a behavior-only correction' if official['version']=='0.9.6' else ''}{f' · with a {v} pending preview' if candidate_preview else ''}</p><h1>Inside MeBot</h1><p class="lead">See setup, reading and story questions in the app. {'The story captures are MeBot 0.9.5 examples; no new 0.9.6 screen is implied. ' if r['version']=='0.9.6' and visual_release_version=='0.9.5' else ('Candidate screenshots are labelled as sample previews; ' if candidate_preview else 'Story examples are labelled as sample content; ')}select an image for its original size.</p><div class="screen-filters js-only" role="group" aria-label="Filter app screenshots">{filters}</div><p id="screen-count" role="status" class="micro">{len(screens)} screens</p><div class="screen-grid" id="screen-gallery">{''.join(shot(s) for s in screens)}</div></section>
-<section class="section wrap hairline" id="image-notes"><h2>About these captures</h2><p>Each capture is labelled with its app version; dated public examples keep their capture dates. The English and Kiswahili 0.9.4 imported-note examples use synthetic fixtures; the note text and name are examples, not account data. The 0.9.5 story captures also use synthetic story and provider fixtures; feed and detail views are deliberately scrolled to the question area, and the MeBot view shows an editable draft before Send. MeBot 0.9.6 changes conversation timing and restore behavior, not the visible screens shown here.</p><p>These host captures are not live articles, live provider responses, owner account sessions, or physical-phone acceptance evidence. The original source remains available in the story; selecting a suggested question prepares a draft and does not send it automatically. <a href="screenshots/README.md">Full capture notes and sources →</a> · <a href="{candidate_preview_page}">Story-conversation update →</a></p><section class="evidence-only"><h3>Accessibility stress evidence — not a normal-use screenshot</h3><p>The separate 0.9.4 capture tests a narrow 320 dp layout at 130% font scale. It is evidence of a stress configuration, not a standard phone-size example.</p><a href="screenshots/v094/evidence/imported-notes-sw-320dp-130percent.png"><img src="screenshots/v094/evidence/imported-notes-sw-320dp-130percent.png" width="640" height="1600" alt="Evidence-only MeBot 0.9.4 accessibility stress capture: Kiswahili imported notes at 320 dp width and 130 percent text scale; not a normal-use screenshot." loading="lazy" decoding="async">Open evidence image</a></section><div class="actions"><a class="text-link" href="{REPO}/blob/main/docs/IMAGE-CREDITS.md">Image credits →</a></div></section>''','screenshots.html')
-resources=[('Matching source','Exact tested application source snapshot.',official['sourceFilename']),('Verification report','Executed checks and explicit device-testing limits.',official['verificationFilename']),('Release notes','Experience-first changes for this version.',official['releaseNotesFilename']),('SHA-256 checksums','Digests for all release assets.',official.get('checksumFilename','SHA256SUMS.txt')),('Release metadata','Package, source, version and signer identity.',official.get('releaseMetadataFilename','release-metadata.json'))]
-resource_html=''.join(f'<div class="download-row"><div><strong>{t}</strong><p>{desc}</p></div><a href="{base}{f}">Download <span class="sr-only">{t}</span> ↓</a></div>' for t,desc,f in resources)
-candidate_download_note=(f'''<aside class="beta-note"><strong>MeBot {v} is in preparation, not a public download.</strong> The signed APK below is the current official MeBot {official['version']}. The candidate is not available through the website or in-app updates. <a href="{candidate_preview_page}">Preview the story-conversation update →</a></aside>''' if candidate_preview else '')
-page('download.html','Download MeBot','Official signed MeBot Android APK, matching source, release notes and verification files.',f'''
-<div class="release-page"><p class="eyebrow">Official Android release · Published {official['publishedDate']}</p><h1>Download MeBot</h1><p class="lead">MeBot {official['version']} · Android 8.0+ · {size}.</p>{candidate_download_note}<section class="release-card"><span class="release-state" data-release-status>Version {official['version']} · Official release</span><h2>MeBot <span data-release-version>{official['version']}</span></h2><div class="actions">{download()}<a class="button secondary" href="{notes}">Release notes ↗</a></div>{identity}<p class="micro">Direct signed APK download. JavaScript is not required.</p><details class="release-metadata"><summary>File identity and verification</summary><p>Package: <code>{official['applicationId']}</code> · Version code {official['versionCode']}.</p><p><code data-release-filename>{official['filename']}</code> · <span data-release-size>{size}</span>.</p><p>Exact application source: <code>{official['sourceCommit']}</code> · tree <code>{official['sourceTree']}</code>.</p><p>Signer certificate SHA-256: <code>{official['certificateSha256']}</code>.</p><div class="code-block"><div class="code-toolbar"><span>APK SHA-256</span><button type="button" class="copy-button js-only" data-copy-target="apk-checksum">Copy checksum</button></div><pre id="apk-checksum" data-release-sha tabindex="0">{official['sha256']}</pre></div></details></section>
-<section class="article-section" id="install"><h2>Install or update</h2><ol><li>Download and open the APK on Android. Allow your browser or file manager to install when Android asks.</li><li>For existing 0.9.x installations, install over MeBot. Your package and signing identity match; keep the app installed and do not clear its data.</li><li>On first install, choose your language and interests, then explore the feed. Importing a context file is optional.</li><li>Connect an AI provider when ready. Public-source reading, saved items and local tools do not require an AI account.</li><li>For future releases, open <strong>You → Software Updates</strong>. The installer verifies the package, version, bytes and certificate; Android still asks before installation.</li></ol><p>Earlier 0.8.x binaries used a different signing identity; they are not an in-place update path to this release. Back up supported preferences before changing installation. Protected credentials do not transfer in portable exports. Do not erase your current app to try an update.</p></section>
-<section class="article-section" id="resources"><h2>Release resources</h2><p>The exact source snapshot, APK, user-facing notes, checksum list, release metadata and technical report are distributed together.</p><div class="download-list">{resource_html}</div></section><section class="article-section" id="limits"><h2>Verification limits</h2><p>See the separate verification report for exact test counts, lint findings and signing checks. Automated provider responses and Android host tests are not substitutes for a real account login, physical-phone media, OEM file picker or overnight alarm testing.</p><p>AI ranking remains optional and does not promise a particular story. Provider billing and subscription eligibility follow the selected service.</p></section><section class="article-section" id="context"><h2>Import your preferences</h2><p>Onboarding interests are enough to start. If you import JSON, review the replacement before saving; a confirmed import returns to your details with the saved notes in view.</p><a class="text-link" href="guides/personal-context.html#after-import">See the context guide →</a></section></div>''','download.html')
-candidate_card=(f'''<section class="release-card" id="prepared-candidate"><span class="release-state">In preparation · not yet released</span><h2>MeBot {v}</h2><p>MeBot binds the selected story before conversation setup finishes. You can start typing immediately; your draft stays with that story while its conversation opens, and Send waits until the right conversation is ready. Rotation, reopening and app lock restore the story without sending a pending question.</p><p>The candidate is not offered for download or in-app updates. The official release below remains MeBot {official['version']}.</p><div class="actions"><a class="button secondary" href="{candidate_preview_page}">Preview the story-conversation flow →</a><a class="text-link" href="{candidate_notes}">Candidate notes</a></div></section>''' if candidate_preview else '')
-what_changed=(f'''<h2>What changed in {official['version']}</h2><p>Questions stay connected to the story you chose while MeBot opens its conversation. You can start typing immediately; the draft stays in that story thread, and Send waits until the correct conversation is ready. Rotation and reopening return to the same story; app lock cancels pending sends and unlock restores the story without sending.</p><p>The 0.9.5 story-question experience is preserved, with the original publisher source still available. Technical evidence and device-test limits remain separate from these user-facing notes.</p>''' if official['version']=='0.9.6' else (f'''<h2>What changed in {official['version']}</h2><p>Stories open in MeBot first, with publisher attribution and a compact category label. Story-grounded questions appear in the feed, story details and MeBot. Review or edit a prepared question before deciding to send it; the original source stays available as a secondary action, and local questions remain useful offline.</p><p>Connected-AI suggestions are reused only when suitable for the current story and approved context. They complement—not replace—the original source.</p>''' if official['version']=='0.9.5' else f'''<h2>What changed in {official['version']}</h2><p>Confirm a context import and return to your details with the notes you just saved. If a file is invalid or you cancel, your draft stays put. Source-verified forecasts and events leave the active feed when they expire, while saved and starred records remain available. Useful evergreen stories age more slowly.</p><p>Your selected AI can help match a bounded shortlist of public stories within its existing feed refresh. The score is a qualitative signal, not a calibrated prediction or a guarantee. It does not use passive reading history or reorder the item you are reading.</p>'''))
-history=''.join(f'<tr><th scope="row">{esc(x["version"])}</th><td>{("Current official" if x["version"]==official["version"] else ("Historical signed · superseded" if x.get("apk",True) else "Source only · superseded")) if x["status"]=="published" else ("Historical · known defect" if x.get("recommendation")=="superseded" else "Historical · publication pending")}</td><td>{("<a href="+REPO+"/releases/tag/"+x["tag"]+">Release files ↗</a>") if x["status"]=="published" else "Archive publication pending"}</td></tr>' for x in r['releases'] if x['version']!=v)
-page('releases.html','Releases and files','Official MeBot versions, exact source snapshots and release verification evidence.',f'''<div class="release-page"><p class="eyebrow">Release directory</p><h1>Releases &amp; files</h1>{candidate_card}<section class="release-card"><span class="release-state">Official · {official['publishedDate']}</span><h2>MeBot {official['version']}</h2><p>Recommended Android release · package <code>{official['applicationId']}</code>.</p><div class="actions">{download()}<a class="button secondary" href="{notes}">Full release notes ↗</a></div></section><section class="article-section"><h2>Files for MeBot {official['version']}</h2><div class="download-list">{resource_html}</div></section><section class="article-section">{what_changed}<p><a href="RELEASE-{official['version']}.md">Experience-first release notes →</a> · <a href="guides/personal-context.html#after-import">Illustrated context guide →</a></p></section><section class="article-section"><h2>Earlier releases</h2><p>{('MeBot 0.9.5 is superseded by 0.9.6 and remains available as an immutable historical signed release with its matching source. Scope warning: in 0.9.5, a question sent before the story conversation opens could land in a general chat instead of that story; wait until the story conversation is ready before sending. ' if official['version']=='0.9.6' else 'MeBot 0.9.4 is superseded by 0.9.5 and remains available as a historical signed release. ')}Versions 0.9.3 and earlier are also superseded; 0.9.0–0.9.2 had an external-launch defect. The 0.8.x package/signer lineage is separate from current 0.9.x updates. Versions 0.8.3–0.8.5 are historical source checkpoints without production APKs.</p><div class="table-wrap"><table><thead><tr><th scope="col">Version</th><th scope="col">Status</th><th scope="col">Files</th></tr></thead><tbody>{history}</tbody></table></div></section></div>''','releases.html')
-steps=[('Choose your interests','Pick topics, not technical settings.','onboarding-en-chooser','First launch','Choose topics and an optional city. Skip anything you do not need. Onboarding preferences personalize your feed; a JSON import is optional.','personalization'),('Import only what you want','Review first, then see your notes.','imported-notes-en','You → My context','Review the replacement before saving. After confirmation, return to your details and see the imported notes. Cancel or correct a file without losing your draft.','after-import'),('Read and refine','Keep the introduction in view.','detail-answer','Feed → open an item','Read the source-backed introduction while MeBot prepares more detail. Relevant or Not relevant adjusts future recommendations within that module; Undo reverses the signal.','feedback'),('Connect your provider','Choose the account or server you use.','connection-sw','You → AI connection','ChatGPT and OpenRouter have different authorization flows. Claude and Gemini use API keys. A compatible personal server is explicit. The screen shows the actual capabilities and local request allowance.','connections'),('Set your pace','Decide what happens in the background.','background','My MeBot → background settings','Choose intervals, module preparation, network conditions and quiet hours. Usage limits are managed in AI connection. Completed modules publish without waiting for the rest.','background'),('Keep MeBot current','Verify, then install.','software-updates','You → Software Updates','Automatic checks find eligible releases for this package. Download verification checks integrity and signing. Android asks you to approve installation; your current app is not silently replaced.','updates'),('Use the tools you need','Alarm, Focus and Check-in.','daily-tools','Modules → daily tools','Configure alarms, start a focus session or make a short check-in. These remain optional and work independently of the AI connection. Test alarm sound on your device.','tools')]
-if official['version'] in ('0.9.5','0.9.6'):
- steps[2]=('Ask about the story you opened','Keep the next question grounded.','en-detail','Feed → story details → MeBot',('Read with the publisher visible, open the original source whenever you want, and choose an item-specific question in Feed or story details. MeBot prepares an editable draft; you decide whether to send it. Local questions remain available offline, and Relevant / Not relevant still tunes future results.' if official['version']=='0.9.5' else 'The story stays selected while its conversation opens; start typing, then Send only when it is ready. Rotation or reopening restores the same story conversation.'),'story-questions')
-controls=''.join(f'<button type="button" data-tour-step="{i}" aria-pressed="{str(i==0).lower()}" aria-controls="tour-panel-{i}"><span aria-hidden="true">{i+1:02d}</span>{t}</button>' for i,(t,*_) in enumerate(steps))
-panels=''.join(f'<section class="tour-panel" id="tour-panel-{i}" aria-labelledby="tour-heading-{i}"><div class="tour-copy"><p class="eyebrow">{esc(where)}</p><h2 id="tour-heading-{i}">{esc(t)}</h2><p class="lead">{esc(lead)}</p><p>{esc(body)}</p><a class="text-link" href="{("guides/personal-context.html#after-import" if anchor=="after-import" else ("guides/feed-and-ai.html#follow-up" if anchor=="story-questions" else "guides/release-082.html#"+anchor))}">Detailed guide →</a></div>{shot(key)}</section>' for i,(t,lead,key,where,body,anchor) in enumerate(steps))
-tour_preview=(f'''<section class="section wrap hairline"><p class="eyebrow">In preparation · {v}</p><h2>A question stays in its story conversation.</h2><p>Start typing as the selected story opens. MeBot keeps the draft scoped, waits until its conversation is ready before Send, and restores the story after rotation, reopening or unlocking.</p><div class="actions"><a class="button secondary" href="{candidate_preview_page}">Preview the story-conversation flow →</a><a class="text-link" href="{candidate_notes}">Read the release notes</a></div></section>''' if candidate_preview else '')
-page('tour.html','Start here','A seven-step visual guide to MeBot, from interests to context import, reading and verified software updates.',f'<section class="section wrap"><p class="eyebrow">MeBot {official["version"]} · Start here</p><h1>A short walk through MeBot</h1><p class="lead">The important actions, with sample app screens. Move at your own pace.</p><div class="tour-layout"><nav class="tour-steps js-only" aria-label="Guide steps">{controls}</nav><div class="tour-panels">{panels}</div></div><div class="tour-navigation js-only"><button class="button secondary" type="button" data-tour-prev>← Back</button><span id="tour-status" role="status" aria-live="polite">Step 1 of {len(steps)}</span><button class="button" type="button" data-tour-next>Next →</button></div></section>{tour_preview}<section class="next-step wrap"><div><h2>Explore MeBot</h2><p>The in-app quick guide is skippable and replayable from Help.</p></div><div class="actions">{download()}<a class="button secondary" href="guide.html">All guides →</a></div></section>','tour.html')
-candidate_preview_body=f'''<section class="section wrap"><p class="eyebrow">{('In preparation · '+v) if candidate_preview else 'MeBot '+v+' · story-conversation update'}</p><h1>Keep your question with its story.</h1><p class="lead">Open a story and start typing right away. MeBot keeps the question attached to that story while its conversation prepares; sending remains your choice.</p><div class="article-section"><h2>One story, one conversation</h2><ol><li><strong>Open a story.</strong> Your conversation stays connected to the story you chose.</li><li><strong>Start your question.</strong> Your draft stays with that story while MeBot opens the right conversation. Send waits until it is ready.</li><li><strong>Return without losing context.</strong> Rotation or reopening restores the same story conversation. Locking stops a pending question; unlocking brings the story back without sending it.</li></ol></div><section class="release-card"><h2>{'Not yet a public download' if candidate_preview else 'Available in the official release'}</h2><p>{(f'MeBot {v} is a signed corrective candidate, but public availability, hosted exact-source checks and website promotion remain pending. The current official download is MeBot {official["version"]}; do not sideload local candidate files.' if candidate_preview else f'MeBot {v} is the official Android release. Install over an existing production 0.9.x app without uninstalling or clearing data.')}</p><div class="actions">{download() if not candidate_preview else ''}<a class="button secondary" href="releases.html">Release files →</a><a class="text-link" href="{candidate_notes}">Experience-first notes</a></div></section><p class="micro">The gallery’s 0.9.5 captures show the earlier visual flow, not 0.9.6 behavior or acceptance evidence. Technical verification remains separate.</p><a class="text-link" href="screenshots.html">See the labelled app captures →</a></section>'''
-if candidate_preview or v!='0.9.5':
- page(candidate_preview_page,'Story conversations in MeBot','Keep an item-specific question attached to its story while the conversation opens, across rotation, reopening and app lock.',candidate_preview_body)
-
-current_screens=[s for s in screens if not (s.get('candidatePreview') and s['version'] not in published_versions)]
-current_screens=sorted(current_screens,key=lambda s:s['version']!=visual_release_version)
-image_rows=[]
-for i in range(0,len(current_screens),3):
- group=current_screens[i:i+3]
- image_rows.append('<p align="center">\n'+'\n'.join(f'<a href="docs/{s["file"]}"><img src="docs/{s["file"]}" width="225" alt="{esc(s["alt"],quote=True)}"></a>' for s in group)+'\n</p>\n\n'+' · '.join(f'**{s["title"]}**' for s in group)+'\n')
-release_summary=(f'**Official MeBot {v} · {size} · `mebot.nguli.com`.** Install over the existing 0.9.x app without uninstalling or clearing data.' if published else f'**MeBot {v} is not yet released.** The current official download is MeBot {official["version"]} · {size}. Wait for the verified update; do not install a draft candidate.')
-if official['version']=='0.9.5':
- whats_new=f'''## What’s new in {official['version']}
-
-- Stories open in MeBot first, with the publisher visible and a compact category label.
-- Story-specific questions appear in Feed, story details and MeBot. Review or edit the prepared question before sending.
-- The original source stays available from the story and card menu; local questions remain useful offline.
-
-[Full experience-first release notes](docs/RELEASE-{official['version']}.md). Technical verification and device/provider limits are in the separate [verification report]({verification}).'''
-elif official['version']=='0.9.6':
- whats_new=f'''## What’s new in {official['version']}
-
-- Start a question as soon as you open a story; it stays tied to that story while its conversation prepares.
-- Send only when the correct story conversation is ready.
-- Return to the same story conversation after rotation or reopening; lock/unlock restores it without sending a pending question.
-
-[Full experience-first release notes](docs/RELEASE-{official['version']}.md). Technical verification and device/provider limits are in the separate [verification report]({verification}).'''
-else:
- whats_new=f'''## What’s new in {official['version']}
-
-- After confirming a context import, return to your details and see the notes you just saved. An invalid file or cancelled review leaves your draft alone.
-- Expired source-verified forecasts and events leave the active feed; saved and starred items remain available, and evergreen reading gets more time.
-- Optional AI can help match a short list of public stories to your confirmed interests during the existing feed refresh. Your reading position and explicit feedback stay in control.
-
-[Full experience-first release notes](docs/RELEASE-{official['version']}.md). Technical verification, source identity and test limits are in the separate [verification report]({verification}).'''
-candidate_readme=(f'''## In preparation: MeBot {v}
-
-A story question stays bound to the story you opened, even if you start typing immediately. MeBot keeps the draft scoped while the correct conversation opens, and Send waits until that conversation is ready. Rotation, reopening and app lock restore the story without sending a pending question.
-
-This is a prepared preview, not a public release. The official download remains MeBot {official['version']}; no {v} APK is offered here or through in-app updates. Scope warning for 0.9.5: wait for the story conversation to open before sending; an earlier send could land in general chat. The 0.9.5 screenshots show the earlier visual flow; they do not demonstrate 0.9.6 behavior or acceptance.
-
-<p align="center"><img src="docs/screenshots/v095/en-feed.png" width="145" alt="English feed with a sample story question"><img src="docs/screenshots/v095/sw-feed.png" width="145" alt="Kiswahili feed with a sample story question"><img src="docs/screenshots/v095/en-detail.png" width="145" alt="English story detail with source and question"><img src="docs/screenshots/v095/sw-detail.png" width="145" alt="Kiswahili story detail with source and question"><img src="docs/screenshots/v095/en-mebot-prefilled.png" width="145" alt="Editable English MeBot draft, not sent"><img src="docs/screenshots/v095/sw-mebot-prefilled.png" width="145" alt="Editable Kiswahili MeBot draft, not sent"></p>
-
-[Open the story-conversation preview](docs/{candidate_preview_page}) · [Candidate notes](docs/RELEASE-{v}.md).
-''' if candidate_preview else '')
-README=f'''<div align="center">
-<img src="docs/assets/mebot.svg" width="64" height="64" alt="MeBot robot logo">
-<h1>MeBot Daily</h1><p>Your topics, source-linked answers and optional everyday tools.</p>
-<p><a href="{apk}"><strong>Download official APK</strong></a> · <a href="{notes}">Release files</a> · <a href="START-HERE.md">Start here</a> · <a href="docs/USER-GUIDE.md">User guide</a></p>
-<p>Android 8.0+ · English &amp; Kiswahili · Kotlin + Jetpack Compose · Apache 2.0</p></div>
-
-> {release_summary} Earlier 0.8.x binaries used a different signer and cannot receive this as an in-place update. Review the [installation guidance](docs/INSTALL.md).
-
-Choose interests during onboarding, read a sourced feed, search, ask follow-ups and keep useful resources. Public information and local tools stay available without AI. No personal starter profile is baked into the app.
-
-{whats_new}
-
-{candidate_readme}
-
-## See the current app
-
-{''.join(image_rows)}
-Released-version images retain their dated source context. Imported-note and story-question examples use synthetic fixtures; they are **not live account sessions, live provider responses or physical-device acceptance evidence**. [Sources and capture notes](docs/screenshots/README.md) · [Image credits](docs/IMAGE-CREDITS.md).
-
-## Choose your AI connection
-
-| Connection | What it means |
-| --- | --- |
-| ChatGPT | Existing provider-authorized sign-in for eligible accounts; account/model policy applies. No access to ChatGPT memory or chats is implied. |
-| OpenAI API | Explicit API key with separate API billing. |
-| Claude | Anthropic API key. Claude.ai subscription credentials are not used by third-party MeBot. |
-| Gemini | Gemini API key. This adapter uses the public source material supplied by MeBot; it does not claim native Google Search grounding. |
-| OpenRouter | PKCE authorization with a one-time code return or API key; uses OpenRouter credits, not an imported Claude subscription. |
-| Personal server | Explicit OpenAI-compatible endpoint and model. Features depend on the endpoint; a saved key is never sent over HTTP. |
-| Personal service | Optional self-hosted Python service. The service currently uses its own OpenAI API adapter. |
-
-Provider selection is explicit. No automatic switching to a separately billed provider. Model lists, completed-response checks, streaming support and source discovery follow each adapter’s capabilities. Provider credentials stay outside portable exports.
-
-**Copy starter prompt** prepares the exact preferences JSON schema for any suitable assistant. Review imports before applying. Onboarding interests already count as personalization.
-
-## What is included
-
-| Area | Behavior |
-| --- | --- |
-| Feed | Completed modules publish immediately; new results wait behind Show new items while you read. Expired source-verified forecasts/events leave active reading; saved and starred records stay. |
-| Feedback & fit | Relevant / Not relevant improves module suggestions with undo and reset. Optional bounded AI fit can help match up to eight public stories per module; it is not a probability or promise. |
-| Item detail | Stable introduction, unclipped square answer surface, streaming explanations and grouped sources/media/files. |
-| Activity | One fixed top panel with an anchor-width popover; real events and provider-published summaries, never invented thoughts. |
-| Connection | Provider and model choice, one persisted request budget, presets/custom/unlimited and clear capability limits. |
-| Background | Timing, preparation batches, Wi-Fi/battery conditions, notifications and quiet hours in actionable cards. |
-| Software Updates | Automatic checks and optional Wi-Fi preparation, verified package/version/certificate/hash, and Android’s installer approval. |
-| Guidance | One relevant dismissible setup notice, a short first-use tour and replay from Help. |
-| Daily tools | Alarm, Focus and Daily Check-in; independent of AI. |
-| Data | Clear reading history explains its scope before confirmation; saved items, conversations and relevance feedback are separate. |
-
-## Install and use
-
-[Download the official APK]({apk}). Updating from a 0.9.x release preserves your existing installation; do not uninstall or clear app data. Choose interests, connect a provider when ready, then open Feed. Test any configured alarm on your phone before overnight reliance. [Start here](START-HERE.md).
-
-## Verification and release files
-
-[Verification report]({verification}) · [Exact source snapshot]({source}) · [Release notes]({base}{official.get('releaseNotesFilename','RELEASE-NOTES.md')}) · [Checksums]({checksums}) · [Native gallery](docs/screenshots/README.md).
-
-The current application source is commit `{official['sourceCommit']}` (tree `{official.get('sourceTree','not recorded')}`). The source archive preserves its original local build commit; see the verification report for the mapping.
-
-Tests use controlled providers and native Android host journeys. Real account eligibility, physical playback, file-picker behavior and overnight alarms need device checks. Historical releases are preserved. No private profile or signing key is published.
-
-## Build
+    title,desc,body=map(publication_copy,(title,desc,body))
+    nav=header.replace(f'href="{current}"',f'href="{current}" aria-current="page"',1) if current else header
+    og=screens[0]['file'] if screens else 'assets/mebot.svg'
+    head=f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{esc(title)} · MeBot</title><meta name="description" content="{esc(desc,quote=True)}"><meta name="theme-color" content="#f7f8fa"><meta name="color-scheme" content="light dark"><meta name="referrer" content="strict-origin-when-cross-origin"><link rel="canonical" href="{SITE}{name}"><link rel="icon" href="assets/mebot.svg" type="image/svg+xml"><meta property="og:title" content="{esc(title,quote=True)}"><meta property="og:image" content="{SITE}{og}"><meta property="og:image:alt" content="{esc(screens[0]["alt"] if screens else "MeBot robot mark",quote=True)}"><link rel="stylesheet" href="site.css"><link rel="stylesheet" href="showcase.css"><script src="site.js" defer></script><script src="showcase.js" defer></script></head><body data-release-manifest="assets/release.json">'
+    (DOCS/name).write_text(head+nav+notice+'<main id="main">'+body+'</main>'+footer)
+hero=''.join(shot(s,True) for s in screens[:2])
+page('index.html','MeBot — reading with a next step','Explore the MeBot 0.9.8 preview: sourced reading, thoughtful questions, English and Kiswahili, and your colours.',f'''
+<section class="hero wrap"><div class="hero-copy"><p class="eyebrow">Android · English &amp; Kiswahili · {v} {'preview' if pending else ''}</p><h1>Read with purpose.<br>Choose your next step.</h1><p class="hero-lead">News, opportunities and useful ideas, with their sources close at hand. Read in your language. Ask when you want to go further.</p><div class="actions"><a class="button" href="{preview}">Explore the {v} preview →</a><a class="button secondary" href="download.html">Published downloads</a></div><p class="micro">{('The preview shown here is not an installable update.' if pending else 'The current release is available below.')}</p></div><div class="hero-phones">{hero}</div></section>
+<section class="section wrap hairline"><div class="section-heading"><div><p class="eyebrow">Sources, not invented freshness</p><h2>Useful in Tanzania. Open to the world.</h2><p>Explore verified opportunities, local reporting and technology or AI news. Publisher dates and deadlines keep their meaning; check the original requirements before applying.</p></div><a class="text-link" href="screenshots.html">See the complete gallery →</a></div>{gallery(selected('read'))}</section>
+<section class="section wrap hairline" id="story-questions"><h2>Five angles. Your decision.</h2><p class="lead">{experience}</p>{gallery(selected('ask'))}<a class="text-link" href="guides/feed-and-ai.html">Reading and suggestions guide →</a></section>
+<section class="section wrap hairline"><h2>Room to read beyond a headline.</h2><p>{reads}</p><p class="micro">The images below illustrate Today with public source items. Original Read is described here without presenting a synthetic article as editorial proof.</p>{gallery(selected('reads'))}</section>
+<section class="section wrap hairline"><h2>Make it comfortable to read.</h2><p>Choose eight accent colours or your own, with Original, Warm, Soft colour and Deep black page styles. Follow your phone’s theme or choose light or dark. Deep black applies in dark mode.</p>{gallery(selected('appearance'))}<a class="text-link" href="guides/appearance.html">Appearance controls →</a></section>
+<section class="next-step wrap"><div><h2>Know which version you are getting.</h2><p>{v} is a preview. Published {official['version']} is an earlier experience and does not contain the corrections illustrated here.</p></div><div class="actions">{download()}<a class="button secondary" href="download.html">Read the version notice →</a></div></section><p class="image-provenance wrap">{provenance}</p>''','index.html')
+groups=list(dict.fromkeys(s['group'] for s in screens)); group_titles={'read':'News & opportunities','ask':'Questions','reads':'Today','appearance':'Colours & themes','start':'Getting started','organize':'Your preferences','tools':'Everyday tools'}
+filters=''.join(f'<button type="button" data-screen-filter="{g}" aria-pressed="{str(g=="all").lower()}">{"All screens" if g=="all" else group_titles.get(g,g.title())}</button>' for g in ['all',*groups])
+page('screenshots.html','Inside MeBot','Fresh source-verified MeBot preview screens in English and Kiswahili, with actual colour and page-style choices.',f'<section class="section wrap"><p class="eyebrow">MeBot {v} preview · new native captures</p><h1>Inside MeBot</h1><p class="lead">Real public topics, clear sources and room for your own reading style. These screens show the preview, not the older published APK.</p><div class="screen-filters js-only" role="group" aria-label="Filter app screenshots">{filters}</div><p id="screen-count" role="status" class="micro">{len(screens)} screens</p><div class="screen-grid" id="screen-gallery">{"".join(shot(s) for s in screens)}</div></section><section class="section wrap hairline" id="image-notes"><h2>What these images show</h2><p>{provenance}</p><p>English and Kiswahili examples use the same source facts. An AI-authored Original Read is not a publisher article; its evidence and Created date are labelled separately. Screen colour comes from the app’s real appearance settings, not image recolouring.</p><a href="screenshots/v098-showcase/README.md">Capture details and source record →</a></section>','screenshots.html')
+resources=[('Matching source','sourceFilename'),('Technical report · prepublication snapshot','verificationFilename'),('Release notes','releaseNotesFilename'),('SHA-256 checksums','checksumFilename'),('Release metadata','releaseMetadataFilename')]
+report_note='The original report records prepublication qualification. Its pending-publication wording is historical; the published identity record establishes the completed release and download checks.'
+resource_html=''.join(f'<div class="download-row"><div><strong>{title}</strong><p>{report_note if key=="verificationFilename" else "Published "+official["version"]+" release file."}</p></div><a href="{base}{official[key]}">Download <span class="sr-only">{title}</span> ↓</a></div>' for title,key in resources)
+page('download.html','Downloads and version availability','Separate the unreleased MeBot preview from the existing published APK and its exact release files.',f'''<div class="release-page"><p class="eyebrow">Published {official['publishedDate']}</p><h1>Downloads &amp; availability</h1><p class="lead">The preview is {v}. The published APK is {official['version']}.</p><aside class="beta-note"><strong>Wait for the next verified update for the experience shown here.</strong> The earlier {official['version']} APK includes the older suggestion flow, not the corrected AI-only five-question flow or Original Reads. Its original verification report must be read with that limitation; it is not evidence for the preview.</aside><section class="release-card"><span data-release-status>Published {official['version']} · earlier experience</span><h2>MeBot <span data-release-version>{official['version']}</span></h2><div class="actions">{download()}<a class="button secondary" href="{release_url}">Published release notes ↗</a></div><p>{identity}</p><p>Android 8.0+ · <span data-release-size>{size}</span>. JavaScript is not required.</p><details class="release-metadata"><summary>File identity and verification</summary><p>Package <code>{official['applicationId']}</code> · version code {official['versionCode']}.</p><p><code data-release-filename>{official['filename']}</code></p><p>Published source <code>{official['sourceCommit']}</code> · tree <code>{official['sourceTree']}</code>.</p><p>Signer SHA-256 <code>{official['certificateSha256']}</code>.</p><div class="code-block"><div class="code-toolbar"><span>APK SHA-256</span><button type="button" class="copy-button js-only" data-copy-target="apk-checksum">Copy checksum</button></div><pre id="apk-checksum" data-release-sha tabindex="0">{official['sha256']}</pre></div></details></section><section class="article-section" id="resources"><h2>Published release resources</h2><div class="download-list">{resource_html}</div><p><a href="{official["integrityFile"]}">Published identity and verification receipt →</a></p></section><section class="article-section"><h2>Preview availability</h2><p>There is no public {v} APK or in-app update yet. Source review and release qualification are separate from installation.</p><a href="{REPO}/pull/19">Follow source review →</a></section><section class="article-section" id="limits"><h2>Verification limits</h2><p>Host tests and screenshots do not establish live provider access, physical-phone playback, biometric behavior, OEM file-picker support or overnight alarms. Keep your existing data and test device-specific features before relying on them.</p></section></div>''','download.html')
+rows=[]
+for item in r.get('releases',[]):
+    label=('Current official release' if not pending else 'Published earlier experience') if item['version']==official['version'] else ('Historical published release' if item.get('status')=='published' else 'Historical record · not a public APK')
+    link=f'<a href="{REPO}/releases/tag/{item["tag"]}">Release files ↗</a>' if item.get('status')=='published' else ''
+    warning = ' Not recommended: known launch failures when opening file selection or notifications. Superseded by later releases.' if item['version'] in ('0.9.0','0.9.1','0.9.2') else ''
+    rows.append(f'<div class="download-row"><div><strong>MeBot {item["version"]}</strong><p>{label}{warning}</p></div>{link}</div>')
+page('releases.html','Release directory','MeBot preview availability and dated published release records.',f'<section class="section wrap"><h1>Release directory</h1><h2>What changed in the {v} preview</h2><p>{experience}</p><p>{reads}</p><p><strong>Not offered as a public APK yet.</strong> No historical asset is relabelled as the new preview.</p><a class="text-link" href="{preview}">Explore the preview →</a><div class="actions">{download()}</div><h2>Dated release records</h2><p>Older files preserve their original identity and verification limits. Their screenshots are not used in the current showcase.</p><div class="download-list">{"".join(rows)}</div></section>','releases.html')
+steps=[('Choose interests','Pick your topics and optionally a city. A context file is not required.','guides/install.html',None),('Bring only useful context','Review imported JSON before replacing notes. After confirmation, your saved notes appear in your context details. Cancel leaves the draft in place.','guides/personal-context.html#after-import',None),('Read with the source nearby','Keep publisher dates, deadlines and original links in view. Saved stories stay available without AI.','guides/feed-and-ai.html', 'read'),('Ask when you choose',experience,'guides/feed-and-ai.html#follow-up','ask'),('Explore Original Reads',reads,'guides/feed-and-ai.html','reads'),('Choose your colours','Change accent and page style in Appearance. Deep black requires dark mode; your choice is saved.','guides/appearance.html','appearance'),('Keep your data and tools','Background timing remains under Android control. Review update identity before installation. Alarm, Focus and Daily Check-in work independently of AI; test alarms on your own phone.','guides/background-and-data.html',None)]
+controls=''.join(f'<button type="button" data-tour-step="{i}" aria-pressed="{str(i==0).lower()}" aria-controls="tour-panel-{i}"><span aria-hidden="true">{i+1:02d}</span>{title}</button>' for i,(title,*_) in enumerate(steps))
+panels=''.join(f'<section class="tour-panel" id="tour-panel-{i}" aria-labelledby="tour-heading-{i}"><div class="tour-copy"><p class="eyebrow">{v} preview · step {i+1}</p><h2 id="tour-heading-{i}">{title}</h2><p class="lead">{body}</p><a class="text-link" href="{guide}">Detailed guide →</a></div>{shot(selected(group,1)[0]) if group and selected(group,1) else ""}</section>' for i,(title,body,guide,group) in enumerate(steps))
+page('tour.html','Start with MeBot','A practical guide to sourced reading, optional AI and personal settings in the MeBot preview.',f'<section class="section wrap"><p class="eyebrow">{v} preview</p><h1>A short walk through MeBot</h1><p class="lead">Read first. Add context and AI only where they help.</p><div class="tour-layout"><nav class="tour-steps js-only" aria-label="Guide steps">{controls}</nav><div class="tour-panels">{panels}</div></div><div class="tour-navigation js-only"><button class="button secondary" type="button" data-tour-prev>← Back</button><span id="tour-status" role="status" aria-live="polite">Step 1 of {len(steps)}</span><button class="button" type="button" data-tour-next>Next →</button></div></section>','tour.html')
+page(preview,'The next MeBot reading experience','Preview five deliberate question angles, complete Original Reads and a personal Today selection.',f'<section class="section wrap"><p class="eyebrow">MeBot {v} preview</p><h1>More to read. A clearer next step.</h1><p class="lead">{experience}</p>{gallery(selected("ask"))}<h2>Original Reads and a useful Today</h2><p>{reads}</p><p>The screenshots below show Today, not a completed Original Read. Long-form Original Read images are omitted until suitable content is reviewed.</p>{gallery(selected("reads"))}<section class="release-card"><h2>Not yet a public download</h2><p>The source is under review. This page does not offer a signed preview APK or claim physical-device acceptance. The earlier published APK has a different experience.</p><a href="{REPO}/pull/19">Source review →</a></section></section>')
+old_readme=(ROOT/'README.md').read_text(); tail=old_readme[old_readme.index('## Choose your AI connection'):]
+tail=re.sub(r'https://github.com/EmmanuelMmanda/MeBot/releases/download/v0\.9\.\d+/[^)\s]+',lambda m: m.group(0),tail)
+# Keep the established useful provider/build guidance; release-specific identity is regenerated below.
+tail=tail.split('## Install and use')[0].split('## Build')[0]+'''## Build
 
 JDK **17**, Gradle **8.13**, Android SDK **36**, Build Tools **35.0.0**.
 
 ```sh
-git clone {REPO}.git
+git clone https://github.com/EmmanuelMmanda/MeBot.git
 cd MeBot
 git switch develop
 python3 scripts/prepare-build.py
 ./gradlew :core:test :app:testDebugUnitTest :app:assembleRelease :app:lintRelease
 ```
 
-The preparation script retrieves pinned typography and generates original alarm tones. Release signing uses private `MEBOT_*` environment values; debug builds need no key. Use `mebot.buildJdk=21` only for a local JDK21 environment; official CI uses17. Source archives intentionally omit font binaries and build outputs.
+Tests use controlled providers. Real account access, physical-phone media, file pickers and overnight alarms require device checks. No private profile, provider credential or signing key belongs in public source. See [Build](docs/BUILD.md), [Contributing](CONTRIBUTING.md), [Privacy](docs/PRIVACY.md), and [Security](SECURITY.md).
 
-```sh
-cd service
-python3 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python -m pytest -q
-```
-
-## Project structure
-
-`core/` contains domain models, validation, feedback and recommendation policy. `app/` contains Compose UI, Android lifecycle, providers, local tools, secure storage and software updates. `service/` is an optional backend. `docs/` includes illustrated guides, capture provenance and the static website. `.github/` contains verification and publication workflows.
-
-Work on develop, verify, then promote to main. iOS/multiplatform implementation is **not included** in this release.
-
-[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Privacy](docs/PRIVACY.md) · [Architecture](docs/ARCHITECTURE.md) · [Build guide](docs/BUILD.md) · [Release history](docs/PUBLIC-RELEASES.md).
-
-## License
-
-[Apache 2.0](LICENSE). Third-party material retains its own [notices](NOTICE) and [image credits](docs/IMAGE-CREDITS.md). MeBot is independent and is not endorsed by OpenAI, Anthropic, Google or any publisher. Documentation hosting is independent of the package identifier.
+[Apache 2.0](LICENSE). Third-party content retains its own [notices](NOTICE) and [credits](docs/IMAGE-CREDITS.md). MeBot is independent, not endorsed by any provider or publisher.
 '''
-(ROOT/'README.md').write_text(README)
-candidate_start=(f'''\n## Prepared preview: MeBot {v}\n\nThe story you open is bound to its conversation before asynchronous setup begins. Start typing right away; your draft stays with that story while the correct conversation opens, and Send waits until it is ready. Rotation, reopening and app lock restore the story without sending a pending question.\n\nThis candidate is not publicly released or offered through in-app updates. The current official download remains MeBot {official['version']}. Scope warning for 0.9.5: wait for the story conversation to open before sending; an earlier question could land in a general chat. [Explore the story-conversation preview](docs/{candidate_preview_page}) · [Read the experience-first notes](docs/RELEASE-{v}.md). Existing 0.9.5 screenshots show the earlier visual flow, not 0.9.6 acceptance evidence.'''.rstrip() if candidate_preview else '')
-start=f'''# Start here — MeBot {official['version']}
+image_rows=[]
+for i in range(0,len(screens),3):
+    ss=screens[i:i+3]; image_rows.append('<p align="center">'+'\n'.join(f'<a href="docs/{s["file"]}"><img src="docs/{s["file"]}" width="225" alt="{esc(s["alt"],quote=True)}"></a>' for s in ss)+'</p>\n\n'+' · '.join(f'**{s["title"]}** — {s["locale"]}, {s["theme"]}' for s in ss))
+(ROOT/'README.md').write_text(publication_copy(f'''<div align="center"><img src="docs/assets/mebot.svg" width="64" height="64" alt="MeBot robot logo"><h1>MeBot</h1><p>Read with purpose. Choose your next step.</p><p>Android · English &amp; Kiswahili · Apache 2.0</p></div>
 
-[Download Android APK]({apk}) · [Release files]({notes}) · [Full user guide](docs/USER-GUIDE.md)
+> **MeBot {v} preview — not yet a public download.** Published {official['version']} is an earlier experience, without the corrected AI-only five-question flow or Original Reads shown here. [Version availability](docs/download.html) · [Source review]({REPO}/pull/19).
 
-## 1. Choose interests
-Pick topics and, optionally, a city. The app does not require an imported context file.
+## Explore the next experience
 
-![Choose interests](docs/screenshots/v090/onboarding-en-chooser.png)
+{experience}
 
-## 2. Import only what you want
-If you import context JSON, review the replacement first. After confirming, MeBot returns to your details with the saved notes visible. If you cancel or the file is invalid, your draft stays in place. Onboarding interests are already enough to begin.
+{reads}
 
-![Imported notes in English](docs/screenshots/v094/imported-notes-en.png)
+Choose eight accent colours or your own, with Original, Warm, Soft colour and Deep black page styles. Your phone’s theme, light and dark are supported; Deep black applies in dark mode.
 
-This example uses synthetic notes, not personal account data. See the [context guide](docs/guides/personal-context.html#after-import) for the review flow.
+## See the current preview
 
-## 3. Read, ask and refine
-{("Stories open in MeBot first, with the publisher visible. Choose an item-grounded question, review or edit its draft before you send, and open the original source whenever you want. Local questions remain available offline. Relevant / Not relevant still tunes that module; Undo changes your choice." if official["version"] == "0.9.5" else ("Choose an item-specific question. In 0.9.6, the draft stays with that story while its conversation opens and after rotation, reopening or app lock." if official["version"] == "0.9.6" else "Open an item for the introduction and an automatic explanation when AI is connected. Sources remain accessible. Relevant / Not relevant tunes that module; Undo changes your choice."))}
+{chr(10).join(image_rows)}
 
-![A sourced item and its explanation](docs/screenshots/v082/detail-answer.png)
+{provenance} [Capture sources](docs/screenshots/v098-showcase/README.md). Historical screenshots remain evidence only, outside this current gallery.
 
-## 4. Choose a connection
-Open You → AI connection. Choose an eligible sign-in, an API key or your personal endpoint. Set the request allowance here. Public information stays usable without AI.
+## Installation and release identity
 
-![Provider choices](docs/screenshots/v092/connection-sw.png)
+[Published {official['version']} APK]({apk}) · [Published release files]({release_url}) · [Start here](START-HERE.md) · [User guide](docs/USER-GUIDE.md).
 
-## 5. Set background behavior
-Choose timing, preparation, connection/battery conditions and quiet hours. New results arrive as modules complete.
+{identity} Package: `mebot.nguli.com`. The published APK source is `{official['sourceCommit']}`, tree `{official['sourceTree']}`. This identifies the earlier APK, not the preview images. Technical evidence is separate from experience-first release notes.
 
-![Background controls](docs/screenshots/v082/background.png)
-
-## 6. Keep MeBot current
-Open You → Software Updates. Automatic checks and optional Wi-Fi downloads prepare eligible releases; Android requires installation approval. This package is `mebot.nguli.com`, separate from older development builds.
-
-![Software Updates](docs/screenshots/v082/software-updates.png)
-
-## 7. Use optional tools
-Alarm, Focus and Daily Check-in are together during onboarding and remain available independently of AI. Run a short alarm test before relying on it overnight.
-
-![Daily tools](docs/screenshots/v082/daily-tools.png)
-
-The in-app guide is skippable and replayable from Help. Captures use dated public content or synthetic state; [source and image notes](docs/screenshots/README.md).
-{candidate_start}
-'''
-(ROOT/'START-HERE.md').write_text(start.rstrip()+'\n')
-print(f'Rendered {v}: five product pages, {len(screens)} gallery captures, README and Start Here.')
-
-# Keep historical previews readable, but make the current official release and website footer consistent.
-for document in DOCS.rglob('*.html'):
-    content=document.read_text()
-    content=re.sub(r'<aside class="wrap release-hold">.*?</aside>', '', content, flags=re.S)
-    content=re.sub(r'<!-- preview-[0-9]+:start -->.*?<!-- preview-[0-9]+:end -->', '', content, flags=re.S)
-    content=re.sub(r'Official 0\.\d+\.\d+(?:-[A-Za-z0-9.]+)?',f'Official {official["version"]}',content)
-    if '<aside class="beta-banner">' in content:
-        depth=len(document.relative_to(DOCS).parent.parts); prefix='../'*depth
-        banner=f'<aside class="beta-banner"><!-- current-release-notice -->MeBot {official["version"]} is the current official Android release. <a href="{prefix}download.html">Download, update and verify →</a></aside>'
-        content=re.sub(r'<aside class="beta-banner">.*?</aside>',banner,content,count=1,flags=re.S)
-    content=re.sub(r'(<footer\b.*?</footer>)',lambda m:re.sub(r'MeBot 0\.[0-9.]+(?:-beta\.[0-9]+)? ·',f'MeBot {site_footer_version} ·',m.group(1),flags=re.S),content,flags=re.S)
-    content=content.replace('Dated public content · native captures','Native Android host captures with dated public stories and labelled synthetic examples. No live personal accounts or physical-phone capture is implied.').replace('Dated public stories · labelled synthetic examples · native captures','Native Android host captures with dated public stories and labelled synthetic examples. No live personal accounts or physical-phone capture is implied.')
-    content=re.sub(r'<p class="image-note">.*?</p>', '<p class="image-note">Native Android host captures with dated public stories and labelled synthetic examples. No live personal accounts or physical-phone capture is implied. <a id="image-original">Open original image</a></p>',content,flags=re.S)
-    release_095 = next((x for x in r.get('releases',[]) if x.get('version')=='0.9.5'), None)
-    published_095 = bool(release_095 and release_095.get('status')=='published')
-    if document.name=='preview-095.html':
-        content=re.sub(r'<aside class="release-archive(?: wrap)?">.*?</aside>', '', content, flags=re.S)
-    elif document.name.startswith('preview-') and document.name != candidate_preview_page:
-        content=re.sub(r'<aside class="release-archive(?: wrap)?">.*?</aside>', '', content, flags=re.S)
-        archive_title='Historical MeBot 0.9.5 story-flow guide.' if document.name=='preview-095.html' else 'Historical preview.'
-        content=content.replace('<main', f'<aside class="release-archive wrap"><p><strong>{archive_title}</strong> <a href="releases.html">Browse release files</a> or <a href="download.html">get the current official MeBot {official["version"]}</a>.</p></aside><main',1)
-    if document.name=='preview-095.html' and published_095:
-        replacements={
-            '<title>MeBot 0.9.5 story-flow preview · MeBot</title>':'<title>MeBot 0.9.5 story-flow guide · MeBot</title>',
-            "A prepared, unpublished preview of MeBot's story-grounded questions and in-app reading flow.":"An illustrated guide to MeBot's story-grounded questions and in-app reading flow.",
-            'Prepared preview · 0.9.5 is not publicly released':'MeBot 0.9.5 · Story-flow guide',
-            'MeBot is preparing a more direct path from reading to a thoughtful next question.':'MeBot keeps a direct path from reading to a thoughtful next question.',
-            'Not yet released · no 0.9.5 download':f'Official release · {release_095.get("publishedDate", "published")}',
-            'The current official update is MeBot 0.9.4.':'MeBot 0.9.5 remains a historical release; see the current download page.',
-            'MeBot 0.9.5 is not available through the website or in-app updates. Do not install draft candidate files. This page describes the prepared experience only.':'This is an illustrated guide to the published MeBot 0.9.5 story-question flow.',
-            'Download the official 0.9.4 release':f'Download the official {official["version"]} release',
-            'MeBot 0.9.5 is still being prepared.':'MeBot 0.9.5 was published and is now a historical release.',
-            '0.9.5 · candidate preview':'0.9.5 · sample content',
-            'The prepared candidate retains package':'The release retains package',
-            'Wait for an official release before changing your installation.':'Install over an existing production 0.9.x app; do not uninstall or clear its data. Older 0.8.x builds use a different signing identity.',
-        }
-        for old,new in replacements.items(): content=content.replace(old,new)
-        content=content.replace('MeBot 0.9.5 story-flow preview','MeBot 0.9.5 story-flow guide')
-        content=content.replace('candidate release notes','experience-first release notes')
-        content=re.sub(r'<p>The release retains package <code>mebot\.nguli\.com</code>.*?</p>', '<p>The release retains package <code>mebot.nguli.com</code> and the existing 0.9.x production signing identity. Install over a production 0.9.x app; do not uninstall or clear data. Older 0.8.x builds are not an in-place update path.</p>', content, flags=re.S)
-        content=content.replace('Want to try MeBot now?','Explore the current release')
-        content=content.replace('MeBot 0.9.4 is the current official Android release; 0.9.5 is still being prepared.',f'MeBot {official["version"]} is the current official Android release.')
-        content=content.replace('Download MeBot 0.9.4 ↓','Download MeBot APK ↓')
-    if document.name=='preview-095.html' and published_095 and official['version']!='0.9.5':
-        # The 0.9.5 story-flow page is historical once 0.9.6 is current. Keep
-        # the original capture context, but do not leave superseded copy that
-        # recommends its updater or links back to its download as current.
-        replacements={
-            'Official release · 2026-10-26':'Historical signed release · 2026-10-26',
-            '<h2>The current official release is MeBot 0.9.5.</h2>':'<h2>MeBot 0.9.5 is superseded by MeBot 0.9.6.</h2>',
-            '<p>MeBot 0.9.5 is available through the official release page and in-app updates for eligible installations.</p>':'<p>MeBot 0.9.5 remains an immutable historical signed release. A question sent before its story conversation was ready could land in a general chat instead of that story; wait for the conversation to open or update to 0.9.6.</p>',
-            'href="download.html">Download the official 0.9.5 release':'href="releases.html">View historical 0.9.5 release files',
-            '<h2>Get the story-first update</h2>':'<h2>Historical story-flow guide</h2>',
-            '<p>MeBot 0.9.5 is the current official Android release.</p>':'<p>MeBot 0.9.5 is superseded. MeBot 0.9.6 is the current official release.</p>',
-        }
-        for old,new in replacements.items(): content=content.replace(old,new)
-    if document.name=='guide.html' and official['version']=='0.9.6':
-        # Keep the guide hub's highlighted "new" feature and link aligned with
-        # the current release instead of leaving 0.9.5 as its recommendation.
-        content=content.replace('New in the current release · 0.9.5','New in the current release · 0.9.6')
-        content=content.replace(
-            'Stories open in MeBot first, with a compact category label and the publisher visible. Item-grounded questions follow an item from Feed to details and MeBot as an editable draft. The original source stays easy to open; nothing sends automatically.',
-            'In 0.9.6, the selected story stays attached while its conversation opens. Start typing immediately; Send waits for the correct conversation. Rotation, reopening and lock/unlock restore the same story without sending a pending question. Editable drafts and the original source remain available; nothing sends automatically.')
-        content=content.replace('href="preview-095.html">Read the illustrated story-flow guide',
-                                'href="preview-096.html">Read the 0.9.6 story-conversation guide')
-    if not published and not (document.name=='preview-095.html' and published_095):
-        depth=len(document.relative_to(DOCS).parent.parts);prefix='../'*depth
-        warning=(' Scope warning for 0.9.5: wait for the story conversation to open before sending; a question sent earlier could land in a general chat instead of that story.' if v=='0.9.6' else '')
-        status=f'<aside class="wrap release-hold"><p><strong>MeBot {v} is a prepared candidate, not yet publicly released or available through in-app updates.</strong> The current official release is MeBot {official["version"]}; no candidate download is offered here.{warning} <a href="{prefix}download.html">Get the official release</a> · <a href="{prefix}{candidate_preview_page}">Preview the story-conversation flow</a> · <a href="{prefix}{candidate_notes}">Candidate notes</a>.</p></aside>'
-        content=content.replace('<main',status+'<main',1)
-    elif not published and document.name=='preview-095.html' and published_095:
-        status=f'<aside class="release-archive wrap"><p><strong>Published MeBot 0.9.5 story-flow guide.</strong> MeBot {official["version"]} remains the current official release. {("Scope warning: wait until the story conversation is ready before sending a question in 0.9.5. " if official["version"]=="0.9.5" else "")}<a href="releases.html">Release directory</a> · <a href="{candidate_preview_page}">0.9.6 story-conversation update</a>.</p></aside>'
-        content=content.replace('<main',status+'<main',1)
-    elif published and document.name=='preview-095.html' and official['version']!='0.9.5':
-        status=f'<aside class="release-archive wrap"><p><strong>Historical MeBot 0.9.5 story-flow guide.</strong> MeBot {official["version"]} is the current official release. <a href="releases.html">Browse release files</a> or <a href="download.html">download the current version</a>.</p></aside>'
-        content=content.replace('<main',status+'<main',1)
-    document.write_text(content)
-
-# Candidate documents remain useful to review, while all download links stay on published releases only.
-if not published:
-    notice=f'> **MeBot {v} is a release candidate, not yet published.** The official download remains MeBot {official["version"]}; do not install draft files.\n\n'
-    for output in (ROOT/'README.md', ROOT/'START-HERE.md'):
-        content=output.read_text()
-        if 'is a release candidate, not yet published' not in content:
-            output.write_text(notice+content)
+{tail}'''))
+(ROOT/'START-HERE.md').write_text(publication_copy(f'# Start here — MeBot {v} preview\n\n**Not yet a public download.** The [published {official["version"]} APK]({apk}) does not contain the full preview experience. [Version availability](docs/download.html).\n\n'+'\n\n'.join(f'## {i+1}. {title}\n\n{body}\n\n[Detailed guide](docs/{guide}).' for i,(title,body,guide,_) in enumerate(steps))+f'\n\n{identity}\n\n[Fresh bilingual gallery](docs/screenshots.html) · [User guide](docs/USER-GUIDE.md).\n'))
+print(f'Rendered current {v} presentation with {len(screens)} fresh captures; historical pages and release records untouched.')

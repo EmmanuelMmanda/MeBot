@@ -1,0 +1,11 @@
+<resources>
+    <string name="original_read_authorship_098">AI-authored original read</string>
+    <string name="original_read_created_098">Created %1$s</string>
+    <string name="original_read_evidence_098">Evidence</string>
+    <string name="original_read_evidence_count_098">Evidence · %1$d</string>
+    <string name="original_read_further_reading_098">Further reading</string>
+    <string name="daily_selection_098_title">For you today</string>
+    <string name="today_verified_section_098_title">Verified today from sources</string>
+    <string name="today_verified_section_098_empty">No verified source updates for today.</string>
+    <string name="today_verified_section_098_covered">All verified items for today are already included in your selection above.</string>
+</resources>

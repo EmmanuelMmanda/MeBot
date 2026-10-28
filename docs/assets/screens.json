@@ -1,287 +1,136 @@
 [
   {
-    "file": "screenshots/v090/onboarding-en-chooser.png",
-    "title": "Choose your interests",
-    "alt": "Compact icon interest selection in the full English onboarding screen.",
-    "caption": "Normal phone width and default text size; synthetic setup.",
-    "group": "start",
-    "version": "0.9.0",
-    "captureDate": "2026-10-25"
-  },
-  {
-    "file": "screenshots/v090/onboarding-sw-chooser.png",
-    "title": "Chagua unavyopenda",
-    "alt": "Compact icon interest selection in the full Kiswahili onboarding screen.",
-    "caption": "Normal phone width and default text size; synthetic setup.",
-    "group": "start",
-    "version": "0.9.0",
-    "captureDate": "2026-10-25"
-  },
-  {
-    "file": "screenshots/v092/context-import-sw.png",
-    "title": "Bring your context",
-    "alt": "Full-screen Kiswahili context import with prompt, paste and file actions.",
-    "caption": "Copy a prompt, paste JSON or choose a file, then review before saving.",
-    "group": "start",
-    "version": "0.9.2",
-    "captureDate": "2026-10-26"
-  },
-  {
-    "file": "screenshots/v094/imported-notes-en.png",
-    "title": "Your notes are ready",
-    "alt": "Synthetic English context import confirmation with imported notes visible on the My context screen.",
-    "caption": "After confirming an import, return to your details and see the saved notes. Synthetic example; no owner data.",
-    "group": "start",
-    "version": "0.9.4",
-    "captureDate": "2026-10-26"
-  },
-  {
-    "file": "screenshots/v094/imported-notes-sw.png",
-    "title": "Vidokezo vyako viko tayari",
-    "alt": "Uthibitisho wa kuagiza muktadha kwa Kiswahili, ukiwa na vidokezo vya mfano vinavyoonekana kwenye ukurasa wa Muktadha wangu.",
-    "caption": "Baada ya kuthibitisha uingizaji, rudi kwenye maelezo yako na uone vidokezo vilivyohifadhiwa. Mfano wa kubuni; si data ya mmiliki.",
-    "group": "start",
-    "version": "0.9.4",
-    "captureDate": "2026-10-26"
-  },
-  {
-    "file": "screenshots/v092/connection-sw.png",
-    "title": "Your AI connection",
-    "alt": "AI connection settings with provider and account controls.",
-    "caption": "Native host render with synthetic account state, not a live login.",
-    "group": "organize",
-    "version": "0.9.2",
-    "captureDate": "2026-10-26"
-  },
-  {
-    "file": "screenshots/v092/starred-sw.png",
-    "title": "Follow what matters",
-    "alt": "Kiswahili starred follow-up settings.",
-    "caption": "Control existing follow-up frequency and background settings.",
-    "group": "organize",
-    "version": "0.9.2",
-    "captureDate": "2026-10-26"
-  },
-  {
-    "file": "screenshots/v092/personalization-sw.png",
-    "title": "Make it yours",
-    "alt": "Personalization settings with app lock.",
-    "caption": "Appearance, language and optional app lock in one place.",
-    "group": "organize",
-    "version": "0.9.2",
-    "captureDate": "2026-10-26"
-  },
-  {
-    "file": "screenshots/v092/lock-setup-sw.png",
-    "title": "Optional app lock",
-    "alt": "Kiswahili app PIN and biometric setup.",
-    "caption": "Protects app access, not an encrypted feed database. No real PIN is shown.",
-    "group": "organize",
-    "version": "0.9.2",
-    "captureDate": "2026-10-26"
-  },
-  {
-    "file": "screenshots/v082/feed.png",
-    "title": "Your first edition",
-    "alt": "Personalized feed containing dated public reporting and source links.",
-    "caption": "Fresh results appear as modules finish; reading position is preserved.",
+    "file": "screenshots/v098-showcase/en-feed-light-ember.png",
+    "title": "Read what matters",
+    "alt": "MeBot English feed with an EMAICON conference story and source attribution.",
+    "caption": "Source-reviewed public topics in the native preview. This static editorial fixture does not demonstrate a live feed refresh or AI response.",
     "group": "read",
-    "version": "0.8.2",
-    "captureDate": "2026-10-25"
+    "locale": "en",
+    "theme": "Light · Raspberry · Original",
+    "sourceUrls": [
+      "https://emaiconference.com/",
+      "https://www.fsdt.or.tz/igf/",
+      "https://pdpc.go.tz/sw/news/pdpc-yashiriki-mkutano-wa-kimataifa-wa-akili-unde-na-teknolojia-za-kidijitali/",
+      "https://tcra.go.tz/publications/statistics/2026/q4",
+      "https://apicon.or.tz/"
+    ],
+    "version": "0.9.8",
+    "captureDate": "2026-10-28",
+    "captureKind": "native-host-editorial-fixture",
+    "candidatePreview": true,
+    "liveProvider": false,
+    "sha256": "bb2a2e09bdb438b5dbb9179ced30e30ada12b426a814182d353cc5195b6784b3"
   },
   {
-    "file": "screenshots/v082/news.png",
-    "title": "News near you",
-    "alt": "Tanzania news filter showing the Daily News report on Ubungo school furniture repairs.",
-    "caption": "Actual publisher reporting captured on 25 October 2026.",
+    "file": "screenshots/v098-showcase/sw-today-light-sage.png",
+    "title": "Kwa ajili yako leo",
+    "alt": "MeBot Kiswahili personal reading selection with translated Tanzania headlines and a dated FSDT deadline.",
+    "caption": "A personal selection is separate from stories published today. Reviewed Kiswahili display headlines are editorial translations, not official publisher translations.",
+    "group": "reads",
+    "locale": "sw",
+    "theme": "Light · Sage · Warm",
+    "sourceUrls": [
+      "https://emaiconference.com/",
+      "https://www.fsdt.or.tz/igf/",
+      "https://pdpc.go.tz/sw/news/pdpc-yashiriki-mkutano-wa-kimataifa-wa-akili-unde-na-teknolojia-za-kidijitali/",
+      "https://tcra.go.tz/publications/statistics/2026/q4",
+      "https://apicon.or.tz/"
+    ],
+    "version": "0.9.8",
+    "captureDate": "2026-10-28",
+    "captureKind": "native-host-editorial-fixture",
+    "candidatePreview": true,
+    "liveProvider": false,
+    "sha256": "e025d1ff0e94484cf61dea106058c634a0009e65ece97a11a5c11a554f2f866b"
+  },
+  {
+    "file": "screenshots/v098-showcase/en-detail-dark-slate.png",
+    "title": "The source and its caveats",
+    "alt": "TCRA quarter-ending-June-2026 report detail with the subscription-count caveat and source access.",
+    "caption": "The TCRA report covers the quarter ending June 2026. Subscription counts are lines or accounts, not unique people. AI is disconnected in this capture.",
     "group": "read",
-    "version": "0.8.2",
-    "captureDate": "2026-10-25"
+    "locale": "en",
+    "theme": "Dark · Slate · Original",
+    "sourceUrls": [
+      "https://tcra.go.tz/publications/statistics/2026/q4"
+    ],
+    "version": "0.9.8",
+    "captureDate": "2026-10-28",
+    "captureKind": "native-host-editorial-fixture",
+    "candidatePreview": true,
+    "liveProvider": false,
+    "sha256": "a2618d8bc5acae77bb7153042f0ad7d70a3557873dba524b6fec0b5b0adfc8a3"
   },
   {
-    "file": "screenshots/v082/detail-answer.png",
-    "title": "Read and keep exploring",
-    "alt": "Source-backed story introduction and a square, unclipped streaming answer surface.",
-    "caption": "The introduction remains visible while more detail arrives.",
+    "file": "screenshots/v098-showcase/sw-opportunity-dark-teal.png",
+    "title": "Fursa, kwa Kiswahili",
+    "alt": "FSDT grant detail in Kiswahili with source access, expanded notes and AI-disconnected state.",
+    "caption": "An opportunity explained in Kiswahili. The reviewed cycle 2 deadline is 5 November 2026; region, sector and applicant eligibility apply. Check FSDT before applying.",
     "group": "read",
-    "version": "0.8.2",
-    "captureDate": "2026-10-25"
+    "locale": "sw",
+    "theme": "Dark · Teal · Soft colour",
+    "sourceUrls": [
+      "https://www.fsdt.or.tz/igf/"
+    ],
+    "version": "0.9.8",
+    "captureDate": "2026-10-28",
+    "captureKind": "native-host-editorial-fixture",
+    "candidatePreview": true,
+    "liveProvider": false,
+    "sha256": "34498fb2bd698c28086b804492673e6284a0df1c84ee4e1917b27ccd60056cf0"
   },
   {
-    "file": "screenshots/v082/detail-streaming.png",
-    "title": "A clear start to each story",
-    "alt": "Story details with an original photo, relevance controls and the stable summary introduction.",
-    "caption": "More notes are optional; the introduction is not hidden behind Show more.",
-    "group": "read",
-    "version": "0.8.2",
-    "captureDate": "2026-10-25"
+    "file": "screenshots/v098-showcase/en-appearance-light-violet.png",
+    "title": "Your colours, your comfort",
+    "alt": "MeBot Appearance dialog showing system, light and dark themes and the accent-colour choices.",
+    "caption": "Actual theme and accent controls, with Violet selected. Scroll within this dialog for the page-style options shown in the complementary image.",
+    "group": "appearance",
+    "locale": "en",
+    "theme": "Light · Violet · Original",
+    "sourceUrls": [],
+    "version": "0.9.8",
+    "captureDate": "2026-10-28",
+    "captureKind": "native-host-editorial-fixture",
+    "candidatePreview": true,
+    "liveProvider": false,
+    "sha256": "26981ad1d2bfdb98f651e130f86b310831aacecc9ad667d35bed98d79c15d144"
   },
   {
-    "file": "screenshots/v082/mebot.png",
-    "title": "Ask MeBot",
-    "alt": "MeBot conversation about CRDB Bank Foundation with source and resource controls.",
-    "caption": "Public programme information, not an invented open application.",
-    "group": "read",
-    "version": "0.8.2",
-    "captureDate": "2026-10-25"
+    "file": "screenshots/v098-showcase/en-appearance-page-style-light-violet.png",
+    "title": "A page style that suits you",
+    "alt": "Scrolled MeBot Appearance dialog showing Original, Warm, Soft color and Deep black page styles.",
+    "caption": "The same native Appearance dialog, scrolled to its page-style controls. Original is selected; Deep black applies in dark mode.",
+    "group": "appearance",
+    "locale": "en",
+    "theme": "Light · Violet · Original",
+    "sourceUrls": [],
+    "version": "0.9.8",
+    "captureDate": "2026-10-28",
+    "captureKind": "native-host-editorial-fixture",
+    "candidatePreview": true,
+    "liveProvider": false,
+    "sha256": "351a7e0213657697bdd99e33c88a10ce79f4e80c3cd70ec328860959fb843885"
   },
   {
-    "file": "screenshots/v082/welcome.png",
-    "title": "A familiar starting point",
-    "alt": "MeBot welcome with a licensed photograph of Dar es Salaam.",
-    "caption": "A historical city photograph with credit, not a current weather or location view.",
-    "group": "start",
-    "version": "0.8.2",
-    "captureDate": "2026-10-25"
-  },
-  {
-    "file": "screenshots/v082/interests.png",
-    "title": "Choose what matters",
-    "alt": "Interactive MeBot interest tiles in onboarding.",
-    "caption": "Start with your interests. Importing a context file is optional.",
-    "group": "start",
-    "version": "0.8.2",
-    "captureDate": "2026-10-25"
-  },
-  {
-    "file": "screenshots/v082/daily-tools.png",
-    "title": "Three optional daily tools",
-    "alt": "Alarm, Focus and Daily Check-in presented together in onboarding.",
-    "caption": "Use the tools you need without making alarms the whole app.",
-    "group": "start",
-    "version": "0.8.2",
-    "captureDate": "2026-10-25"
-  },
-  {
-    "file": "screenshots/v082/modules.png",
-    "title": "Explore the catalog",
-    "alt": "MeBot module catalog with searchable categories and module controls.",
-    "caption": "Each module keeps its own preferences and relevant context.",
-    "group": "organize",
-    "version": "0.8.2",
-    "captureDate": "2026-10-25"
-  },
-  {
-    "file": "screenshots/v082/providers.png",
-    "title": "Choose your connection",
-    "alt": "AI connection with provider choices and capability-specific setup.",
-    "caption": "Subscription sign-in, API keys and a personal server are distinct choices.",
-    "group": "organize",
-    "version": "0.8.2",
-    "captureDate": "2026-10-25"
-  },
-  {
-    "file": "screenshots/v082/usage.png",
-    "title": "Keep usage in view",
-    "alt": "AI request allowance alongside provider connection settings.",
-    "caption": "One persisted request budget; changing its limit does not erase usage.",
-    "group": "organize",
-    "version": "0.8.2",
-    "captureDate": "2026-10-25"
-  },
-  {
-    "file": "screenshots/v082/background.png",
-    "title": "Set the pace",
-    "alt": "Card-based background settings for timing, network conditions, notifications and preparation.",
-    "caption": "Completed results are published independently of slower modules.",
-    "group": "organize",
-    "version": "0.8.2",
-    "captureDate": "2026-10-25"
-  },
-  {
-    "file": "screenshots/v082/software-updates.png",
-    "title": "Software Updates",
-    "alt": "Software Updates screen showing automatic-check controls and release state.",
-    "caption": "Updates verify package, version, checksum and certificate before installation.",
-    "group": "organize",
-    "version": "0.8.2",
-    "captureDate": "2026-10-25"
-  },
-  {
-    "file": "screenshots/v082/my-mebot.png",
-    "title": "Your own setup",
-    "alt": "My MeBot area with setup, guide and software update actions.",
-    "caption": "Manage preferences without ambiguous shortcuts.",
-    "group": "organize",
-    "version": "0.8.2",
-    "captureDate": "2026-10-25"
-  },
-  {
-    "file": "screenshots/v082/learning.png",
-    "title": "Discover beyond headlines",
-    "alt": "Learning module showing a public NASA resource about RS-25 tests at Stennis.",
-    "caption": "A dated public research example, not a personal AI account transcript.",
-    "group": "read",
-    "version": "0.8.2",
-    "captureDate": "2026-10-25"
-  },
-  {
-    "file": "screenshots/v082/about.png",
-    "title": "About MeBot",
-    "alt": "About screen with app identity, real imagery, credits and open-source information.",
-    "caption": "The Android host captures identify their build; no device testing is implied.",
-    "group": "tools",
-    "version": "0.8.2",
-    "captureDate": "2026-10-25"
-  },
-  {
-    "file": "screenshots/v095/en-feed.png",
-    "title": "A question about this story",
-    "alt": "English feed scrolled to an example story question, with the prompt tied to the item.",
-    "caption": "Sample stories; the feed is scrolled to the question prompt. Choosing it prepares an editable MeBot draft; it does not send.",
-    "group": "read",
-    "version": "0.9.5",
-    "sampleFixture": true,
-    "candidatePreview": false
-  },
-  {
-    "file": "screenshots/v095/sw-feed.png",
-    "title": "Swali kuhusu taarifa hii",
-    "alt": "Kiswahili MeBot feed with sample story cards and an item-specific question prompt, shown at the scrolled position.",
-    "caption": "Maudhui ya mfano; ukurasa umeshushwa hadi kwenye swali la taarifa. Kulichagua huandaa rasimu ya MeBot, si kutuma ujumbe.",
-    "group": "read",
-    "version": "0.9.5",
-    "sampleFixture": true,
-    "candidatePreview": false
-  },
-  {
-    "file": "screenshots/v095/en-detail.png",
-    "title": "Ask about this story",
-    "alt": "English story detail showing a sample source card and the story-specific question action.",
-    "caption": "Sample content; detail is scrolled to the question prompt. The original source remains available as a secondary action.",
-    "group": "read",
-    "version": "0.9.5",
-    "sampleFixture": true,
-    "candidatePreview": false
-  },
-  {
-    "file": "screenshots/v095/sw-detail.png",
-    "title": "Uliza kuhusu taarifa hii",
-    "alt": "Kiswahili story detail with a sample source card and a question grounded in that story.",
-    "caption": "Maudhui ya mfano; maelezo yamefanyiwa scroll hadi kwenye swali. Chanzo asili bado kinaweza kufunguliwa kwa hiari.",
-    "group": "read",
-    "version": "0.9.5",
-    "sampleFixture": true,
-    "candidatePreview": false
-  },
-  {
-    "file": "screenshots/v095/en-mebot-prefilled.png",
-    "title": "An editable question in MeBot",
-    "alt": "MeBot with a question about an example story in the editable composer; no message has been sent.",
-    "caption": "Sample question and fixture provider label. The draft stays editable and unsent until the user chooses Send.",
-    "group": "read",
-    "version": "0.9.5",
-    "sampleFixture": true,
-    "candidatePreview": false
-  },
-  {
-    "file": "screenshots/v095/sw-mebot-prefilled.png",
-    "title": "Swali linaloweza kuhaririwa",
-    "alt": "Kiswahili MeBot conversation with a sample story question in the editable composer before Send.",
-    "caption": "Swali na lebo ya mtoa huduma ni vya majaribio tu. Rasimu inaweza kuhaririwa na haitumwi hadi mtumiaji achague Tuma.",
-    "group": "read",
-    "version": "0.9.5",
-    "sampleFixture": true,
-    "candidatePreview": false
+    "file": "screenshots/v098-showcase/sw-today-verified-light-sage.png",
+    "title": "Leo, bila kubuni tarehe",
+    "alt": "Kiswahili verified source-day section honestly states there are no source items for today.",
+    "caption": "The source-reviewed fixture has no stories published on 28 October 2026. The separate source-day section stays empty rather than relabelling older stories as new.",
+    "group": "reads",
+    "locale": "sw",
+    "theme": "Light · Sage · Warm",
+    "sourceUrls": [
+      "https://emaiconference.com/",
+      "https://www.fsdt.or.tz/igf/",
+      "https://pdpc.go.tz/sw/news/pdpc-yashiriki-mkutano-wa-kimataifa-wa-akili-unde-na-teknolojia-za-kidijitali/",
+      "https://tcra.go.tz/publications/statistics/2026/q4",
+      "https://apicon.or.tz/"
+    ],
+    "version": "0.9.8",
+    "captureDate": "2026-10-28",
+    "captureKind": "native-host-editorial-fixture",
+    "candidatePreview": true,
+    "liveProvider": false,
+    "sha256": "818a109363dfa655834a1de61fd477a1109662a256ac062addcfa10b701ff453"
   }
 ]

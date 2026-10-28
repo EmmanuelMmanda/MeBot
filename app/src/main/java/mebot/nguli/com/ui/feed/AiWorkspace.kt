@@ -28,9 +28,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,6 +41,12 @@ import androidx.compose.ui.unit.dp
 import mebot.nguli.com.R
 import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.FeedUiState
+import mebot.nguli.com.feed.SuggestionGenerationHandle097
+import mebot.nguli.com.feed.SuggestedConversationDraft
+import mebot.nguli.com.feed.SuggestionSheetSnapshot097
+import mebot.nguli.com.feed.SuggestionSheetStatus097
+import mebot.nguli.com.feed.SuggestionTargetSnapshot097
+import mebot.nguli.com.feed.SuggestionTargets097
 import mebot.nguli.com.ui.MeBotMark
 import mebot.nguli.com.ui.MeBotTokens
 import java.util.Locale
@@ -59,8 +68,14 @@ fun AiWorkspace(
     onSelectModel: (String) -> Unit = {},
     onDismissNotice: ((String) -> Unit)? = null,
     onSpeechPreferences: (Float, String) -> Unit = { _, _ -> },
-    onPrepareSuggestion: (String, String) -> Unit = { _, _ -> },
     onSuggestionDraftApplied: (String) -> Unit = {},
+    onUseSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> },
+    onEditSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> },
+    onSuggestionSheet: (SuggestionTargetSnapshot097, String) -> SuggestionSheetSnapshot097 = { target, _ ->
+        SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.NEEDS_GENERATION, emptyList())
+    },
+    onGenerateSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
+    onCancelSuggestionGeneration: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
@@ -71,22 +86,42 @@ fun AiWorkspace(
     val draftKey = ui.activeConversationId ?: "new"
     var drafts by rememberSaveable { mutableStateOf(hashMapOf<String, String>()) }
     var previousDraftKey by rememberSaveable { mutableStateOf(draftKey) }
+    var pendingReplaceDraft by remember { mutableStateOf<SuggestedConversationDraft?>(null) }
+    var focusComposerAfterEdit by rememberSaveable { mutableStateOf(false) }
     val draft = drafts[draftKey].orEmpty()
     fun setDraft(value: String) { drafts = HashMap(drafts).apply { if (value.isEmpty()) remove(draftKey) else put(draftKey, value.take(2000)) } }
-    LaunchedEffect(draftKey, ui.suggestionDraft?.id) {
+    LaunchedEffect(draftKey, ui.suggestionDraft?.id, ui.suggestionWorking) {
         val pendingSuggestion = ui.suggestionDraft
         val suggestionTarget = pendingSuggestion?.conversationId == draftKey
         // A newly-created thread may arrive after the user starts typing.
         // A suggestion creates its own thread; keep any unsent "new" draft on the old key.
-        if (!suggestionTarget && previousDraftKey == "new" && draftKey != "new" && conversation?.turns.isNullOrEmpty() && drafts[draftKey].isNullOrBlank()) {
+        // Suppress the generic new-thread migration during any suggestion action, including
+        // direct Send (which intentionally carries no draft-application event).
+        if (!ui.suggestionWorking && pendingSuggestion == null && !suggestionTarget && previousDraftKey == "new" &&
+            draftKey != "new" && conversation?.turns.isNullOrEmpty() && drafts[draftKey].isNullOrBlank()) {
             drafts["new"]?.takeIf { it.isNotBlank() }?.let { pending ->
                 drafts = HashMap(drafts).apply { put(draftKey, pending); remove("new") }
             }
         }
         previousDraftKey = draftKey
         if (suggestionTarget && pendingSuggestion != null) {
-            drafts = HashMap(drafts).apply { put(draftKey, pendingSuggestion.text.take(2000)) }
-            onSuggestionDraftApplied(pendingSuggestion.id)
+            val existingDraft = drafts[draftKey].orEmpty()
+            if (existingDraft.isNotBlank() && existingDraft.trim() != pendingSuggestion.text.trim()) {
+                if (pendingReplaceDraft?.id != pendingSuggestion.id) pendingReplaceDraft = pendingSuggestion
+            } else {
+                drafts = HashMap(drafts).apply { put(draftKey, pendingSuggestion.text.take(2000)) }
+                focusComposerAfterEdit = true
+                onSuggestionDraftApplied(pendingSuggestion.id)
+            }
+        }
+    }
+    LaunchedEffect(pendingReplaceDraft?.id, ui.suggestionDraft?.id, draftKey, state?.conversations?.map { it.id }) {
+        val pending = pendingReplaceDraft ?: return@LaunchedEffect
+        val currentEvent = ui.suggestionDraft
+        val suggestionStillCurrent = currentEvent?.id == pending.id && currentEvent.conversationId == pending.conversationId
+        val targetStillPresent = state?.conversations?.any { it.id == pending.conversationId } == true
+        if (!suggestionStillCurrent || !targetStillPresent || pending.conversationId != draftKey) {
+            pendingReplaceDraft = null
         }
     }
     var submittedKey by rememberSaveable { mutableStateOf<String?>(null) }
@@ -141,7 +176,7 @@ fun AiWorkspace(
         }
     }
     fun send(value: String) {
-        if (!ui.connected || ui.asking || ui.importWorking || ui.conversationOpening || !ui.conversationReady || value.isBlank()) return
+        if (!ui.connected || ui.asking || ui.importWorking || ui.suggestionWorking || ui.conversationOpening || !ui.conversationReady || value.isBlank()) return
         previousTurnId = turns.lastOrNull { it.role == "user" }?.id
         submittedKey = draftKey; submittedText = value.trim()
         onAsk(value.trim())
@@ -158,22 +193,31 @@ fun AiWorkspace(
     val hasConfirmedAboutYou = state?.context.orEmpty().any {
         PersonalProfile085.isGlobal(it) && it.confirmed && it.text.isNotBlank()
     }
-    val promptChoices = remember(scopeKind, state?.modules, locale.language) { PromptSuggestions.forModule(scopeKind, state, locale.language == "sw") }
-    val now = LocalFeedClock.current
-    val appLanguage = if (locale.language == "sw") "sw" else "en"
-    val currentStories = remember(state, now / 60_000) { state?.let { currentStoryCandidates095(it, now) }.orEmpty() }
-    val suggestionCandidates = story?.let { listOf(it) } ?: currentStories
-    val priorQuestions = turns.filter { it.role == "user" }.map { it.text }
-    val storySuggestionGroups = if (state == null || ui.asking || ui.importWorking || ui.conversationOpening || !ui.conversationReady || draft.isNotBlank()) emptyList() else suggestionCandidates.map { candidate ->
-        StorySuggestionGroup095(
-            candidate,
-            suggestionChips095(
-                ui, state, candidate, now, appLanguage,
-                if (candidate.id == story?.id) LocalSuggestionFallback095.CONTENT_AND_DETAIL else LocalSuggestionFallback095.CONTENT,
-                priorUserQuestions = priorQuestions,
-            ).take(if (story != null) 2 else 1),
-        )
-    }.filter { it.options.isNotEmpty() }
+    val appLanguage = if (ui.appLanguage == "sw") "sw" else "en"
+    val suggestionTarget = remember(state, ui.activeConversationId, conversation?.id, module?.id, appLanguage) {
+        when {
+            state == null -> null
+            ui.activeConversationId != null -> conversation?.takeIf { it.id == ui.activeConversationId }
+                ?.let { SuggestionTargets097.conversation(state, it.id, appLanguage) }
+            module != null -> SuggestionTargets097.module(state, module.id, appLanguage)
+            else -> SuggestionTargets097.general(state, appLanguage)
+        }
+    }
+    val suggestionContext = when {
+        story != null -> story.title
+        conversation?.title?.isNotBlank() == true -> conversation.title
+        module != null -> moduleName(module)
+        else -> stringResource(R.string.workspace_general)
+    }
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(focusComposerAfterEdit, draftKey, draft) {
+        if (focusComposerAfterEdit && draft.isNotBlank()) {
+            runCatching { focusRequester.requestFocus() }
+            keyboard?.show()
+            focusComposerAfterEdit = false
+        }
+    }
     val modelName = state?.connection?.let { connection ->
         if (connection.mode == "chatgpt") ui.chatGpt.accounts.find { it.id == connection.accountId }?.models?.find { it.slug == connection.model }?.displayName ?: connection.model
         else connection.model
@@ -199,9 +243,9 @@ fun AiWorkspace(
             Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 MeBotActivityBadge(if (ui.asking) ui.activities.lastOrNull { it.operation == "answer" } ?: mebot.nguli.com.feed.AiActivity("workspace-preparing", "workspace", "", "answer", "preparing") else null, Modifier.size(36.dp)); Spacer(Modifier.width(10.dp))
                 Text(stringResource(R.string.workspace_title), Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
-                IconButton(onClick = { showHistory = true }, enabled = conversations.isNotEmpty() && !ui.asking && !ui.importWorking,
+                IconButton(onClick = { showHistory = true }, enabled = conversations.isNotEmpty() && !ui.asking && !ui.importWorking && !ui.suggestionWorking,
                     modifier = Modifier.testTag("workspace-history")) { Icon(Icons.Outlined.History, stringResource(R.string.workspace_history)) }
-                IconButton(onClick = { speech.stop(); onNew(null) }, enabled = !ui.asking && !ui.importWorking,
+                IconButton(onClick = { speech.stop(); onNew(null) }, enabled = !ui.asking && !ui.importWorking && !ui.suggestionWorking,
                     modifier = Modifier.testTag("workspace-new")) { Icon(Icons.Outlined.Add, stringResource(R.string.workspace_new)) }
             }
             BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -209,19 +253,18 @@ fun AiWorkspace(
                 val modelLabel = if (ui.connected) modelName else stringResource(R.string.feed_connect)
                 val scopeLabel = module?.let { moduleName(it) } ?: stringResource(R.string.workspace_general)
                 if (stacked) Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    WorkspaceModelControl(modelLabel, ui.connected, { if(ui.connected) showModels = true else onConnect() }, Modifier.fillMaxWidth(), wrapLabel = true)
-                    WorkspaceScopeControl(scopeLabel, !ui.asking && !ui.importWorking, { showScopes = true }, Modifier.fillMaxWidth(), wrapLabel = true)
+                    WorkspaceModelControl(modelLabel, ui.connected, { if(ui.connected) showModels = true else onConnect() }, Modifier.fillMaxWidth(),
+                        enabled = !ui.asking && !ui.importWorking && !ui.suggestionWorking && !ui.conversationOpening, wrapLabel = true)
+                    WorkspaceScopeControl(scopeLabel, !ui.asking && !ui.importWorking && !ui.suggestionWorking && !ui.conversationOpening,
+                        { showScopes = true }, Modifier.fillMaxWidth(), wrapLabel = true)
                 } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    WorkspaceModelControl(modelLabel, ui.connected, { if(ui.connected) showModels = true else onConnect() }, Modifier.weight(1f))
-                    WorkspaceScopeControl(scopeLabel, !ui.asking && !ui.importWorking, { showScopes = true }, Modifier.widthIn(max = 160.dp))
+                    WorkspaceModelControl(modelLabel, ui.connected, { if(ui.connected) showModels = true else onConnect() }, Modifier.weight(1f),
+                        enabled = !ui.asking && !ui.importWorking && !ui.suggestionWorking && !ui.conversationOpening)
+                    WorkspaceScopeControl(scopeLabel, !ui.asking && !ui.importWorking && !ui.suggestionWorking && !ui.conversationOpening,
+                        { showScopes = true }, Modifier.widthIn(max = 160.dp))
                 }
             }
             if (story != null) Text(story.title, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (turns.isNotEmpty() && draft.isBlank() && storySuggestionGroups.isNotEmpty()) {
-                WorkspaceStorySuggestions(storySuggestionGroups, "workspace-active-suggestions") { itemId, stableId ->
-                    onPrepareSuggestion(itemId, stableId)
-                }
-            }
             LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth().testTag("workspace-messages"),
                 contentPadding = PaddingValues(top = 14.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                 if (turns.isEmpty() && !ui.asking && state != null && onDismissNotice != null) item(key = "setup") {
@@ -231,10 +274,7 @@ fun AiWorkspace(
                     WorkspaceStart(
                         ui.connected, onConnect, onContext, scopeKind != null, story != null,
                         hasConfirmedAboutYou, draft.isNotBlank(),
-                        if (draft.isBlank() && suggestionCandidates.isEmpty() && ui.connected && !ui.asking && !ui.importWorking && !ui.conversationOpening && ui.conversationReady) promptChoices else emptyList(),
-                        if (draft.isBlank()) storySuggestionGroups else emptyList(),
-                        onPrepareSuggestion,
-                    ) { prompt -> setDraft(prompt) }
+                    )
                 }
                 items(turns, key = { it.id }, contentType = { it.role }) { turn -> WorkspaceTurn(turn, speech) }
                 if (ui.asking || (ui.answer?.isNotBlank() == true && turns.lastOrNull()?.text != ui.answer)) item(key = "pending") {
@@ -276,9 +316,12 @@ fun AiWorkspace(
                     if (ui.conversationOpening) Text(stringResource(R.string.workspace_opening),
                         Modifier.fillMaxWidth().padding(start = 18.dp, top = 10.dp, end = 18.dp).testTag("workspace-opening"),
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (ui.suggestionWorking) Text(stringResource(R.string.suggestions_working),
+                        Modifier.fillMaxWidth().padding(start = 18.dp, top = 10.dp, end = 18.dp).testTag("workspace-suggestion-working"),
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TextField(value = draft, onValueChange = ::setDraft, enabled = !ui.asking && !ui.importWorking,
                         placeholder = { Text(stringResource(R.string.workspace_question)) }, minLines = 1, maxLines = 4,
-                        modifier = Modifier.fillMaxWidth().testTag("workspace-question"),
+                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester).testTag("workspace-question"),
                         colors = TextFieldDefaults.colors(focusedContainerColor = MaterialTheme.colorScheme.surface,
                             unfocusedContainerColor = MaterialTheme.colorScheme.surface, disabledContainerColor = MaterialTheme.colorScheme.surface,
                             focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -286,7 +329,7 @@ fun AiWorkspace(
                         shape = RoundedCornerShape(22.dp))
                     Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { documents.importAttachment() },
-                            enabled = !ui.asking && !ui.importWorking && !ui.conversationOpening && ui.conversationReady && conversation?.attachments.orEmpty().size < 3,
+                        enabled = !ui.asking && !ui.importWorking && !ui.suggestionWorking && !ui.conversationOpening && ui.conversationReady && conversation?.attachments.orEmpty().size < 3,
                             modifier = Modifier.testTag("workspace-attach")) { Icon(Icons.Outlined.AttachFile, stringResource(R.string.workspace_attach)) }
                         if (voiceAvailable) IconButton(onClick = {
                             speech.stop()
@@ -295,22 +338,66 @@ fun AiWorkspace(
                                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale.toLanguageTag())
                                 .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)) }
                                 .onFailure { Toast.makeText(context, R.string.workspace_voice_error, Toast.LENGTH_SHORT).show() }
-                        }, enabled = !ui.asking && !ui.importWorking, modifier = Modifier.testTag("workspace-voice")) {
+                        }, enabled = !ui.asking && !ui.importWorking && !ui.suggestionWorking, modifier = Modifier.testTag("workspace-voice")) {
                             Icon(Icons.Outlined.MicNone, stringResource(R.string.workspace_voice_input))
                         }
                         IconButton(onClick = { showVoiceSettings = true }, modifier = Modifier.testTag("workspace-voice-options")) {
                             Icon(Icons.Outlined.VolumeUp, stringResource(R.string.rich_voice_settings))
                         }
+                        SuggestionAction097(
+                            target = suggestionTarget,
+                            contextLabel = suggestionContext,
+                            language = appLanguage,
+                            connected = ui.connected,
+                            busy = ui.asking || ui.importWorking || ui.suggestionWorking || ui.conversationOpening || !ui.conversationReady,
+                            onReadSnapshot = onSuggestionSheet,
+                            onGenerate = onGenerateSuggestion,
+                            onCancelGeneration = onCancelSuggestionGeneration,
+                            onConnect = onConnect,
+                            onUse = onUseSuggestion,
+                            onEdit = onEditSuggestion,
+                            testTag = "workspace-suggestions",
+                        )
                         if (speech.readingId != null) IconButton(onClick = speech.stop) { Icon(Icons.Outlined.VolumeOff, stringResource(R.string.workspace_stop_audio)) }
                         Spacer(Modifier.weight(1f))
                         if (ui.asking) FilledTonalButton(onClick = onCancel, modifier = Modifier.heightIn(min = 44.dp).testTag("workspace-cancel")) {
                             Icon(Icons.Outlined.Stop, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.workspace_stop))
-                        } else FilledIconButton(onClick = { send(draft) }, enabled = ui.connected && draft.isNotBlank() && !ui.importWorking && !ui.conversationOpening && ui.conversationReady,
+                        } else FilledIconButton(onClick = { send(draft) }, enabled = ui.connected && draft.isNotBlank() && !ui.importWorking && !ui.suggestionWorking && !ui.conversationOpening && ui.conversationReady,
                             modifier = Modifier.size(44.dp).testTag("workspace-send")) { Icon(Icons.AutoMirrored.Outlined.Send, stringResource(R.string.feed_ask_send), Modifier.size(20.dp)) }
                     }
                 }
             }
         }
+    }
+    pendingReplaceDraft?.let { pending ->
+        AlertDialog(
+            onDismissRequest = {
+                pendingReplaceDraft = null
+                onSuggestionDraftApplied(pending.id)
+            },
+            title = { Text(stringResource(R.string.suggestions_replace_title)) },
+            text = { Text(stringResource(R.string.suggestions_replace_body)) },
+            confirmButton = {
+                mebot.nguli.com.security.ProtectedWindowRegistration()
+                TextButton(onClick = {
+                    drafts = HashMap(drafts).apply { put(pending.conversationId, pending.text.take(2000)) }
+                    pendingReplaceDraft = null
+                    focusComposerAfterEdit = true
+                    onSuggestionDraftApplied(pending.id)
+                }, modifier = Modifier.testTag("workspace-suggestion-replace")) {
+                    Text(stringResource(R.string.suggestions_replace_draft))
+                }
+            },
+            dismissButton = {
+                mebot.nguli.com.security.ProtectedWindowRegistration()
+                TextButton(onClick = {
+                    pendingReplaceDraft = null
+                    onSuggestionDraftApplied(pending.id)
+                }, modifier = Modifier.testTag("workspace-suggestion-keep")) {
+                    Text(stringResource(R.string.suggestions_keep_draft))
+                }
+            },
+        )
     }
     if (showConversationFiles) ModalBottomSheet(onDismissRequest = { showConversationFiles = false }) {
         mebot.nguli.com.security.ProtectedWindowRegistration()
@@ -397,8 +484,10 @@ fun AiWorkspace(
 }
 
 @Composable
-private fun WorkspaceModelControl(label: String, connected: Boolean, onClick: () -> Unit, modifier: Modifier, wrapLabel: Boolean = false) {
-    Surface(onClick = onClick, color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), modifier = modifier.testTag("workspace-model")) {
+private fun WorkspaceModelControl(label: String, connected: Boolean, onClick: () -> Unit, modifier: Modifier,
+    enabled: Boolean = true, wrapLabel: Boolean = false) {
+    Surface(onClick = onClick, enabled = enabled, color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(12.dp), modifier = modifier.testTag("workspace-model")) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Icon(if (connected) Icons.Outlined.CheckCircleOutline else Icons.Outlined.Link, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
             Text(label, style = MaterialTheme.typography.labelMedium, maxLines = if (wrapLabel) Int.MAX_VALUE else 1,
@@ -426,10 +515,6 @@ private fun WorkspaceStart(
     itemScoped: Boolean,
     hasConfirmedAboutYou: Boolean,
     draftPrefilled: Boolean,
-    prompts: List<String>,
-    storySuggestions: List<StorySuggestionGroup095>,
-    onPrepareSuggestion: (String, String) -> Unit,
-    onPrompt: (String) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(stringResource(when {
@@ -449,42 +534,8 @@ private fun WorkspaceStart(
         if (!connected) FilledTonalButton(onClick = onConnect, modifier = Modifier.testTag("workspace-connect")) {
             Icon(Icons.Outlined.Link, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.feed_connect))
         }
-        if (storySuggestions.isNotEmpty()) {
-            WorkspaceStorySuggestions(storySuggestions, "workspace-start-suggestions", onPrepareSuggestion)
-        } else if (prompts.isNotEmpty()) {
-            HorizontalRail(prompts.withIndex().toList(), itemKey = { it.index.toString() }) { (index, prompt) ->
-                SuggestionChip(onClick = { onPrompt(prompt) }, label = { Text(prompt, maxLines=2, overflow = TextOverflow.Ellipsis, modifier=Modifier.widthIn(max=220.dp)) },
-                    modifier=Modifier.heightIn(min=48.dp).testTag("workspace-starter-$index"))
-            }
-        }
         TextButton(onClick = onContext, contentPadding = PaddingValues(0.dp)) {
             Text(stringResource(R.string.workspace_manage_context), style = MaterialTheme.typography.labelMedium)
-        }
-    }
-}
-
-@Composable
-private fun WorkspaceStorySuggestions(
-    groups: List<StorySuggestionGroup095>,
-    tag: String,
-    onPrepareSuggestion: (String, String) -> Unit,
-) {
-    if (groups.isEmpty()) return
-    Column(Modifier.fillMaxWidth().testTag(tag), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(R.string.workspace_story_suggestions), style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        groups.forEachIndexed { index, group ->
-            Column(Modifier.fillMaxWidth().testTag("$tag-story-$index"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(publisherLabel(group.item).ifBlank { stringResource(moduleNameResource(group.item.kind)) },
-                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(group.item.title, style = MaterialTheme.typography.titleSmall,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis)
-                SuggestionRail095(group.options, "$tag-question-$index") { stableId ->
-                    onPrepareSuggestion(group.item.id, stableId)
-                }
-            }
-            if (index < groups.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
     }
 }

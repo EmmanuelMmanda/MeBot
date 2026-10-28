@@ -134,6 +134,8 @@ class AiSearchTest {
         val service = state.copy(connection = AiConnection(mode = "service", model = "service-model", serviceUrl = "https://service.example/"))
         val result = OpenAiFeedProvider(http).search(service, listOf(news), "Find updates", secret, "sw")
         assertEquals(FeedLogic.itemId(source), result.single().id)
+        assertEquals(java.net.URI(source).host.removePrefix("www."), result.single().sourceName)
+        assertEquals(FeedAcquisition.AI_SOURCE_GROUNDED, result.single().acquisition)
         val request = http.requests.single()
         assertEquals("https://service.example/v1/search", request.url)
         val body = Json.parseToJsonElement(request.body!!).jsonObject

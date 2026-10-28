@@ -43,8 +43,12 @@ data class FeedState(
     val readingHistoryEnabled: Boolean = true,
     val viewedAtMillis: Map<String, Long> = emptyMap(),
     val editionSequence: Long = 0,
+    /** Device-local recommendation projection; never publisher/publication metadata. */
+    val personalDailySelection098: PersonalDailySelection098? = null,
     val conversations: List<AiConversation> = emptyList(),
     val briefs: List<AiItemBrief> = emptyList(),
+    /** Device-local cache of complete provider-authored suggestion sets; never provider request data. */
+    val suggestionSets097: List<AiSuggestionSet097> = emptyList(),
     /** Optional additional discovery batches per module. 1 preserves existing behavior. */
     val prefetchBatches: Int = 1,
     val relevanceSignals: List<RelevanceSignal> = emptyList(),
@@ -130,6 +134,50 @@ data class FeedItem(
     val suggestedInteractionsContentDigest: String = "",
     val suggestedInteractionsScopeProviderDigest: String = "",
     val suggestedInteractionsGeneratedAtMillis: Long = 0,
+    /** How this record was acquired. String codes keep future/unknown values migration-safe. */
+    val acquisition: String = FeedAcquisition.LEGACY_UNKNOWN,
+    /** Who authored the content, independent of acquisition and AI ranking. */
+    val authorship: String = FeedAuthorship.LEGACY_UNKNOWN,
+    /** Long-form reading sections; their body text is authoritative for an Original Read. */
+    val sections: List<FeedContentSection> = emptyList(),
+    /** Optional discovery links, separate from citations/evidence for factual claims. */
+    val furtherReading: List<FeedCitation> = emptyList(),
+)
+
+/** Stable string codes rather than serialized enums so future values never break old backups. */
+object FeedAcquisition {
+    const val LEGACY_UNKNOWN = "legacy_unknown"
+    const val PUBLISHER_RSS = "publisher_rss"
+    const val PUBLIC_API = "public_api"
+    const val AI_WEB_GROUNDED = "ai_web_grounded"
+    /** AI-authored transformation grounded in already cached/consulted source evidence, not new web research. */
+    const val AI_SOURCE_GROUNDED = "ai_source_grounded"
+    const val ORIGINAL_READ = "original_read"
+}
+
+object FeedAuthorship {
+    const val LEGACY_UNKNOWN = "legacy_unknown"
+    const val PUBLISHER = "publisher"
+    const val AI = "ai"
+    const val MIXED = "mixed"
+}
+
+@Serializable
+data class FeedContentSection(
+    val heading: String,
+    val body: String,
+)
+
+/** Bounded local selection state. Item revisions are parallel to itemIds and hashed only. */
+@Serializable
+data class PersonalDailySelection098(
+    val selectionDate: String = "",
+    val timezone: String = "",
+    val algorithmVersion: Int = 0,
+    val itemIds: List<String> = emptyList(),
+    val itemRevisions: List<String> = emptyList(),
+    val inputDigest: String = "",
+    val selectedAtMillis: Long = 0,
 )
 
 /** The only model-generated action exposed by the feed is a user-initiated question about this item. */
@@ -141,6 +189,19 @@ data class AiSuggestedInteraction(
     val intent: AiSuggestedInteractionIntent = AiSuggestedInteractionIntent.ASK_ABOUT_ITEM,
     val label: String,
     val prompt: String,
+)
+
+/**
+ * Complete provider-authored question set for a non-feed or explicitly regenerated target.
+ * `revision` is a local digest of the exact approved target/provider scope, never raw user text.
+ */
+@Serializable
+data class AiSuggestionSet097(
+    val targetKind: String,
+    val targetId: String? = null,
+    val revision: String,
+    val questions: List<String>,
+    val generatedAtMillis: Long,
 )
 
 @Serializable
@@ -191,7 +252,7 @@ data class ModulePreset(
 object ModuleCatalog {
     const val maxModules = 32
     val groups = listOf("signals", "growth", "life")
-    val contentTypes = setOf("article", "video", "podcast", "repository", "course", "event", "opportunity", "weather", "entertainment")
+    val contentTypes = setOf("article", "video", "podcast", "repository", "course", "event", "opportunity", "weather", "entertainment", "original_read")
     val presets = listOf(
         ModulePreset("news", "signals", "The most consequential recent developments for the configured region and approved interests, with what changed and why it matters.",
             "Prioritize recent consequential developments, with a mix of sources and perspectives. Explain what changed and the practical consequence. Link to the reported story, not a search page. Separate reporting from opinion.", hasPublicSource = true),

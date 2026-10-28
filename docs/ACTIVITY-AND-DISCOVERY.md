@@ -1,5 +1,7 @@
 # Activity, refresh and resource checks
 
+> Workflow reference for the official 0.9.8 release. See [release availability](download.html). Older host screenshots have been removed from this current guide; archived captures remain in their dated folders.
+
 ## What the top panel means
 
 The activity panel is outside the page's scroll container. Its icon has a running ring only while the associated operation exists. Tap it for a short, scrollable popover; close it with Show less or by tapping outside. This does not move the article underneath.
@@ -40,10 +42,3 @@ Automated provider fixtures are not a live account authorization test. Device pl
 ## Interface previews
 
 Native host renders with example content, not live account responses.
-
-![Readable source summary with a compact Show more action while MeBot works](screenshots/v081/mebot-0.8.1-detail-working.png)
-
-![Fixed activity panel expanded into an operation history popover](screenshots/v081/mebot-0.8.1-activity-details.png)
-
-![Streaming MeBot answer with one top activity surface](screenshots/v081/mebot-0.8.1-streaming.png)
-

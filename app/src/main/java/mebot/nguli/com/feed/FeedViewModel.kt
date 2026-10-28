@@ -7,10 +7,12 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import mebot.nguli.com.MeBotApplication
+import mebot.nguli.com.R
 import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.auth.ChatGptAuthException
 import mebot.nguli.com.feed.auth.ChatGptAuthState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -31,8 +33,26 @@ import java.util.concurrent.atomic.AtomicLong
 
 data class SuggestedConversationDraft(val id: String, val conversationId: String, val text: String)
 
+/** Handle returned synchronously for the one explicit, budgeted generation request. */
+data class SuggestionGenerationHandle097(val requestId: String, val job: Job)
+
+private data class SuggestionSelectionSnapshot097(
+    val conversationId: String?,
+    val itemId: String?,
+    val ready: Boolean,
+)
+
+private data class SuggestionRollback097(
+    val createdThreadId: String?,
+    val originalThread: AiConversation?,
+    val appendedThread: AiConversation?,
+    val previousSelection: SuggestionSelectionSnapshot097?,
+    val epoch: Long,
+)
+
 data class FeedUiState(
     val state: FeedState? = null, val loading: Boolean = true,
+    val appLanguage: String = "en",
     val refreshing: Boolean = false, val refreshingModuleId: String? = null, val connecting: Boolean = false,
     val connected: Boolean = false, val error: String? = null, val notice: String? = null,
     val asking: Boolean = false, val answer: String? = null,
@@ -43,7 +63,9 @@ data class FeedUiState(
     val activeConversationId: String? = null,
     val conversationOpening: Boolean = false,
     val conversationReady: Boolean = true,
+    val suggestionWorking: Boolean = false,
     val suggestionDraft: SuggestedConversationDraft? = null,
+    val suggestionGeneration: SuggestionGenerationState097? = null,
     val contextSaving: Boolean = false,
     val deliverySaving: Boolean = false,
     val moduleSavingId: String? = null,
@@ -103,7 +125,24 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     ))
     val ui = _ui.asStateFlow()
     private var refreshJob: Job? = null
+    private var dailySelectionJob098: Job? = null
     private var askJob: Job? = null
+    private val suggestionActionLock = Any()
+    private val suggestionGenerationLock = Any()
+    private var suggestionActionJob: Job? = null
+    private var suggestionGenerationJob: Job? = null
+    private var suggestionGenerationRequestId: String? = null
+    private var suggestionGenerationTarget: SuggestionTargetSnapshot097? = null
+    private var suggestionAskJob: Job? = null
+    private var suggestionDispatchStarted = false
+    private var pendingSuggestionThreadId: String? = null
+    private var suggestionPreviousSelection: SuggestionSelectionSnapshot097? = null
+    private var pendingSuggestionOriginalThread: AiConversation? = null
+    private var pendingSuggestionAppendedThread: AiConversation? = null
+    /** Fences delayed suggestion cleanup from restoring/deleting rows after backup/reset replacement. */
+    @Volatile private var suggestionRollbackEpoch = 0L
+    private var lastSuggestionSendKey: String? = null
+    private var lastSuggestionSendAtElapsed: Long = 0L
     private var connectJob: Job? = null
     private var importJob: Job? = null
     private var detailJob: Job? = null
@@ -136,6 +175,15 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     init {
         viewModelScope.launch { engine.progress.collect { p -> _ui.update { it.copy(refreshProgress=p) } } }
         viewModelScope.launch { AiActivityRegistry.state.collect { tasks -> _ui.update { it.copy(activities = tasks.values.toList()) } } }
+        viewModelScope.launch {
+            app.repository.state.collect { appState ->
+                val selectedLanguage = when (val language = appState.settings.language) {
+                    "en", "sw" -> language
+                    else -> if (app.resources.configuration.locales[0]?.language == "sw") "sw" else "en"
+                }
+                _ui.update { it.copy(appLanguage = selectedLanguage) }
+            }
+        }
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { repository.applyOptionalSeed(app) }
@@ -186,7 +234,17 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     fun clearMessage() { _ui.update { it.copy(error = null, notice = null) } }
     fun clearImportSummary() { _ui.update { it.copy(importSummary = null) } }
     fun clearNotice() { _ui.update { it.copy(notice = null) } }
-    fun clearAnswer() { suggestionGeneration.incrementAndGet(); _ui.update { it.copy(suggestionDraft = null) }; askGeneration++; askJob?.cancel(); _ui.update { it.copy(asking = false, answer = null, question = null, answerCitations = emptyList()) } }
+    fun clearAnswer() = clearAnswerInternal(suppressSuggestionRollback = false)
+    private fun clearAnswerInternal(suppressSuggestionRollback: Boolean) {
+        suggestionGeneration.incrementAndGet()
+        cancelActiveSuggestionGeneration097()
+        cancelSuggestionAction(pendingOnly = false,
+            restorePreviousSelection = !suppressSuggestionRollback,
+            rollbackOnCancel = !suppressSuggestionRollback)
+        _ui.update { it.copy(suggestionDraft = null) }
+        askGeneration++; askJob?.cancel()
+        _ui.update { it.copy(asking = false, answer = null, question = null, answerCitations = emptyList()) }
+    }
 
     /** Validate the saved conversation intent against the persisted snapshot before enabling sends. */
     private fun restoreConversationSelection(state: FeedState) {
@@ -295,22 +353,36 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             conversationReady = false, error = failureCode(error, "storage_error")) }
     }
     /** Invalidate an in-flight selection when leaving the workspace; late work is generation-fenced. */
-    fun cancelConversationOpen() {
-        if (!_ui.value.conversationOpening) return
+    fun cancelConversationOpen(): Job? =
+        cancelConversationOpenInternal(restoreSuggestionSelection = true, rollbackSuggestion = true)
+
+    private fun cancelConversationOpenInternal(restoreSuggestionSelection: Boolean, rollbackSuggestion: Boolean): Job? {
+        cancelActiveSuggestionGeneration097()
+        val rollbackJob = cancelSuggestionAction(pendingOnly = true, restorePreviousSelection = restoreSuggestionSelection,
+            rollbackOnCancel = rollbackSuggestion)
+        if (!_ui.value.conversationOpening) return rollbackJob
         conversationSelectionGeneration++
         _ui.update { it.copy(activeConversationId = null, conversationOpening = false,
             // Keep the pending intent durably bound while hidden; it can be resumed on return.
             conversationReady = false, error = null) }
+        return rollbackJob
     }
     /** Reopen a cancelled item target when the user returns to the workspace. */
     fun resumeConversationOpenIfNeeded() {
         val current = _ui.value
-        if (current.conversationOpening || current.conversationReady || current.activeConversationId != null) return
+        val handlingSuggestion = synchronized(suggestionActionLock) { suggestionActionJob?.isActive == true }
+        if (handlingSuggestion || current.suggestionWorking || current.conversationOpening || current.conversationReady || current.activeConversationId != null) return
         if (pendingConversationOpen) openConversation(intendedConversationItemId)
     }
     private fun cancelRefresh() { refreshGeneration++; refreshJob?.cancel(); _ui.update { it.copy(refreshing = false, refreshingModuleId = null) } }
     private fun cancelConnection() { connectGeneration++; connectJob?.cancel(); chatGpt.cancelSignIn(); _ui.update { it.copy(connecting = false, chatGptVerifying = false) } }
-    private fun cancelAiWork() { cancelConversationOpen(); clearAnswer(); cancelDetail(); cancelSearch() }
+    private fun cancelAiWork(discardSuggestionRollback: Boolean = false) {
+        if (discardSuggestionRollback) suggestionRollbackEpoch++
+        cancelConversationOpenInternal(restoreSuggestionSelection = !discardSuggestionRollback,
+            rollbackSuggestion = !discardSuggestionRollback)
+        clearAnswerInternal(suppressSuggestionRollback = discardSuggestionRollback)
+        cancelDetail(); cancelSearch()
+    }
     private fun diagnose(operation: String, error: Exception, moduleId: String? = null) {
         val entry = operationDiagnostic(operation, error, moduleId)
         _ui.update { it.copy(diagnostics = (it.diagnostics + entry).takeLast(20)) }
@@ -339,6 +411,13 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         lastLoadMoreAttemptMillis = now
         refreshInternal(manual = false, moduleId = moduleId)
     }
+    /** Local projection only: no provider call, quota reservation, or source timestamp mutation. */
+    fun ensurePersonalDailySelection098() {
+        if (dailySelectionJob098?.isActive == true || app.appLock.state.value.locked) return
+        dailySelectionJob098 = work {
+            repository.update { state -> PersonalDailySelectionLogic098.ensure(state, System.currentTimeMillis()) }
+        }
+    }
     fun refresh() = refreshInternal(manual = true)
     fun refreshModule(moduleId: String?) = refreshInternal(manual = true, moduleId = moduleId)
     private fun refreshInternal(manual: Boolean, moduleId: String? = null) {
@@ -349,7 +428,10 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             try {
                 if (manual) repository.update { it.copy(editionSequence = (it.editionSequence + 1) % 1_000_000_000L) }
                 val result = withContext(Dispatchers.IO) { if (moduleId == null) engine.refresh(allowPlanRetry = manual) else engine.refreshModule(moduleId, allowPlanRetry = manual) }
-                if (generation == refreshGeneration) _ui.update { it.copy(error = result.error, notice = result.notice) }
+                if (generation == refreshGeneration) {
+                    repository.update { state -> PersonalDailySelectionLogic098.ensure(state, System.currentTimeMillis(), refresh = manual) }
+                    _ui.update { it.copy(error = result.error, notice = result.notice) }
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (e: Exception) { if (generation == refreshGeneration) _ui.update { it.copy(error = (e as? FeedFailure)?.code ?: "provider_error") } }
             finally { if (generation == refreshGeneration) _ui.update { it.copy(refreshing = false, refreshingModuleId = null) } }
@@ -745,7 +827,7 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         }
     }
 
-    /** Resolve against current persisted content, then prepare a new scoped draft; never infer here. */
+    /** Legacy convenience seam: only a current provider-authored option may populate a draft. */
     fun prepareSuggestion(itemId: String, stableSuggestionId: String, appLanguage: String): Job {
         clearAnswer()
         val suggestionToken = suggestionGeneration.get()
@@ -753,23 +835,14 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         return viewModelScope.launch {
             try {
                 val language = appLanguage.takeIf { it == "sw" } ?: "en"
-                val configuration = android.content.res.Configuration(app.resources.configuration).apply {
-                    setLocale(java.util.Locale.forLanguageTag(language))
-                }
-                val localized = app.createConfigurationContext(configuration)
+                if (briefLanguage() != language) throw FeedFailure("suggestion_changed")
                 var prepared: SuggestedConversationDraft? = null
                 var preparedThread: AiConversation? = null
                 repository.update { state ->
                     if (suggestionToken != suggestionGeneration.get() || selectionToken != conversationSelectionGeneration) return@update state
                     val item = state.items.find { it.id == itemId } ?: return@update state
-                    val prompt = if (stableSuggestionId.startsWith("local:")) {
-                        val resource = localSuggestionPromptResource095(item.kind, stableSuggestionId) ?: return@update state
-                        localized.getString(resource, item.title)
-                    } else {
-                        if (!_ui.value.connected) return@update state
-                        AiSuggestedInteractions095.resolve(state, itemId, stableSuggestionId,
-                            System.currentTimeMillis(), language)?.prompt ?: return@update state
-                    }
+                    val target = SuggestionTargets097.item(state, itemId, language) ?: return@update state
+                    val prompt = resolveSuggestion097(state, target, stableSuggestionId, language) ?: return@update state
                     if (state.conversations.size >= ConversationLogic.maxConversations) throw FeedFailure("conversation_limit")
                     // A new thread preserves any unsent text in the previous conversation.
                     val thread = AiConversation(moduleId = item.moduleId, itemId = item.id)
@@ -790,16 +863,517 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         }
     }
 
+    /** Read-only prepared snapshot. This never contacts the provider or changes a draft. */
+    fun suggestionSheet097(target: SuggestionTargetSnapshot097, appLanguage: String): SuggestionSheetSnapshot097 {
+        val uiState = _ui.value
+        val state = uiState.state ?: return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.UNAVAILABLE,
+            failureCode = "suggestion_unavailable")
+        val language = appLanguage.takeIf { it in setOf("en", "sw") } ?: "en"
+        if (uiState.appLanguage != language)
+            return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.STALE_TARGET, failureCode = "suggestion_changed")
+        if (!SuggestionTargets097.current(state, target, language))
+            return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.STALE_TARGET, failureCode = "suggestion_changed")
+        val preparedSet = cachedSuggestionSet097(state, target, language, System.currentTimeMillis())
+        val prepared = preparedSet?.questions?.map { question -> SuggestionOptionSnapshot097(
+            AiSuggestionCache097.optionId(preparedSet, question), question, preparedSet.generatedAtMillis)
+        }.orEmpty()
+        if (prepared.isNotEmpty()) return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.READY,
+            prepared, validUntilMillis = preparedSet!!.generatedAtMillis + AiSuggestionCache097.CACHE_TTL_MILLIS)
+        val generation = uiState.suggestionGeneration?.takeIf { it.target == target }
+        if (generation?.status == SuggestionSheetStatus097.GENERATING) return SuggestionSheetSnapshot097(target,
+            SuggestionSheetStatus097.GENERATING, requestId = generation.requestId)
+        generation?.let { return SuggestionSheetSnapshot097(target, it.status, requestId = it.requestId, failureCode = it.failureCode) }
+        if (!uiState.connected || app.appLock.state.value.locked)
+            return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.UNAVAILABLE, failureCode = "suggestion_unavailable")
+        return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.NEEDS_GENERATION)
+    }
+
+    /** Compatibility accessor for non-sheet clients; options are never fabricated locally. */
+    fun suggestionOptions097(target: SuggestionTargetSnapshot097, appLanguage: String): List<SuggestionOptionSnapshot097> =
+        suggestionSheet097(target, appLanguage).options
+
+    private fun optionsForState097(
+        state: FeedState,
+        target: SuggestionTargetSnapshot097,
+        appLanguage: String,
+        now: Long,
+    ): List<SuggestionOptionSnapshot097> {
+        if (!SuggestionTargets097.current(state, target, appLanguage)) return emptyList()
+        val set = cachedSuggestionSet097(state, target, appLanguage, now) ?: return emptyList()
+        if (!AiSuggestionCache097.areValidQuestions(set.questions)) return emptyList()
+        return set.questions.map { question -> SuggestionOptionSnapshot097(
+            AiSuggestionCache097.optionId(set, question), question, set.generatedAtMillis)
+        }
+    }
+
+    private fun cachedSuggestionSet097(
+        state: FeedState,
+        target: SuggestionTargetSnapshot097,
+        appLanguage: String,
+        now: Long,
+    ): AiSuggestionSet097? {
+        val kind = target.kind.name.lowercase(java.util.Locale.ROOT)
+        val stored = state.suggestionSets097.lastOrNull { record ->
+            AiSuggestionCache097.isFresh(record, kind, target.targetId, target.revision, now)
+        }
+        val itemCache = if (target.kind == SuggestionTargetKind097.ITEM) {
+            state.items.singleOrNull { it.id == target.itemId }?.takeIf {
+                AiSuggestedInteractions095.isApplicable(state, it, now, appLanguage)
+            }?.let { item -> AiSuggestionSet097(kind, target.targetId, target.revision,
+                item.suggestedInteractions.map { it.prompt }, item.suggestedInteractionsGeneratedAtMillis) }
+        } else if (target.kind == SuggestionTargetKind097.CONVERSATION) {
+            val thread = state.conversations.singleOrNull { it.id == target.targetId }
+            val item = thread?.takeIf { it.turns.isEmpty() && it.attachments.isEmpty() }?.itemId?.let { id ->
+                state.items.singleOrNull { it.id == id }
+            }
+            item?.takeIf { AiSuggestedInteractions095.isApplicable(state, it, now, appLanguage) }
+                ?.let { AiSuggestionSet097(kind, target.targetId, target.revision,
+                    it.suggestedInteractions.map { interaction -> interaction.prompt }, it.suggestedInteractionsGeneratedAtMillis) }
+        } else null
+        return listOfNotNull(stored, itemCache).filter { AiSuggestionCache097.isValid(it) }
+            .maxByOrNull { it.generatedAtMillis }
+    }
+
+    /** Explicit single request; opening a sheet is read-only. Duplicate taps share this job. */
+    fun generateSuggestions097(target: SuggestionTargetSnapshot097, appLanguage: String): SuggestionGenerationHandle097? {
+        val language = appLanguage.takeIf { it in setOf("en", "sw") } ?: "en"
+        synchronized(suggestionGenerationLock) {
+            suggestionGenerationJob?.takeIf { it.isActive }?.let { active ->
+                if (suggestionGenerationTarget == target) return SuggestionGenerationHandle097(
+                    suggestionGenerationRequestId ?: return null, active)
+                return null
+            }
+            val currentUi = _ui.value
+            val state = currentUi.state ?: return null
+            val actionAlreadyWorking = synchronized(suggestionActionLock) { suggestionActionJob?.isActive == true }
+            if (!currentUi.connected || currentUi.appLanguage != language || currentUi.asking || currentUi.importWorking || currentUi.conversationOpening ||
+                currentUi.suggestionWorking || actionAlreadyWorking || app.appLock.state.value.locked ||
+                !SuggestionTargets097.current(state, target, language)) return null
+            // A full, fresh AI set needs no second request. Generate/Retry is only valid when
+            // prepared data is missing, expired, or was explicitly rejected as incomplete.
+            if (cachedSuggestionSet097(state, target, language, System.currentTimeMillis()) != null) return null
+            val requestId = java.util.UUID.randomUUID().toString()
+            lateinit var launched: Job
+            launched = viewModelScope.launch(start = CoroutineStart.LAZY) {
+                try {
+                    _ui.update { it.copy(suggestionGeneration = SuggestionGenerationState097(
+                        requestId, target, SuggestionSheetStatus097.GENERATING)) }
+                    if (briefLanguage() != language || app.appLock.state.value.locked) throw FeedFailure("suggestion_changed")
+                    val initial = repository.current()
+                    if (!SuggestionTargets097.current(initial, target, language)) throw FeedFailure("suggestion_changed")
+                    if (target.kind == SuggestionTargetKind097.CONVERSATION && _ui.value.activeConversationId != target.targetId)
+                        throw FeedFailure("suggestion_changed")
+                    withContext(Dispatchers.IO) {
+                        engine.generateSuggestionSet097(
+                            target = target,
+                            expectedLanguage = language,
+                            expectedCurrent = { latest ->
+                                _ui.value.appLanguage == language && !app.appLock.state.value.locked &&
+                                    !_ui.value.asking && !_ui.value.importWorking &&
+                                    synchronized(suggestionGenerationLock) {
+                                        suggestionGenerationRequestId == requestId && suggestionGenerationJob?.isActive == true
+                                    } && synchronized(suggestionActionLock) { suggestionActionJob?.isActive != true } &&
+                                    SuggestionTargets097.current(latest, target, language)
+                            },
+                            onRequestDispatch = {
+                                synchronized(suggestionGenerationLock) {
+                                    if (suggestionGenerationRequestId != requestId || suggestionGenerationJob?.isActive != true ||
+                                        app.appLock.state.value.locked)
+                                        throw CancellationException("Suggestion generation cancelled before dispatch")
+                                }
+                            },
+                        )
+                    }
+                    val updated = repository.current()
+                    if (!SuggestionTargets097.current(updated, target, language) || briefLanguage() != language ||
+                        app.appLock.state.value.locked) throw FeedFailure("suggestion_changed")
+                    _ui.update { it.copy(state = updated, suggestionGeneration = null, error = null) }
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: Exception) {
+                    val rawCode = failureCode(error, "suggestion_failed")
+                    val code = when (rawCode) {
+                        "suggestion_incomplete", "suggestion_changed", "suggestion_unavailable" -> rawCode
+                        "unauthorized", "chatgpt_reauth", "quota", "limit_reached", "rate_limit", "offline" -> rawCode
+                        else -> "suggestion_failed"
+                    }
+                    _ui.update { current ->
+                        val sameGeneration = current.suggestionGeneration?.requestId == requestId
+                        if (sameGeneration) current.copy(suggestionGeneration = SuggestionGenerationState097(
+                            requestId, target,
+                            when (code) {
+                                "suggestion_incomplete" -> SuggestionSheetStatus097.INCOMPLETE
+                                "suggestion_unavailable", "unauthorized", "chatgpt_reauth", "offline" -> SuggestionSheetStatus097.UNAVAILABLE
+                                else -> SuggestionSheetStatus097.ERROR
+                            },
+                            code)) else current
+                    }
+                } finally {
+                    val released = synchronized(suggestionGenerationLock) {
+                        if (suggestionGenerationRequestId == requestId) {
+                            suggestionGenerationJob = null
+                            suggestionGenerationRequestId = null
+                            suggestionGenerationTarget = null
+                            true
+                        } else false
+                    }
+                    if (released) _ui.update { current ->
+                        val generation = current.suggestionGeneration
+                        if (generation?.requestId == requestId && generation.status == SuggestionSheetStatus097.GENERATING)
+                            current.copy(suggestionGeneration = null) else current
+                    }
+                }
+            }
+            suggestionGenerationJob = launched
+            suggestionGenerationRequestId = requestId
+            suggestionGenerationTarget = target
+            _ui.update { it.copy(suggestionGeneration = SuggestionGenerationState097(
+                requestId, target, SuggestionSheetStatus097.GENERATING)) }
+            launched.start()
+            return SuggestionGenerationHandle097(requestId, launched)
+        }
+    }
+
+    fun cancelSuggestionGeneration097(requestId: String) {
+        val job = synchronized(suggestionGenerationLock) {
+            if (suggestionGenerationRequestId != requestId) return
+            val current = suggestionGenerationJob
+            suggestionGenerationJob = null
+            suggestionGenerationRequestId = null
+            suggestionGenerationTarget = null
+            current
+        }
+        job?.cancel()
+        _ui.update { if (it.suggestionGeneration?.requestId == requestId) it.copy(suggestionGeneration = null) else it }
+    }
+
+    private fun cancelActiveSuggestionGeneration097() {
+        val requestId = synchronized(suggestionGenerationLock) { suggestionGenerationRequestId } ?: return
+        cancelSuggestionGeneration097(requestId)
+    }
+
+    private fun resolveSuggestion097(
+        state: FeedState,
+        target: SuggestionTargetSnapshot097,
+        stableOptionId: String,
+        appLanguage: String,
+    ): String? {
+        optionsForState097(state, target, appLanguage, System.currentTimeMillis())
+            .singleOrNull { it.id == stableOptionId }?.let { return it.questionText }
+        // Compatibility for a previously rendered provider-generated item ID. This still resolves
+        // only from a fresh complete AI cache; no local or caller-supplied text can pass this path.
+        if (target.kind == SuggestionTargetKind097.ITEM) return target.itemId?.let { id ->
+            AiSuggestedInteractions095.resolve(state, id, stableOptionId, System.currentTimeMillis(), appLanguage)?.prompt
+        }
+        return null
+    }
+
+    private fun startSuggestionAction(action: suspend () -> Unit): Job = synchronized(suggestionActionLock) {
+        suggestionActionJob?.takeIf { it.isActive }?.let { return@synchronized it }
+        val before = _ui.value
+        suggestionDispatchStarted = false
+        pendingSuggestionThreadId = null
+        suggestionAskJob = null
+        pendingSuggestionOriginalThread = null
+        pendingSuggestionAppendedThread = null
+        suggestionPreviousSelection = SuggestionSelectionSnapshot097(before.activeConversationId, intendedConversationItemId, before.conversationReady)
+        lateinit var launched: Job
+        launched = viewModelScope.launch(start = CoroutineStart.LAZY) {
+            _ui.update { it.copy(suggestionWorking = true, error = null) }
+            try { action() }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (e: Exception) {
+                if (!synchronized(suggestionActionLock) { suggestionDispatchStarted })
+                    runCatching { rollbackSuggestionBeforeDispatch() }
+                diagnose("suggestion", e)
+                _ui.update { it.copy(error = failureCode(e)) }
+            } finally {
+                val released = synchronized(suggestionActionLock) {
+                    if (suggestionActionJob === launched) {
+                        suggestionActionJob = null; suggestionDispatchStarted = false; pendingSuggestionThreadId = null
+                        suggestionAskJob = null; suggestionPreviousSelection = null
+                        pendingSuggestionOriginalThread = null; pendingSuggestionAppendedThread = null; true
+                    } else false
+                }
+                if (released) _ui.update { it.copy(suggestionWorking = false) }
+            }
+        }
+        suggestionActionJob = launched
+        launched.start()
+        launched
+    }
+
+    /** Cancel a not-yet-dispatched suggestion when leaving the workspace; lock/cancel paths cancel all work. */
+    private fun cancelSuggestionAction(
+        pendingOnly: Boolean,
+        restorePreviousSelection: Boolean = false,
+        rollbackOnCancel: Boolean = true,
+    ): Job? {
+        var cancelledThreadId: String? = null
+        var selectionToRestore: SuggestionSelectionSnapshot097? = null
+        var originalThread: AiConversation? = null
+        var appendedThread: AiConversation? = null
+        var rollbackBeforeDispatch = false
+        var selectionGenerationAtCancel = 0L
+        var rollbackEpochAtCancel = 0L
+        val cancelled = synchronized(suggestionActionLock) {
+            val job = suggestionActionJob
+            if (job == null || !job.isActive || (pendingOnly && suggestionDispatchStarted)) false
+            else {
+                cancelledThreadId = pendingSuggestionThreadId
+                if (restorePreviousSelection && rollbackOnCancel) selectionToRestore = suggestionPreviousSelection
+                rollbackBeforeDispatch = !suggestionDispatchStarted && rollbackOnCancel
+                selectionGenerationAtCancel = conversationSelectionGeneration
+                rollbackEpochAtCancel = suggestionRollbackEpoch
+                if (rollbackBeforeDispatch) {
+                    originalThread = pendingSuggestionOriginalThread
+                    appendedThread = pendingSuggestionAppendedThread
+                }
+                // Main.immediate (and Unconfined test dispatchers) can synchronously run the
+                // action's finally block on cancel and clear suggestionAskJob. Preserve the child.
+                val askJobToCancel = suggestionAskJob
+                job.cancel()
+                askJobToCancel?.cancel()
+                suggestionActionJob = null
+                suggestionDispatchStarted = false
+                pendingSuggestionThreadId = null
+                suggestionAskJob = null
+                suggestionPreviousSelection = null
+                pendingSuggestionOriginalThread = null; pendingSuggestionAppendedThread = null
+                true
+            }
+        }
+        if (!cancelled) return null
+        _ui.update { it.copy(suggestionWorking = false) }
+        return viewModelScope.launch {
+            val updated = repository.update { state ->
+                var conversations = state.conversations
+                val id = cancelledThreadId
+                val original = originalThread
+                val appended = appendedThread
+                if (rollbackBeforeDispatch && rollbackEpochAtCancel == suggestionRollbackEpoch && original != null && appended != null &&
+                    conversations.singleOrNull { it.id == original.id } == appended) {
+                    conversations = conversations.map { if (it.id == original.id) original else it }
+                }
+                if (rollbackBeforeDispatch && rollbackEpochAtCancel == suggestionRollbackEpoch && id != null) {
+                    val pending = conversations.singleOrNull { it.id == id }
+                    if (pending != null && pending.turns.isEmpty() && pending.attachments.isEmpty())
+                        conversations = conversations.filterNot { it.id == id }
+                }
+                if (conversations != state.conversations) state.copy(conversations = conversations) else state
+            }
+            if (rollbackBeforeDispatch && rollbackEpochAtCancel == suggestionRollbackEpoch &&
+                conversationSelectionGeneration == selectionGenerationAtCancel)
+                selectionToRestore?.let { restoreSuggestionSelection(it, updated) }
+        }
+    }
+
+    private fun restoreSuggestionSelection(snapshot: SuggestionSelectionSnapshot097, state: FeedState) {
+        val previousId = snapshot.conversationId
+        val previousThread = previousId?.let { id -> state.conversations.singleOrNull { it.id == id } }
+        when {
+            previousThread != null && previousThread.itemId == snapshot.itemId -> {
+                saveActiveConversationSelection(previousThread)
+                _ui.update { it.copy(activeConversationId = previousThread.id, conversationOpening = false,
+                    conversationReady = true) }
+            }
+            previousId == null && snapshot.itemId == null && snapshot.ready -> {
+                clearSavedConversationSelection()
+                _ui.update { it.copy(activeConversationId = null, conversationOpening = false,
+                    conversationReady = true) }
+            }
+            else -> {
+                saveBlockedConversationSelection(snapshot.itemId)
+                _ui.update { it.copy(activeConversationId = null, conversationOpening = false,
+                    conversationReady = false, error = it.error ?: "invalid_input") }
+            }
+        }
+    }
+
+    /** Primary next-step action: re-resolve the displayed ID and immediately send exactly once. */
+    fun sendSuggestion(target: SuggestionTargetSnapshot097, stableOptionId: String, appLanguage: String): Job {
+        val actionKey = "${target.kind}|${target.targetId.orEmpty()}|${target.revision}|$stableOptionId"
+        synchronized(suggestionActionLock) {
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (lastSuggestionSendKey == actionKey && now - lastSuggestionSendAtElapsed in 0..1_500L) {
+                return suggestionActionJob?.takeIf { it.isActive } ?: Job().apply { complete() }
+            }
+            lastSuggestionSendKey = actionKey
+            lastSuggestionSendAtElapsed = now
+        }
+        return startSuggestionAction {
+            val language = appLanguage.takeIf { it == "sw" } ?: "en"
+            if (briefLanguage() != language) throw FeedFailure("suggestion_changed")
+            val uiAtTap = _ui.value
+            if (app.appLock.state.value.locked) throw FeedFailure("suggestion_changed")
+            if (uiAtTap.asking || askJob?.isActive == true || uiAtTap.importWorking || uiAtTap.conversationOpening || !uiAtTap.conversationReady)
+                throw FeedFailure("invalid_input")
+            if (!uiAtTap.connected) throw FeedFailure("unauthorized")
+            val selectionAtTap = conversationSelectionGeneration
+            if (target.kind == SuggestionTargetKind097.CONVERSATION && uiAtTap.activeConversationId != target.targetId)
+                throw FeedFailure("suggestion_changed")
+            val initial = repository.current()
+            if (selectionAtTap != conversationSelectionGeneration || !SuggestionTargets097.current(initial, target, language))
+                throw FeedFailure("suggestion_changed")
+            val question = resolveSuggestion097(initial, target, stableOptionId, language) ?: throw FeedFailure("suggestion_changed")
+            if (question.isBlank() || question.length > 2000) throw FeedFailure("invalid_input")
+            // Reuses the existing deterministic pre-open seam. Production leaves it as a no-op;
+            // tests can hold this point to verify navigation/lock cancellation before routing.
+            beforeConversationOpen(target.itemId)
+            if (selectionAtTap != conversationSelectionGeneration) throw CancellationException("Suggestion target changed")
+
+            val thread = if (target.kind == SuggestionTargetKind097.CONVERSATION) {
+                initial.conversations.singleOrNull { it.id == target.targetId } ?: throw FeedFailure("suggestion_changed")
+            } else suggestionThreadForTarget(initial, target, language, selectionAtTap)
+
+            val latest = repository.current()
+            if (selectionAtTap != conversationSelectionGeneration || !SuggestionTargets097.current(latest, target, language) ||
+                briefLanguage() != language || app.appLock.state.value.locked)
+                throw FeedFailure("suggestion_changed")
+            if (thread.itemId != target.itemId || thread.moduleId != target.moduleId) throw FeedFailure("suggestion_changed")
+            val activeGeneration = if (target.kind == SuggestionTargetKind097.CONVERSATION) {
+                if (_ui.value.activeConversationId != thread.id || ! _ui.value.conversationReady || _ui.value.conversationOpening)
+                    throw FeedFailure("suggestion_changed")
+                selectionAtTap
+            } else activateSuggestionThread(thread, selectionAtTap)
+            synchronized(suggestionActionLock) {
+                if (suggestionActionJob?.isActive != true) throw CancellationException("Suggestion send was cancelled")
+            }
+            val started = launchConversationSend(question, thread.id, thread.itemId, activeGeneration, fromSuggestion = true,
+                suggestionTarget = target, suggestionLanguage = language, suggestionOptionId = stableOptionId)
+                ?: throw FeedFailure("invalid_input")
+            started.join()
+            if (!synchronized(suggestionActionLock) { suggestionDispatchStarted }) rollbackSuggestionBeforeDispatch()
+        }
+    }
+
+    private suspend fun rollbackSuggestionBeforeDispatch() {
+        val selectionGenerationAtRollback = conversationSelectionGeneration
+        val rollback = synchronized(suggestionActionLock) {
+            if (suggestionDispatchStarted) return
+            SuggestionRollback097(pendingSuggestionThreadId, pendingSuggestionOriginalThread,
+                pendingSuggestionAppendedThread, suggestionPreviousSelection, suggestionRollbackEpoch)
+        }
+        val createdThreadId = rollback.createdThreadId
+        val originalThread = rollback.originalThread
+        val appendedThread = rollback.appendedThread
+        val updated = repository.update { state ->
+            if (rollback.epoch != suggestionRollbackEpoch) return@update state
+            var conversations = state.conversations
+            if (originalThread != null && appendedThread != null &&
+                conversations.singleOrNull { it.id == originalThread.id } == appendedThread) {
+                conversations = conversations.map { if (it.id == originalThread.id) originalThread else it }
+            }
+            if (createdThreadId != null) {
+                val created = conversations.singleOrNull { it.id == createdThreadId }
+                if (created != null && created.turns.isEmpty() && created.attachments.isEmpty())
+                    conversations = conversations.filterNot { it.id == createdThreadId }
+            }
+            if (conversations != state.conversations) state.copy(conversations = conversations) else state
+        }
+        if (rollback.epoch == suggestionRollbackEpoch && conversationSelectionGeneration == selectionGenerationAtRollback)
+            rollback.previousSelection?.let { restoreSuggestionSelection(it, updated) }
+    }
+
+    /** Pencil action: populate the exact scoped composer, never append a turn or contact a provider. */
+    fun editSuggestion(target: SuggestionTargetSnapshot097, stableOptionId: String, appLanguage: String): Job =
+        startSuggestionAction {
+            val language = appLanguage.takeIf { it == "sw" } ?: "en"
+            if (briefLanguage() != language) throw FeedFailure("suggestion_changed")
+            val uiAtTap = _ui.value
+            if (app.appLock.state.value.locked) throw FeedFailure("suggestion_changed")
+            if (uiAtTap.asking || askJob?.isActive == true || uiAtTap.importWorking || uiAtTap.conversationOpening || !uiAtTap.conversationReady)
+                throw FeedFailure("invalid_input")
+            val selectionAtTap = conversationSelectionGeneration
+            if (target.kind == SuggestionTargetKind097.CONVERSATION && uiAtTap.activeConversationId != target.targetId)
+                throw FeedFailure("suggestion_changed")
+            val initial = repository.current()
+            if (selectionAtTap != conversationSelectionGeneration || !SuggestionTargets097.current(initial, target, language))
+                throw FeedFailure("suggestion_changed")
+            val prompt = resolveSuggestion097(initial, target, stableOptionId, language) ?: throw FeedFailure("suggestion_changed")
+            val thread = if (target.kind == SuggestionTargetKind097.CONVERSATION) {
+                initial.conversations.singleOrNull { it.id == target.targetId } ?: throw FeedFailure("suggestion_changed")
+            } else suggestionThreadForTarget(initial, target, language, selectionAtTap)
+
+            val latest = repository.current()
+            if (selectionAtTap != conversationSelectionGeneration || !SuggestionTargets097.current(latest, target, language) ||
+                briefLanguage() != language || app.appLock.state.value.locked)
+                throw FeedFailure("suggestion_changed")
+            if (thread.itemId != target.itemId || thread.moduleId != target.moduleId) throw FeedFailure("suggestion_changed")
+            if (target.kind == SuggestionTargetKind097.CONVERSATION) {
+                if (_ui.value.activeConversationId != thread.id || !_ui.value.conversationReady || _ui.value.conversationOpening)
+                    throw FeedFailure("suggestion_changed")
+            } else activateSuggestionThread(thread, selectionAtTap)
+            synchronized(suggestionActionLock) {
+                if (suggestionActionJob?.isActive != true) throw CancellationException("Suggestion edit was cancelled")
+                suggestionDispatchStarted = true // The edit is committed locally; navigation must not discard its draft event.
+            }
+            _ui.update { current ->
+                if (_ui.value.activeConversationId != thread.id || !_ui.value.conversationReady) current
+                else current.copy(answer = null, question = null, answerCitations = emptyList(),
+                    suggestionDraft = SuggestedConversationDraft(java.util.UUID.randomUUID().toString(), thread.id, prompt), error = null)
+            }
+        }
+
+    private suspend fun suggestionThreadForTarget(
+        state: FeedState,
+        target: SuggestionTargetSnapshot097,
+        appLanguage: String,
+        selectionGeneration: Long,
+    ): AiConversation {
+        var selected: AiConversation? = null
+        val candidate = AiConversation(moduleId = target.moduleId, itemId = target.itemId)
+        synchronized(suggestionActionLock) {
+            if (suggestionActionJob?.isActive == true) pendingSuggestionThreadId = candidate.id
+        }
+        repository.update { latest ->
+            if (selectionGeneration != conversationSelectionGeneration || !SuggestionTargets097.current(latest, target, appLanguage))
+                return@update latest
+            val existing = when (target.kind) {
+                SuggestionTargetKind097.ITEM -> latest.conversations.filter { it.itemId == target.itemId && it.moduleId == target.moduleId }
+                    .maxByOrNull { it.updatedAtMillis }
+                SuggestionTargetKind097.MODULE -> latest.conversations.filter { it.moduleId == target.moduleId && it.itemId == null }
+                    .maxByOrNull { it.updatedAtMillis }
+                SuggestionTargetKind097.GENERAL -> latest.conversations.filter { it.moduleId == null && it.itemId == null }
+                    .maxByOrNull { it.updatedAtMillis }
+                SuggestionTargetKind097.CONVERSATION -> return@update latest
+            }
+            if (existing != null) { selected = existing; return@update latest }
+            if (latest.conversations.size >= ConversationLogic.maxConversations) throw FeedFailure("conversation_limit")
+            selected = candidate
+            latest.copy(conversations = latest.conversations + candidate)
+        }
+        return selected ?: throw FeedFailure("suggestion_changed")
+    }
+
+    private fun activateSuggestionThread(thread: AiConversation, expectedGeneration: Long): Long {
+        if (expectedGeneration != conversationSelectionGeneration) throw CancellationException("Suggestion target changed")
+        val generation = ++conversationSelectionGeneration
+        saveActiveConversationSelection(thread)
+        _ui.update { it.copy(activeConversationId = thread.id, conversationOpening = false,
+            conversationReady = true, error = null) }
+        return generation
+    }
+
     fun suggestionDraftApplied(id: String) {
         _ui.update { if (it.suggestionDraft?.id == id) it.copy(suggestionDraft = null) else it }
     }
 
-    private suspend fun appendQuestion(id: String, question: String, stillCurrent: () -> Boolean): AiConversation {
+    private suspend fun appendQuestion(
+        id: String,
+        question: String,
+        stillCurrent: () -> Boolean,
+        scopeCurrent: (FeedState) -> Boolean = { true },
+        beforeCommit: (AiConversation) -> Boolean = { true },
+        markAttachmentsUsed: Boolean = true,
+    ): AiConversation {
         val clean = question.trim()
         if (clean.isBlank() || clean.length > 2000) throw FeedFailure("invalid_input")
         var appended: AiConversation? = null
+        var scopeInvalid = false
+        var suggestionCancelled = false
         val updated = repository.update { state ->
             if (!stillCurrent()) return@update state
+            if (!scopeCurrent(state)) { scopeInvalid = true; return@update state }
             var found = false
             var candidate: AiConversation? = null
             val conversations = state.conversations.map { thread ->
@@ -809,17 +1383,26 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                     if (thread.turns.size > ConversationLogic.maxTurns - (if (duplicateRetry) 1 else 2)) throw FeedFailure("conversation_full")
                     val next = thread.copy(title = thread.title.ifBlank { clean.take(160) },
                         turns = if (duplicateRetry) thread.turns else thread.turns + AiTurn(role = "user", text = clean),
-                        attachments = thread.attachments.map { if (it.usedAtMillis > 0) it else it.copy(usedAtMillis = maxOf(System.currentTimeMillis(), thread.createdAtMillis)) },
+                        attachments = if (markAttachmentsUsed) thread.attachments.map {
+                            if (it.usedAtMillis > 0) it else it.copy(usedAtMillis = maxOf(System.currentTimeMillis(), thread.createdAtMillis))
+                        } else thread.attachments,
                         updatedAtMillis = maxOf(System.currentTimeMillis(), thread.createdAtMillis))
                     candidate = next
                     next
                 }
             }
             if (!found || !stillCurrent()) return@update state
-            appended = candidate
+            if (!scopeCurrent(state)) { scopeInvalid = true; return@update state }
+            val nextThread = candidate ?: return@update state
+            if (!beforeCommit(nextThread)) { suggestionCancelled = true; return@update state }
+            appended = nextThread
             state.copy(conversations = conversations)
         }
-        if (appended == null) throw CancellationException("Conversation selection changed before the question was saved")
+        if (appended == null) {
+            if (scopeInvalid) throw FeedFailure("suggestion_changed")
+            if (suggestionCancelled) throw CancellationException("Suggestion cancelled before the question was saved")
+            throw CancellationException("Conversation selection changed before the question was saved")
+        }
         return updated.conversations.find { it.id == id } ?: throw FeedFailure("invalid_input")
     }
 
@@ -827,10 +1410,18 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         current.connection == expected.connection && current.context == expected.context && current.name == expected.name &&
             current.region == expected.region && current.timezone == expected.timezone
 
-    private suspend fun appendAnswer(thread: AiConversation, result: AiAnswer, expected: FeedState, stillCurrent: () -> Boolean): AiConversation {
+    private suspend fun appendAnswer(
+        thread: AiConversation,
+        result: AiAnswer,
+        expected: FeedState,
+        stillCurrent: () -> Boolean,
+        scopeCurrent: (FeedState) -> Boolean = { true },
+        scopeFailureCode: String = "invalid_input",
+    ): AiConversation {
         val next = thread.copy(turns = thread.turns + AiTurn(role = "assistant", text = result.answer, citations = result.citations, model = expected.connection.model),
             updatedAtMillis = maxOf(System.currentTimeMillis(), thread.createdAtMillis))
         repository.update { state ->
+            if (!scopeCurrent(state)) throw FeedFailure(scopeFailureCode)
             if (!stillCurrent() || !sameRequestContext(state, expected) || state.conversations.find { it.id == thread.id } != thread ||
                 state.modules.find { it.id == thread.moduleId } != expected.modules.find { it.id == thread.moduleId }) throw FeedFailure("invalid_input")
             state.copy(conversations = state.conversations.map { if (it.id == next.id) next else it })
@@ -840,10 +1431,25 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
 
     fun sendConversation(question: String) {
         val selectedUi = _ui.value
-        if (askJob?.isActive == true || selectedUi.importWorking || selectedUi.conversationOpening || !selectedUi.conversationReady) return
-        val targetConversationId = selectedUi.activeConversationId
-        val targetItemId = intendedConversationItemId
-        val selectionGeneration = conversationSelectionGeneration
+        launchConversationSend(question, selectedUi.activeConversationId, intendedConversationItemId,
+            conversationSelectionGeneration, fromSuggestion = false)
+    }
+
+    /** Captured destination prevents a suggestion resolving on one screen from drifting to a newly active chat. */
+    private fun launchConversationSend(
+        question: String,
+        targetConversationId: String?,
+        targetItemId: String?,
+        selectionGeneration: Long,
+        fromSuggestion: Boolean,
+        suggestionTarget: SuggestionTargetSnapshot097? = null,
+        suggestionLanguage: String = "en",
+        suggestionOptionId: String? = null,
+    ): Job? {
+        val selectedUi = _ui.value
+        val suggestionInFlight = synchronized(suggestionActionLock) { suggestionActionJob?.isActive == true }
+        if (askJob?.isActive == true || (!fromSuggestion && suggestionInFlight) || selectedUi.importWorking ||
+            selectedUi.conversationOpening || !selectedUi.conversationReady || targetConversationId != selectedUi.activeConversationId) return null
         val generation = ++askGeneration
         askJob = viewModelScope.launch {
             if (selectionGeneration != conversationSelectionGeneration || targetConversationId != _ui.value.activeConversationId) return@launch
@@ -871,18 +1477,80 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                     }
                     if (selectionGeneration != conversationSelectionGeneration || _ui.value.activeConversationId != selected.id) return@launch
                 }
-                val thread = appendQuestion(selected.id, question) {
-                    generation == askGeneration && selectionGeneration == conversationSelectionGeneration
+                val beforeSuggestionTurn = selected.takeIf { suggestionTarget?.kind == SuggestionTargetKind097.CONVERSATION }
+                var appendedSuggestionThread: AiConversation? = null
+                val targetStillCurrent: (FeedState) -> Boolean = { latest ->
+                    val target = suggestionTarget
+                    val unlocked = !app.appLock.state.value.locked
+                    val actionActive = if (target == null) true else synchronized(suggestionActionLock) {
+                        suggestionActionJob?.isActive == true
+                    }
+                    if (!unlocked || !actionActive) false else if (target == null) true else {
+                        val optionId = suggestionOptionId
+                        if (optionId == null) false
+                        else if (target.kind != SuggestionTargetKind097.CONVERSATION) {
+                            SuggestionTargets097.current(latest, target, suggestionLanguage) &&
+                                resolveSuggestion097(latest, target, optionId, suggestionLanguage) == question
+                        } else {
+                            val original = beforeSuggestionTurn
+                            val nowThread = latest.conversations.singleOrNull { it.id == target.targetId }
+                            val expectedThread = appendedSuggestionThread
+                            val threadIsExpected = if (expectedThread == null) nowThread == original else nowThread == expectedThread
+                            val preAppendState = if (original == null) latest else latest.copy(
+                                conversations = latest.conversations.map { if (it.id == original.id) original else it },
+                            )
+                            threadIsExpected && SuggestionTargets097.current(preAppendState, target, suggestionLanguage) &&
+                                resolveSuggestion097(preAppendState, target, optionId, suggestionLanguage) == question
+                        }
+                    }
                 }
+                if (suggestionTarget != null) synchronized(suggestionActionLock) {
+                    if (suggestionActionJob?.isActive != true) throw CancellationException("Suggestion send was cancelled")
+                    pendingSuggestionOriginalThread = selected
+                    pendingSuggestionAppendedThread = null
+                }
+                val commitSuggestionThread: (AiConversation) -> Boolean = { nextThread ->
+                    if (suggestionTarget == null) true else synchronized(suggestionActionLock) {
+                        if (suggestionActionJob?.isActive != true || app.appLock.state.value.locked) false
+                        else { pendingSuggestionAppendedThread = nextThread; true }
+                    }
+                }
+                val stillCurrent: () -> Boolean = {
+                    generation == askGeneration && selectionGeneration == conversationSelectionGeneration &&
+                        (suggestionTarget == null || synchronized(suggestionActionLock) { suggestionActionJob?.isActive == true })
+                }
+                val thread = appendQuestion(selected.id, question, stillCurrent,
+                    targetStillCurrent, commitSuggestionThread,
+                    markAttachmentsUsed = suggestionTarget == null)
+                if (suggestionTarget?.kind == SuggestionTargetKind097.CONVERSATION) appendedSuggestionThread = thread
                 val requestState = repository.current()
                 if (selectionGeneration != conversationSelectionGeneration) return@launch
-                val result = withContext(Dispatchers.IO) { engine.askConversation(thread.id, question) { text ->
-                    if (generation == askGeneration && selectionGeneration == conversationSelectionGeneration) _ui.update { it.copy(answer = text) }
-                } }
+                if (!targetStillCurrent(requestState)) throw FeedFailure(if (suggestionTarget != null) "suggestion_changed" else "invalid_input")
+                val result = withContext(Dispatchers.IO) {
+                    if (suggestionTarget == null) engine.askConversation(thread.id, question) { text ->
+                        if (generation == askGeneration && selectionGeneration == conversationSelectionGeneration) _ui.update { it.copy(answer = text) }
+                    } else engine.askConversation(
+                        conversationId = thread.id,
+                        question = question,
+                        onText = { text ->
+                            if (generation == askGeneration && selectionGeneration == conversationSelectionGeneration) _ui.update { it.copy(answer = text) }
+                        },
+                        expectedCurrent = targetStillCurrent,
+                        expectedLanguage = suggestionLanguage,
+                        staleFailureCode = "suggestion_changed",
+                        excludeUnusedAttachments = true,
+                        onRequestDispatch = {
+                        synchronized(suggestionActionLock) {
+                            if (suggestionActionJob?.isActive != true || app.appLock.state.value.locked)
+                                throw CancellationException("Suggestion send was cancelled")
+                            suggestionDispatchStarted = true
+                        }
+                    })
+                }
                 if (generation == askGeneration && selectionGeneration == conversationSelectionGeneration) {
-                    appendAnswer(thread, result, requestState) {
+                    appendAnswer(thread, result, requestState, {
                         generation == askGeneration && selectionGeneration == conversationSelectionGeneration
-                    }
+                    }, targetStillCurrent, if (suggestionTarget != null) "suggestion_changed" else "invalid_input")
                     _ui.update { it.copy(answer = null, answerCitations = emptyList(), error = null) }
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -891,6 +1559,8 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             } }
             finally { if (generation == askGeneration && selectionGeneration == conversationSelectionGeneration) _ui.update { it.copy(asking = false) } }
         }
+        if (fromSuggestion) synchronized(suggestionActionLock) { suggestionAskJob = askJob }
+        return askJob
     }
 
     fun cancelDetail() { detailGeneration++; detailJob?.cancel(); _ui.update { it.copy(detailLoading = false, detailText = "") } }
@@ -964,13 +1634,13 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                         generation == detailGeneration
                     } ?: return@launch
                 detailConversationId = selected.id
-                val thread = appendQuestion(selected.id, question) { generation == detailGeneration }
+                val thread = appendQuestion(selected.id, question, stillCurrent = { generation == detailGeneration })
                 _ui.update { it.copy(detailTurns = thread.turns) }
                 val result = withContext(Dispatchers.IO) { engine.askConversation(thread.id, question) { text ->
                     if (generation == detailGeneration) _ui.update { it.copy(detailText = text) }
                 } }
                 if (generation == detailGeneration) {
-                    val completed = appendAnswer(thread, result, state) { generation == detailGeneration }
+                    val completed = appendAnswer(thread, result, state, stillCurrent = { generation == detailGeneration })
                     _ui.update { it.copy(detailTurns = completed.turns, detailText = "", detailCitations = result.citations) }
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -1094,7 +1764,7 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             context = imported.entries.map { it.copy(origin = "imported", global = false) },
             modules = ModuleCatalog.mergeCatalog(imported.modules.ifEmpty { s.modules }),
             items = s.items.map { AiSuggestedInteractions095.clear(it.copy(why = "", relevance = 0, aiRelevance = null)) },
-            briefs = emptyList(), lastAiRefreshMillis = 0, lastRefreshMillis = 0) }
+            briefs = emptyList(), suggestionSets097 = emptyList(), personalDailySelection098 = null, lastAiRefreshMillis = 0, lastRefreshMillis = 0) }
         // Publish the exact DataStore result before the completion signal returns to the editor.
         // The repository collector will converge on the same snapshot; this avoids briefly
         // restoring a stale saveable context draft as the user lands on the notes list.
@@ -1103,11 +1773,12 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     private suspend fun applyBackup(candidate: FeedState) {
         conversationSelectionGeneration++
         clearSavedConversationSelection()
-        cancelConnection(); cancelRefresh(); cancelAiWork()
+        cancelConnection(); cancelRefresh(); cancelAiWork(discardSuggestionRollback = true)
         // Commit the data first. A failed store write must not erase a working account.
         // A blank plan account prevents old API credentials being used if cleanup fails.
         repository.update { candidate.copy(notifications = false, personalSeedApplied = true, modules = ModuleCatalog.mergeCatalog(candidate.modules),
             items = candidate.items.map { AiSuggestedInteractions095.clear(it.copy(aiRelevance = null)) },
+            suggestionSets097 = emptyList(), personalDailySelection098 = null,
             connection = AiConnection(mode = "chatgpt", model = candidate.connection.model), aiPauseCode = "") }
         apiPresence.definitive(false)
         FeedWorker.cancel(app)
@@ -1205,6 +1876,8 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     fun exportFeedBackup(uri: Uri) = work {
         val state = repository.current()
         write(uri, Json { prettyPrint = true; encodeDefaults = true }.encodeToString(state.copy(
+            items = state.items.map(AiSuggestedInteractions095::clear),
+            suggestionSets097 = emptyList(), personalDailySelection098 = null,
             connection = state.connection.copy(accountId = ""), aiPauseCode = "")))
         _ui.update { it.copy(notice = "saved", error = null) }
     }
@@ -1218,12 +1891,13 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     fun reset(): Job {
         // Invalidate staged objects synchronously; a later confirmation must not resurrect erased data.
         cancelImport()
-        clearAnswer()
+        suggestionRollbackEpoch++
+        clearAnswerInternal(suppressSuggestionRollback = true)
         conversationSelectionGeneration++
         clearSavedConversationSelection()
         _ui.update { it.copy(activeConversationId = null, conversationOpening = false, conversationReady = true) }
         return work {
-            cancelRefresh(); cancelConnection(); cancelAiWork()
+            cancelRefresh(); cancelConnection(); cancelAiWork(discardSuggestionRollback = true)
             withContext(Dispatchers.IO) { engine.clearAllCredentials() }
             apiPresence.definitive(false)
             repository.erase(); FeedWorker.cancel(app)

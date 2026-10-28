@@ -11,11 +11,18 @@ import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.*
 import mebot.nguli.com.feed.auth.*
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
@@ -173,15 +180,44 @@ class ChatGptConnectedJourneyTest {
         openConnectionFromOnboarding()
         compose.onNodeWithTag("chatgpt-retry-account").performClick()
         waitForTag("chatgpt-model-picker")
+        val feedViewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]
+        val discoveriesBeforeContinue = app.providerDiscoveries.size
+        val refreshBeforeContinue = feedViewModel.ui.value.state?.lastAiRefreshMillis ?: 0L
         compose.onNodeWithTag("connection-continue").performScrollTo().performClick()
         waitForText(text(R.string.feed_you_title))
-        compose.waitUntil(15_000) { state().lastAiRefreshMillis > 0 }
+        compose.waitUntil(15_000) {
+            compose.waitForIdle()
+            val refreshed = feedViewModel.ui.value
+            (refreshed.state?.lastAiRefreshMillis ?: 0L) > refreshBeforeContinue &&
+                !refreshed.refreshing && app.providerDiscoveries.size > discoveriesBeforeContinue
+        }
         val approved = ContextEntry(id = "search-interest", text = "Useful open-source tools", scopes = setOf("news"))
         val unshared = ContextEntry(id = "private-interest", text = "An unrelated music interest", scopes = setOf("music"))
         val url = "https://example.com/discovered-tool"
         val item = FeedItem("search-tool", "news", "A discovered open-source tool", "A synthetic source-backed search result.",
             sourceName = "Example documentation", sourceUrl = url, citations = listOf(FeedCitation("Example documentation", url)))
-        runBlocking { app.feedRepository.update { it.copy(context = listOf(approved, unshared)) } }
+        // Keep the Compose test dispatcher live while DataStore serializes this fixture update.
+        // Blocking here can prevent a pending refresh/Main continuation from making progress.
+        val feedRepository = app.feedRepository
+        val contextUpdateScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val contextUpdate = contextUpdateScope.async {
+            withTimeout(10_000) {
+                feedRepository.update { it.copy(context = listOf(approved, unshared)) }
+            }
+        }
+        try {
+            compose.waitUntil(15_000) {
+                compose.waitForIdle()
+                contextUpdate.isCompleted
+            }
+            val persisted = runBlocking { contextUpdate.await() }
+            assertEquals("The fixture context must be durably stored before the search begins",
+                listOf(approved, unshared), persisted.context)
+        } finally {
+            contextUpdate.cancel()
+            contextUpdateScope.cancel()
+            runBlocking { withTimeoutOrNull(1_000) { contextUpdate.join() } }
+        }
         app.searchItems = listOf(item)
         val requestsBeforeSearch = state().requestsToday
         compose.onNodeWithTag("nav-feed").performClick()
@@ -336,7 +372,7 @@ class ChatGptConnectedJourneyTest {
 }
 
 /** No network or Android Keystore operations. All values below are synthetic test fixtures. */
-class ChatGptJourneyApplication : MeBotApplication() {
+open class ChatGptJourneyApplication : MeBotApplication() {
     override fun onCreate() { super.onCreate(); androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(this) }
     override val chatGptAuth by lazy { UiFixtureChatGptAuth(this) }
     override val feedSecrets by lazy { TestVault(this) }
@@ -347,6 +383,19 @@ class ChatGptJourneyApplication : MeBotApplication() {
     val askedQuestions = CopyOnWriteArrayList<String>()
     val askedContexts = CopyOnWriteArrayList<List<ContextEntry>>()
     val searched = CopyOnWriteArrayList<String>()
+    val suggestedScopes = CopyOnWriteArrayList<String>()
+    val suggestedQuestionSets = CopyOnWriteArrayList<List<String>>()
+    val suggestionProviderStates = CopyOnWriteArrayList<FeedState>()
+    val suggestedAttachments = CopyOnWriteArrayList<List<AiAttachment>>()
+    @Volatile var suggestionQuestions: List<String> = listOf(
+        "What evidence in this item most strongly supports its main claim?",
+        "Which assumption would change the conclusion if it proved false?",
+        "What practical trade-off matters most before using this approach?",
+        "How does this option compare with the closest alternative described here?",
+        "What unresolved detail would be most useful to investigate next?",
+    )
+    @Volatile var suggestionGate: CompletableDeferred<Unit>? = null
+    @Volatile var onSuggestionRequested: (() -> Unit)? = null
     @Volatile var searchItems: List<FeedItem> = emptyList()
     @Volatile var checkGate: CompletableDeferred<Unit>? = null
     @Volatile var checkFailure: String? = null
@@ -371,6 +420,21 @@ class ChatGptJourneyApplication : MeBotApplication() {
                     askedQuestions += question
                     askedContexts += state.context
                     return AiAnswer(ANSWER, item?.citations.orEmpty())
+                }
+                override suspend fun suggest(
+                    state: FeedState,
+                    item: FeedItem?,
+                    conversation: AiConversation?,
+                    module: FeedModule?,
+                    secret: String,
+                    language: String,
+                ): List<String> {
+                    onSuggestionRequested?.invoke()
+                    suggestionGate?.await()
+                    suggestedScopes += listOfNotNull(item?.id, conversation?.id, module?.id).joinToString(":").ifBlank { "general" }
+                    suggestionProviderStates += state
+                    suggestedAttachments += conversation?.attachments.orEmpty()
+                    return suggestionQuestions.toList().also { suggestedQuestionSets += it }
                 }
                 override suspend fun search(state: FeedState, modules: List<FeedModule>, query: String, secret: String, language: String): List<FeedItem> {
                     searched += "${state.connection.mode}:$secret:$query"

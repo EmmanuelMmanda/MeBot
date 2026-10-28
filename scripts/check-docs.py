@@ -131,6 +131,42 @@ def check_catalog():
             raise ValueError('Integrity file must stay inside docs')
         integrity = json.loads(integrity_path.read_text())
         entries = catalog['releases']
+        # A source-qualified preview is not a signed public APK. Validate its
+        # absence of publication claims, then run all public checks on the
+        # actual published release rather than weakening those contracts.
+        if catalog.get('status') == 'pending' and catalog.get('apk') is False:
+            for field in ('publicAssetsAvailable', 'inAppUpdateAvailable'):
+                if catalog.get(field) is not False:
+                    error(path, f'unsigned preview must set {field} false')
+            if catalog.get('localArtifactsVerified') is not True or not isinstance(catalog.get('sourceSizeBytes'), int) or catalog['sourceSizeBytes'] <= 0:
+                error(path, 'unsigned preview requires verified source archive bytes')
+            if catalog.get('privateCandidate') is not True:
+                error(path, 'unsigned preview must remain a private candidate')
+            for field in ('filename', 'sha256', 'sizeBytes', 'certificateSha256'):
+                if catalog.get(field) is not None:
+                    error(path, f'unsigned preview cannot advertise {field}')
+            if catalog.get('publishedAt') or catalog.get('publishedDate'):
+                error(path, 'unsigned preview cannot advertise a publication date')
+            for field in ('sourceCommit', 'sourceTree'):
+                if not re.fullmatch(r'[0-9a-f]{40}', catalog.get(field) or ''):
+                    error(path, f'unsigned preview requires exact {field}')
+            if not re.fullmatch(r'[0-9a-f]{64}', catalog.get('sourceSha256') or ''):
+                error(path, 'unsigned preview requires source archive SHA-256')
+            for field, proof in (('version','version'),('sourceCommit','source_code_commit'),('sourceTree','source_tree'),('sourceSha256','source_sha256'),('sourceSizeBytes','source_size_bytes'),('filename','apk_file'),('sha256','apk_sha256'),('sizeBytes','apk_size_bytes'),('certificateSha256','signer_certificate_sha256')):
+                if catalog.get(field) != integrity.get(proof):
+                    error(path, f'unsigned preview {field} differs from integrity')
+            if integrity.get('publication_status') != 'pending' or integrity.get('apk_signature_verified') is not False or integrity.get('public_assets_available') is not False or integrity.get('in_app_update_available') is not False:
+                error(path, 'unsigned preview integrity must not claim signing or publication')
+            if integrity.get('published_at') or integrity.get('publication_date'):
+                error(path, 'unsigned preview integrity cannot advertise publication date')
+            public = next((e for e in entries if e.get('status') == 'published' and e.get('apk') is True), None)
+            if public is None:
+                raise ValueError('Preview requires an explicitly identified published download')
+            catalog = public
+            integrity_path = (DOCS / catalog['integrityFile']).resolve()
+            if not integrity_path.is_relative_to(DOCS.resolve()):
+                raise ValueError('Published integrity file must stay inside docs')
+            integrity = json.loads(integrity_path.read_text())
         versions = [entry['version'] for entry in entries]
         if len(versions) != len(set(versions)):
             error(path, 'duplicate versions')
@@ -168,6 +204,17 @@ def check_catalog():
                 error(path, f'latest {catalog_field} differs from release integrity')
         if catalog.get('status') != integrity.get('publication_status'):
             error(path, 'publication status differs from release integrity')
+        if 'assets' in integrity:
+            assets = integrity['assets']
+            expected = []
+            for name, digest, size in [('filename','sha256','sizeBytes'),('sourceFilename','sourceSha256','sourceSizeBytes'),('verificationFilename','verificationSha256','verificationSizeBytes'),('releaseNotesFilename','releaseNotesSha256','releaseNotesSizeBytes'),('checksumFilename','checksumSha256','checksumSizeBytes'),('releaseMetadataFilename','releaseMetadataSha256','releaseMetadataSizeBytes')]:
+                expected.append(catalog[name])
+                asset = next((a for a in assets if a.get('name') == catalog[name]), {})
+                url = f"https://github.com/EmmanuelMmanda/MeBot/releases/download/{catalog['tag']}/{catalog[name]}"
+                if asset.get('digest') != 'sha256:' + catalog[digest] or asset.get('size') != catalog[size] or asset.get('browser_download_url') != url:
+                    error(path, f'published asset proof differs: {catalog[name]}')
+            if sorted(a.get('name','') for a in assets) != sorted(expected):
+                error(path, 'published proof must enumerate exactly the six catalogued assets')
         if integrity.get('personal_profile_asset_present') is not False:
             error(path, 'current public integrity must exclude a personal profile')
         for entry in [catalog, *entries]:

@@ -6,9 +6,10 @@ import java.security.MessageDigest
 
 /** Validation and cache identity for optional item-bound, explicitly user-triggered questions. */
 object AiSuggestedInteractions095 {
-    const val MAX_INTERACTIONS = 2
+    /** A prepared set is useful only when the model supplies five real alternatives. */
+    const val MAX_INTERACTIONS = 5
     const val MAX_LABEL_LENGTH = 48
-    const val MAX_PROMPT_LENGTH = 160
+    const val MAX_PROMPT_LENGTH = 320
     const val CACHE_TTL_MILLIS = 24L * 60 * 60 * 1000
     private const val MAX_TIMESTAMP = 32_503_680_000_000L
     private val digestPattern = Regex("[0-9a-f]{64}")
@@ -21,9 +22,12 @@ object AiSuggestedInteractions095 {
         add("mebot-ai-suggested-interactions-content-v1")
         addAll(listOf(item.id, item.moduleId, item.kind, FeedLogic.canonicalUrl(item.sourceUrl), item.title,
             item.summary, item.publishedAtMillis.toString(), item.deadline, item.contentType, item.sourceName,
+            item.acquisition, item.authorship,
             item.nextStep, item.caveat))
         item.keyPoints.forEach { add("keyPoint:$it") }
         item.citations.map { FeedLogic.canonicalUrl(it.url) }.distinct().sorted().forEach { add("citation:$it") }
+        item.sections.forEachIndexed { index, section -> addAll(listOf("section:$index", section.heading, section.body)) }
+        item.furtherReading.forEach { addAll(listOf("furtherReading:${it.title}", FeedLogic.canonicalUrl(it.url))) }
     })
 
     /** Fingerprint only approved module scope and explicit provider identity; no credential or impression history. */
@@ -52,7 +56,12 @@ object AiSuggestedInteractions095 {
                 interaction.label.isNotBlank() && interaction.label.length <= MAX_LABEL_LENGTH && safeText(interaction.label) &&
                 interaction.prompt.isNotBlank() && interaction.prompt.length <= MAX_PROMPT_LENGTH && safeText(interaction.prompt) &&
                 '?' in interaction.prompt && !urlPattern.containsMatchIn(interaction.label) && !urlPattern.containsMatchIn(interaction.prompt)
-        } && interactions.distinctBy { it.prompt.trim().lowercase() }.size == interactions.size
+        } && interactions.distinctBy { normalizeQuestion(it.prompt) }.size == interactions.size
+
+    /** New caches are all-or-none; legacy one/two-question caches remain decodable but unusable. */
+    fun isCompleteSet(interactions: List<AiSuggestedInteraction>): Boolean =
+        interactions.size == MAX_INTERACTIONS && areValid(interactions) &&
+            AiSuggestionCache097.areValidQuestions(interactions.map { it.prompt })
 
     fun validate(item: FeedItem) {
         require(areValid(item.suggestedInteractions))
@@ -62,15 +71,17 @@ object AiSuggestedInteractions095 {
             require(item.suggestedInteractionsGeneratedAtMillis == 0L)
             return
         }
-        require(item.kind !in setOf("weather", "horoscope") && item.weather == null && item.sourceUrl.isNotBlank())
+        require(item.kind !in setOf("weather", "horoscope") && item.weather == null)
+        require((item.sourceUrl.isNotBlank() && FeedLogic.safeUrl(item.sourceUrl)) || FeedLogic.isValidOriginalReadShape(item))
         require(digestPattern.matches(item.suggestedInteractionsContentDigest))
         require(digestPattern.matches(item.suggestedInteractionsScopeProviderDigest))
         require(item.suggestedInteractionsGeneratedAtMillis in 0..MAX_TIMESTAMP)
     }
 
     fun isApplicable(state: FeedState, item: FeedItem, now: Long, appLanguage: String): Boolean {
-        if (item.suggestedInteractions.isEmpty() || !areValid(item.suggestedInteractions) ||
-            item.kind in setOf("weather", "horoscope") || item.weather != null || !FeedLogic.safeUrl(item.sourceUrl) ||
+        if (!isCompleteSet(item.suggestedInteractions) ||
+            item.kind in setOf("weather", "horoscope") || item.weather != null ||
+            !(FeedLogic.safeUrl(item.sourceUrl) || FeedLogic.isValidOriginalReadShape(item)) ||
             now !in 0..MAX_TIMESTAMP || item.suggestedInteractionsGeneratedAtMillis !in 0..MAX_TIMESTAMP ||
             now - item.suggestedInteractionsGeneratedAtMillis !in 0..CACHE_TTL_MILLIS ||
             item.suggestedInteractionsContentDigest != contentDigest(item)) return false
@@ -114,6 +125,25 @@ object AiSuggestedInteractions095 {
             ?: "en"
 
     private fun safeText(value: String): Boolean = value.none { it.isISOControl() } && value == value.trim()
+
+    /** Reject exact and obvious lexical near-duplicates, without imposing fixed user-visible categories. */
+    fun areDistinctAngles(questions: List<String>): Boolean {
+        if (questions.size != MAX_INTERACTIONS) return false
+        val words = questions.map { question ->
+            normalizeQuestion(question).split(' ').filter { it.length > 2 }.toSet()
+        }
+        for (left in words.indices) for (right in left + 1 until words.size) {
+            val union = words[left] union words[right]
+            val overlap = if (union.isEmpty()) 1.0 else (words[left] intersect words[right]).size.toDouble() / union.size
+            if (overlap >= 0.72) return false
+        }
+        return true
+    }
+
+    private fun normalizeQuestion(value: String): String = value.trim()
+        .lowercase(java.util.Locale.ROOT)
+        .replace(Regex("[^\\p{L}\\p{N} ]+"), " ")
+        .replace(Regex("\\s+"), " ")
 
     private fun digest(parts: List<String>): String {
         val bytes = ByteArrayOutputStream()
