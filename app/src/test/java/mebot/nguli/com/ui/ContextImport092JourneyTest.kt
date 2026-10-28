@@ -34,8 +34,11 @@ class ContextImport092JourneyTest {
     @Test @Config(qualifiers="sw-rTZ-w411dp-h891dp-xhdpi")
     fun swahiliImportRetriesAndPersistsAfterReview()=journey("sw")
     @Test @Config(qualifiers="sw-rTZ-w320dp-h800dp-xhdpi")
-    fun narrowLargeTextImportKeepsActionsReachable(){RuntimeEnvironment.setFontScale(1.3f);compose.activityRule.scenario.recreate();journey("sw","sw-stress")}
-    private fun journey(language:String,suffix:String=language){
+    fun narrowLargeTextImportKeepsActionsReachable()=journey("sw","sw-stress") {
+        RuntimeEnvironment.setFontScale(1.3f)
+        compose.activityRule.scenario.recreate()
+    }
+    private fun journey(language:String,suffix:String=language,afterSetup:(()->Unit)?=null){
         compose.waitForIdle()
         val original=ContextEntry(id="preference-1",text="Synthetic preference for practical business news",category="preference",
             scopes=setOf("news"),confirmed=true,origin="imported",updatedAtMillis=0)
@@ -44,6 +47,8 @@ class ContextImport092JourneyTest {
             app.repository.update{AppState(profile=Profile(onboardingComplete=true),settings=Settings(language=language))}
             app.feedRepository.update{FeedState(onboardingComplete=true,quickGuideSeen=true,interestsConfigured=true,context=listOf(original),modules=ModuleCatalog.mergeCatalog(listOf(FeedModule(id="news",kind="news",query="Fixture local market news"))))}
         }
+        afterSetup?.invoke()
+        compose.waitForIdle()
         waitTag("feed-screen");compose.onNodeWithTag("nav-you").performClick()
         compose.onNodeWithText(text(R.string.preferences_title_083)).performScrollTo().performClick()
         waitTag("context-region")
@@ -80,7 +85,8 @@ class ContextImport092JourneyTest {
         compose.onNodeWithText(text(R.string.context_import_title_092)).performScrollTo().performClick()
         compose.onNodeWithTag("context-paste-input").performScrollTo().assertTextContains("{ invalid JSON }")
         val modulesBeforeImport = runBlocking { app.feedRepository.current() }.modules
-        val valid=ContextSetup.example("Synthetic preference for practical business news")
+        val importedText = "Imported preference for practical business news"
+        val valid=ContextSetup.example(importedText)
         compose.onNodeWithTag("context-paste-input").performTextReplacement(valid)
         compose.onNodeWithTag("context-paste-review").performScrollTo().performClick();waitTag("import-review")
         assertEquals(listOf(original),runBlocking{app.feedRepository.current()}.context)
@@ -93,20 +99,20 @@ class ContextImport092JourneyTest {
         compose.onNodeWithTag("context-paste-input").performScrollTo().assertTextContains(valid)
         compose.onNodeWithTag("context-paste-review").performScrollTo().performClick();waitTag("import-review")
         compose.onNodeWithTag("import-confirm").performClick()
-        compose.waitUntil(10_000){runBlocking{app.feedRepository.current()}.context.any{it.text=="Synthetic preference for practical business news"}}
+        compose.waitUntil(10_000) { runBlocking { app.feedRepository.current() }.context.singleOrNull()?.text == importedText }
         val saved=runBlocking{app.feedRepository.current()}
         assertEquals(setOf("news"),saved.context.single().scopes);assertFalse(saved.context.single().global)
-        assertFalse(saved.context.any { it.text == unsavedNote })
+        assertEquals(importedText, saved.context.single().text); assertFalse(saved.context.any { it.text == unsavedNote })
         assertEquals(modulesBeforeImport,saved.modules);assertEquals(0,saved.requestsToday)
         // Import success is not complete until the committed note is visible in the context editor.
         compose.waitUntil(10_000){feedVm.ui.value.state?.context==saved.context}
         waitTag("context-edit-preference-1")
-        compose.onNodeWithTag("context-edit-preference-1").assertIsDisplayed().assertTextContains("Synthetic preference for practical business news")
+        compose.onNodeWithTag("context-edit-preference-1").assertIsDisplayed().assertTextContains(importedText)
         compose.onNodeWithTag("context-region").assertIsNotDisplayed()
         capture("context-imported-notes-$suffix")
         compose.activityRule.scenario.recreate();waitTag("context-region")
         waitTag("context-edit-preference-1")
-        compose.onNodeWithTag("context-edit-preference-1").assertIsDisplayed().assertTextContains("Synthetic preference for practical business news")
+        compose.onNodeWithTag("context-edit-preference-1").assertIsDisplayed().assertTextContains(importedText)
         assertEquals(saved.context,runBlocking{app.feedRepository.current()}.context)
         // A prior success is informational, not a pending command to leave a newly opened importer.
         compose.onNodeWithTag("context-region").performScrollTo().assertIsDisplayed()
