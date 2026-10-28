@@ -1,10 +1,16 @@
 # Public releases and artifact verification
 
-**MeBot 0.9.6 is the current official release**, published 2026-10-27T03:33:03Z and anonymously asset-verified 2026-10-27T03:34:19.563440Z. It fixes the story-conversation opening, restore and lock/unlock edge case. **Scope warning for superseded 0.9.5:** after opening a story, wait for its conversation to finish opening before sending a question; sending earlier could land in a general chat instead of that story. The fix is available in 0.9.6.
+> **Current status — 28 October 2026:** Published **0.9.7** is the earlier APK. **0.9.8 is a source-qualified preview, not a public APK or in-app update.** The corrected AI-only five-question flow and Original Reads shown in the current showcase are not in that earlier APK. See [download availability](download.html), the [release catalog](assets/release.json), and the [0.9.7 identity evidence](releases/v0.9.7.json). Historical checks below describe their dated releases, not acceptance of the preview.
 
-**MeBot 0.9.5 is a superseded historical signed release**; its original APK, source and integrity record remain unchanged. The current 0.9.6 release keeps the `mebot.nguli.com` package and established 0.9.x production certificate, and updates production 0.9.0–0.9.5 installations in place. MeBot 0.9.4 is superseded but its verified historical release remains available. Versions 0.9.0–0.9.2 had an external-launch defect; 0.9.3 corrected those crashes, and 0.9.4 improved the return after context import. The [release catalog](assets/release.json) and [release directory](releases.html) distinguish signed APK releases from historical source-only checkpoints.
+## Archived publication record — 0.9.6
 
-## Current official 0.9.6 release
+The following record preserves the status and verification reported at its publication date.
+
+**At publication, MeBot 0.9.6 was the current official release**, published 2026-10-27T03:33:03Z and anonymously asset-verified 2026-10-27T03:34:19.563440Z. It fixes the story-conversation opening, restore and lock/unlock edge case. **Scope warning for superseded 0.9.5:** after opening a story, wait for its conversation to finish opening before sending a question; sending earlier could land in a general chat instead of that story. The fix is available in 0.9.6.
+
+**MeBot 0.9.5 is a superseded historical signed release**; its original APK, source and integrity record remain unchanged. The then-current 0.9.6 release kept the `mebot.nguli.com` package and established 0.9.x production certificate, and updates production 0.9.0–0.9.5 installations in place. MeBot 0.9.4 is superseded but its verified historical release remains available. Versions 0.9.0–0.9.2 had an external-launch defect; 0.9.3 corrected those crashes, and 0.9.4 improved the return after context import. The [release catalog](assets/release.json) and [release directory](releases.html) distinguish signed APK releases from historical source-only checkpoints.
+
+## Historical official 0.9.6 release
 
 User-facing change: start typing as soon as a story is opened; the draft stays attached to that story while its conversation prepares, and Send waits for the correct conversation to be ready. Rotation/reopening restores the same story; locking stops pending question opening, and unlocking restores the story without sending it. The separate release notes are [experience-first](RELEASE-0.9.6.md). The accompanying technical verification report is a separate release asset and does not claim physical-device, OEM, live-account/provider or overnight acceptance.
 

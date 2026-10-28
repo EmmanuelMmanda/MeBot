@@ -1,4 +1,4 @@
-> Current test candidate: see [0.7.0-beta.1](RELEASE-0.7.0-beta.1.md). Older figures below describe archived releases, not new beta verification.
+> **Historical verification record.** The figures below describe MeBot 0.6.1, not the current preview. As of 28 October 2026, published **0.9.7** is an earlier experience and **0.9.8** remains a source-qualified preview without a public APK. See [current release availability](download.html) and [release identity evidence](PUBLIC-RELEASES.md). The [0.7.0-beta.1 record](RELEASE-0.7.0-beta.1.md) is also historical. No old test totals establish acceptance of newer source.
 
 # Verification — MeBot 0.6.1
 

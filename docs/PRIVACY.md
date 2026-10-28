@@ -1,11 +1,13 @@
 # Privacy and data
 
-## Provider and update privacy in 0.8.2
+This describes the 0.9.8 preview source, not an available APK. Published 0.9.7 does not include the corrected five-question and Original Read experience. See [release status](INSTALL.md).
+
+## Provider and update privacy
 
 Selected provider requests go only to that configured provider/endpoint with approved scoped context. Credentials are isolated and omitted from portable exports. Claude/Gemini/OpenRouter use their own billing and capability rules. A compatible private/localhost HTTP endpoint requires explicit consent and cannot receive a saved API key over HTTP. Software Updates contacts the public GitHub release API and asset hosts without personal context or AI credentials. The app has no added analytics service. Relevance feedback stays in local persisted state and may be summarized within the same module’s approved AI request. Capture inputs in public documentation are public records, not a user's personal profile.
 
 
-MeBot 0.6.1 keeps local utilities, conversations and cached reading on the device, retrieves configured public feeds, and optionally uses an explicitly connected ChatGPT account, API key or personal service. There is no advertising, analytics client, separate MeBot account service or automatic ChatGPT memory sync. Daily notes, alarm plans and focus records are not included in AI prompts. Personal context is a separate, editable collection of explicitly supplied notes.
+MeBot keeps local utilities, conversations and cached reading on the device, retrieves configured public feeds, and optionally uses an explicitly connected ChatGPT account, API key or personal service. There is no advertising, analytics client, separate MeBot account service or automatic ChatGPT memory sync. Daily notes, alarm plans and focus records are not included in AI prompts. Personal context is a separate, editable collection of explicitly supplied notes.
 
 This document describes the code in this repository. It does not cover another application, a modified build, an operating-system service, or a document provider you choose when exporting a file.
 
@@ -26,7 +28,11 @@ This document describes the code in this repository. It does not cover another a
 
 The personal repository does not open from the Direct Boot alarm receivers. Daily notes and the profile intention are not copied into the device-protected alarm store. Alarm labels, checkpoint labels, chosen sound identifiers/URIs/display names and optional spoken wake-up messages **are** copied because the alarm needs them while the device is locked. A spoken message is audible to anyone nearby when its alarm rings.
 
-The app relies on Android's application storage boundary for personal JSON and operational preferences; the AI credential has an additional Keystore encryption layer. There is no separate app lock or passphrase. Someone who can use the unlocked app can read its records. Exported JSON is readable text; local-tool exports can include notes and checkpoint values, and feed exports include personal context.
+The app relies on Android's application storage boundary for personal JSON and operational preferences; the AI credential has an additional Keystore encryption layer. Optional app lock is a UI privacy gate, not encryption of these records. Someone who can use the unlocked app can read them. Exported JSON is readable text; local-tool exports can include notes and checkpoint values, and feed exports include personal context.
+
+## Suggestions and Original Read
+
+In the 0.9.8 preview, opening the question sheet alone does not call AI or send a question. Explicit generation requests five distinct story-specific suggestions from the selected provider; there is no local offline fallback. Send submits a selected question; Edit prepares a draft. Existing scoped-context and provider billing rules apply. Original Read is AI-authored and labelled with its Created time, separate from publisher dates. Supporting evidence and optional further reading are distinct; neither is permission to broaden personal-context access.
 
 ## Network and AI processing
 
@@ -124,10 +130,9 @@ Only a bounded stage label, HTTP status, sanitized request ID and allowlisted re
 
 Data and backups includes a collapsed troubleshooting view for recent local operation/error codes and a short correlation identifier. Diagnostic logging uses bounded operation/code metadata, exception class and code locations, without provider bodies, URLs, attachments or conversation text. These records are not uploaded by MeBot and do not constitute an analytics feed.
 
-## 0.9.0 candidate: Today and optional app lock
+## Today and optional app lock
 
-Today is an on-device projection of already retrieved content with verified date
-metadata. It retains source/module identity and existing context boundaries; it
+Today separates a personal selection of already retrieved content from items with verified source-date metadata. Publication, forecast and event dates keep their own meaning; a recent check does not make a source newly published. It retains source/module identity and existing context boundaries; it
 makes no additional inference request merely to open or paginate cached items.
 It reuses existing optional local reading history and explicit save/hide choices,
 not new telemetry or dwell tracking. Existing explicit relevance feedback retains

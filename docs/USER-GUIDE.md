@@ -1,17 +1,19 @@
-> **MeBot 0.9.6:** start typing as soon as you open a story; its question stays attached while the conversation prepares, and Send waits for the correct conversation. Rotation, reopening and app lock restore the story without sending a pending question. [Current release notes](RELEASE-0.9.6.md) · [Verification and device/provider limits](PUBLIC-RELEASES.md).
+> **0.9.8 preview — not yet released.** This guide describes the preview source. Published 0.9.7 does not include the corrected five-question and Original Read experience. See [release status](INSTALL.md) and [verification limits](PUBLIC-RELEASES.md).
 
-# MeBot user guide — 0.9.6
+# MeBot user guide — 0.9.8 preview
 
-[Start here](../START-HERE.md) · [Illustrated guide](guides/release-082.html) · [Current release notes](RELEASE-0.9.6.md)
+[Start here](../START-HERE.md) · [Workflow guides](guide.html) · [Published releases](PUBLIC-RELEASES.md)
 
 ## Install and start
-Install the official `mebot.nguli.com` package. MeBot 0.9.6 updates production 0.9.0–0.9.5 without uninstalling; earlier signer/package installations have different migration requirements. See [installation guidance](INSTALL.md). Choose English or Kiswahili, interests and an optional city. Skip the introduction or replay the quick guide from Help. Alarm, Focus and Daily Check-in are optional.
+Install the official `mebot.nguli.com` package. The current public APK is 0.9.7, not this 0.9.8 preview. Compatible production updates do not require uninstalling; earlier signer/package installations have different migration requirements. See [installation guidance](INSTALL.md). Choose English or Kiswahili, interests and an optional city. Skip the introduction or replay the quick guide from Help. Alarm, Focus and Daily Check-in are optional.
 
 ## Feed and discovery
 Public sources are usable without AI. Each module owns its preferences, fallback sources and permitted context. Connected AI prepares richer information only when that provider supports it. Sources remain visible. Refresh the selected module by pulling down. Completed modules appear while others work; failures preserve completed and cached content. While reading, use Show new items to accept newly prepared content without losing your position. Source-verified forecasts and events leave active reading after their useful dates; unknown dates remain unknown. Saved and starred records are not deleted, and evergreen material ages more slowly.
 
 ## Item details and MeBot
-Stories open in MeBot first, with the publisher visible and a compact category label. In 0.9.6, the selected story stays attached while its conversation opens: start typing immediately, and Send waits until the correct conversation is ready. Rotation, reopening and app lock restore the story without sending a pending question. Suggested questions remain editable; they never send automatically. The original source stays available as a secondary action, and local questions work offline. If you still use 0.9.5, wait until the story conversation is ready before sending; an earlier question could land in a general chat instead. See the [current story-conversation guide](preview-096.html) and the [historical 0.9.5 story-flow guide](preview-095.html).
+Stories open in MeBot with the publisher and story context retained. In the 0.9.8 preview, opening the question sheet does not call AI or send a question. Explicit generation uses your selected AI connection to produce five distinct questions about that item. **Send** asks the selected question directly; **Edit** prepares an editable story-scoped draft. New suggestions require AI and connectivity; there is no offline question-generator fallback. Your original source remains available. See the [story guide](guides/feed-and-ai.html).
+
+**Original Read** is AI-authored and labelled with its **Created** time, not a publisher date. Supporting evidence is separate from optional further reading. Verify claims and eligibility at the linked source. **Today** distinguishes your personal selection from items with verified publication, forecast or event dates. A recent check does not change a source’s publication date; unknown dates remain unknown.
 
 The source-backed summary introduction remains visible while the explanation loads and streams. Show more expands original notes; it does not gate the introduction. Answers are separate from media/files, so a failed preview does not erase text. The detail response surface is square to prevent clipping. The fixed activity panel follows actual operation state. Tap it for an equally wide popover of events and provider-published summaries when supplied. Private internal reasoning and invented progress percentages are not shown.
 
@@ -23,6 +25,10 @@ Choose ChatGPT sign-in where eligible, an OpenAI API key, Claude API key, Gemini
 
 Select a model and run the connection check. Credentials are isolated by provider. Usage has one durable daily attempted-request count; presets, custom and unlimited control only MeBot's local cap. Failed attempts can count because provider outcome may be uncertain. Provider limits and billing still apply. No automatic provider or paid billing fallback occurs.
 
+## Appearance and language
+
+Choose English or Kiswahili. In **You → Preferences → Appearance**, choose one of eight accents (Ember, Sage, Blue, Violet, Teal, Amber, Rose or Slate) or a custom six-digit colour. Original, Warm, Soft colour and Deep black page styles are separate from system, light and dark mode. Deep black applies in dark mode. Saving appearance does not change your content or AI connection.
+
 ## Your preferences
 Onboarding interests are enough to begin. You may add editable notes or use Copy starter prompt with an assistant to generate MeBot JSON. Use Import file or Paste JSON and review the replacement before applying. After confirmation, MeBot returns to **You → My context** and shows the saved notes. If the input is invalid or you cancel the review, the current draft stays in place. An empty module list keeps your module choices. Notes require approved scopes. Never import passwords or API keys as preferences.
 
@@ -30,7 +36,7 @@ Onboarding interests are enough to begin. You may add editable notes or use Copy
 Use cards to configure automatic refresh, interval, preparation batches, network/battery conditions, notifications and quiet hours. Refresh now is explicit. Android determines actual background timing. Manage the request budget in AI connection, not here.
 
 ## Software Updates
-Automatic checks inspect the trusted public release list; the current 0.9.6 release is offered to production installations on 0.9.0–0.9.5. Optional Wi-Fi download preparation is separate from AI requests. An update must match the installed package and signing certificate, have a higher version code and a supported Android minimum. Downloads are bounded and checked against their published size and SHA-256; Android's archive metadata is checked before installation. Approve installation through Android. Interrupted/invalid downloads do not replace the installed app. Provider connections and personal data are not in the release metadata.
+Automatic checks inspect the trusted public release list; only compatible published releases are offered. The 0.9.8 preview is not an available update. Optional Wi-Fi download preparation is separate from AI requests. An update must match the installed package and signing certificate, have a higher version code and a supported Android minimum. Downloads are bounded and checked against their published size and SHA-256; Android's archive metadata is checked before installation. Approve installation through Android. Interrupted/invalid downloads do not replace the installed app. Provider connections and personal data are not in the release metadata.
 
 ## Data controls
 Clear reading history asks for confirmation and explains its scope. It does not erase saved items, conversations, preferences or relevance feedback. Those are separate controls. Export personal data only to destinations you trust. Keys are not included in portable JSON exports.

@@ -24,6 +24,7 @@ official = r if published else next(x for x in r['releases'] if x.get('status')=
 candidate_page = f"preview-{r['version'].replace('.', '')}.html"
 apk = f"https://github.com/EmmanuelMmanda/MeBot/releases/download/{official['tag']}/{official['filename']}"
 guide_pages = ['guide.html','guides/install.html','guides/personal-context.html','guides/feed-and-ai.html','guides/troubleshooting.html']
+screens=json.loads((ROOT/'docs/assets/screens.json').read_text())
 checks = []
 def load(page,name,**kwargs):
     if not os.environ.get('MEBOT_OFFLINE_BROWSER'):
@@ -82,18 +83,18 @@ try:
                         assert page.locator('.shot img[src*="small-sw-large"]').count() == 0
                     if name == candidate_page:
                         text = page.locator('main').inner_text().lower()
-                        assert 'keep your question with its story' in text
-                        assert 'send waits until it is ready' in text
+                        assert 'five distinct questions' in text and 'pencil' in text
+                        assert 'original reads' in text and 'created dates' in text
                         if not published:
                             assert 'not yet a public download' in text
                             assert page.locator('a[href*="/releases/download/"]').count() == 0
                         else:
                             assert 'available in the official release' in text
                     if name == 'screenshots.html':
-                        assert page.locator('#screen-gallery .shot img[src*="imported-notes-en.png"]').count() == 1
-                        assert page.locator('#screen-gallery .shot img[src*="imported-notes-sw.png"]').count() == 1
-                        assert page.locator('#screen-gallery .shot img[src*="320dp-130percent"]').count() == 0
-                        assert 'Accessibility stress evidence' in page.locator('#image-notes').inner_text()
+                        assert page.locator('#screen-gallery .shot').count() == len(screens)
+                        for capture in screens:
+                            assert page.locator(f'#screen-gallery img[src="{capture["file"]}"]').count() == 1
+                        assert 'checked date is not a publication date' in page.locator('#image-notes').inner_text()
                     if name == 'download.html':
                         # Technical identity is deliberately collapsed; verify the real user interaction.
                         details = page.locator('.release-metadata')
@@ -112,10 +113,6 @@ try:
                         im.scroll_into_view_if_needed()
                         im.evaluate('img => img.decode()')
                         assert im.evaluate('img => img.naturalWidth > 0')
-                    if name == 'screenshots.html':
-                        evidence = page.locator('#image-notes .evidence-only img')
-                        evidence.scroll_into_view_if_needed(); evidence.evaluate('img => img.decode()')
-                        assert evidence.evaluate('img => img.naturalWidth == 640')
                     page.evaluate('scrollTo(0,0)')
                     if width in (1440,390) and theme == 'light':
                         page.screenshot(path=str(OUT / f'{name[:-5]}-{width}.png'), full_page=name == 'index.html')
@@ -128,7 +125,8 @@ try:
                         assert not errors, errors
                         if name.endswith('personal-context.html'):
                             assert page.locator('#after-import').count() == 1
-                            assert page.locator('#after-import img[src*="imported-notes-en.png"]').count() == 1
+                            assert 'notes' in page.locator('#after-import').inner_text().lower()
+                            assert page.locator('img[src*="screenshots/"]').count() == 0
                         if name.endswith('feed-and-ai.html'):
                             assert 'up to eight public stories per module' in page.locator('main').inner_text()
                         if name.endswith('troubleshooting.html'):
@@ -141,10 +139,13 @@ try:
         context = browser.new_context(viewport={'width': 390, 'height': 844})
         page = context.new_page()
         load(page,'screenshots.html',wait_until='networkidle')
-        page.get_by_role('button', name='Getting started', exact=True).click()
-        start_count = sum(s['group'] == 'start' for s in json.loads((ROOT/'docs/assets/screens.json').read_text()))
+        group=screens[0]['group']
+        page.locator(f'[data-screen-filter="{group}"]').click()
+        assert page.locator(f'[data-screen-filter="{group}"]').get_attribute('aria-pressed')=='true'
+        assert page.locator('[data-screen-filter][aria-pressed="true"]').count()==1
+        start_count=sum(s['group']==group for s in screens)
         assert page.locator('#screen-gallery .shot:visible').count() == start_count
-        assert page.locator('#screen-count').inner_text() == f'{start_count} screens'
+        assert page.locator('#screen-count').inner_text() == f'{start_count} '+('screen' if start_count==1 else 'screens')
         opener = page.locator('#screen-gallery .shot:visible a').first
         opener.focus(); page.keyboard.press('Enter')
         assert page.locator('#image-dialog').is_visible()
@@ -152,7 +153,15 @@ try:
         assert not page.locator('#image-dialog').is_visible()
         assert opener.evaluate('el => document.activeElement === el')
         page.get_by_role('button', name='All screens', exact=True).click()
+        assert page.locator('[data-screen-filter="all"]').get_attribute('aria-pressed')=='true'
+        assert page.locator('[data-screen-filter][aria-pressed="true"]').count()==1
         assert page.locator('#screen-gallery .shot:visible').count() == len(json.loads((ROOT/'docs/assets/screens.json').read_text()))
+        theme_control=page.locator('[data-theme-select]').first
+        theme_control.select_option('dark')
+        assert page.locator('html').get_attribute('data-theme')=='dark'
+        theme_control.select_option('light')
+        assert page.locator('html').get_attribute('data-theme')=='light'
+        checks.append('Website appearance control applies both explicit light and dark themes')
         page.get_by_role('button', name='Menu', exact=False).click()
         assert page.locator('#primary-nav').is_visible()
         page.keyboard.press('Escape')

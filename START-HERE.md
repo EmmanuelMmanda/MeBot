@@ -1,42 +1,49 @@
-# Start here — MeBot 0.9.6
+# Start here — MeBot 0.9.8 preview
 
-[Download Android APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.6/mebot-0.9.6.apk) · [Release files](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.6) · [Full user guide](docs/USER-GUIDE.md)
+**Not yet a public download.** The [published 0.9.7 APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.7/mebot-0.9.7.apk) does not contain the full preview experience. [Version availability](docs/download.html).
 
 ## 1. Choose interests
-Pick topics and, optionally, a city. The app does not require an imported context file.
 
-![Choose interests](docs/screenshots/v090/onboarding-en-chooser.png)
+Pick your topics and optionally a city. A context file is not required.
 
-## 2. Import only what you want
-If you import context JSON, review the replacement first. After confirming, MeBot returns to your details with the saved notes visible. If you cancel or the file is invalid, your draft stays in place. Onboarding interests are already enough to begin.
+[Detailed guide](docs/guides/install.html).
 
-![Imported notes in English](docs/screenshots/v094/imported-notes-en.png)
+## 2. Bring only useful context
 
-This example uses synthetic notes, not personal account data. See the [context guide](docs/guides/personal-context.html#after-import) for the review flow.
+Review imported JSON before replacing notes. After confirmation, your saved notes appear in your context details. Cancel leaves the draft in place.
 
-## 3. Read, ask and refine
-Choose an item-specific question. In 0.9.6, the draft stays with that story while its conversation opens and after rotation, reopening or app lock.
+[Detailed guide](docs/guides/personal-context.html#after-import).
 
-![A sourced item and its explanation](docs/screenshots/v082/detail-answer.png)
+## 3. Read with the source nearby
 
-## 4. Choose a connection
-Open You → AI connection. Choose an eligible sign-in, an API key or your personal endpoint. Set the request allowance here. Public information stays usable without AI.
+Keep publisher dates, deadlines and original links in view. Saved stories stay available without AI.
 
-![Provider choices](docs/screenshots/v092/connection-sw.png)
+[Detailed guide](docs/guides/feed-and-ai.html).
 
-## 5. Set background behavior
-Choose timing, preparation, connection/battery conditions and quiet hours. New results arrive as modules complete.
+## 4. Ask when you choose
 
-![Background controls](docs/screenshots/v082/background.png)
+Open Suggestions when you want another angle. Explicit generation prepares five distinct questions with your connected AI. Send asks the selected question; the pencil lets you edit first. Opening or closing the sheet never sends a question. Without AI, questions are unavailable, while public reading and saved items remain usable.
 
-## 6. Keep MeBot current
-Open You → Software Updates. Automatic checks and optional Wi-Fi downloads prepare eligible releases; Android requires installation approval. This package is `mebot.nguli.com`, separate from older development builds.
+[Detailed guide](docs/guides/feed-and-ai.html#follow-up).
 
-![Software Updates](docs/screenshots/v082/software-updates.png)
+## 5. Explore Original Reads
 
-## 7. Use optional tools
-Alarm, Focus and Daily Check-in are together during onboarding and remain available independently of AI. Run a short alarm test before relying on it overnight.
+Original Reads are clearly labelled AI-authored, with Created dates rather than publisher dates. Read the complete sections, inspect evidence, and explore optional further reading separately. Today keeps your personal selection distinct from verified source-day stories; an undated source is not relabelled as published today.
 
-![Daily tools](docs/screenshots/v082/daily-tools.png)
+[Detailed guide](docs/guides/feed-and-ai.html).
 
-The in-app guide is skippable and replayable from Help. Captures use dated public content or synthetic state; [source and image notes](docs/screenshots/README.md).
+## 6. Choose your colours
+
+Change accent and page style in Appearance. Deep black requires dark mode; your choice is saved.
+
+[Detailed guide](docs/guides/appearance.html).
+
+## 7. Keep your data and tools
+
+Background timing remains under Android control. Review update identity before installation. Alarm, Focus and Daily Check-in work independently of AI; test alarms on your own phone.
+
+[Detailed guide](docs/guides/background-and-data.html).
+
+Install an eligible update over your existing production 0.9.x app. Do not uninstall or clear data. Older separately installed builds have different package or signing identities; see the installation guide before replacing them.
+
+[Fresh bilingual gallery](docs/screenshots.html) · [User guide](docs/USER-GUIDE.md).

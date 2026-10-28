@@ -1,0 +1,81 @@
+{
+  "version": "0.9.7",
+  "publication_status": "published",
+  "published_at": "2026-10-27T08:21:43Z",
+  "public_release_id": 425182941,
+  "public_release_url": "https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.7",
+  "source_code_commit": "c1597b94fef288cc917541dfee0e63fa2366764e",
+  "source_tree": "3ae9fef24f5489ce5d80bfb1bf78eef6574187e8",
+  "apk_file": "mebot-0.9.7.apk",
+  "apk_sha256": "ad37bed35e04e995def5be99cd21e5131bb1690c307b3484f247c21e5fd43138",
+  "apk_size_bytes": 17637544,
+  "source_file": "MeBot-0.9.7-source.zip",
+  "source_sha256": "073ea6346290e11ab1c3b4d982468a8c82b7489f120f3702ee7959edcd9d85e1",
+  "source_size_bytes": 22273142,
+  "signer_certificate_sha256": "c665c578ecf64f33541670d94f099ee435db1e55790395ff0339f2bdf231d007",
+  "verification_basis": "Anonymous public APK and release-metadata download hashes match GitHub asset digests. apksigner v2/v3 one signer matches production certificate; manifest package/version and ZIP asset inventory checked; 16KiB alignment passed. No inference about failed historical hosted qualification.",
+  "assets": [
+    {
+      "name": "MeBot-0.9.7-source.zip",
+      "size": 22273142,
+      "digest": "sha256:073ea6346290e11ab1c3b4d982468a8c82b7489f120f3702ee7959edcd9d85e1",
+      "browser_download_url": "https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.7/MeBot-0.9.7-source.zip"
+    },
+    {
+      "name": "MeBot-0.9.7-verification.md",
+      "size": 4072,
+      "digest": "sha256:e48733b0ee7d8fd49ba75b66aa1f7437bc96b25d12c9adf1a2fd80f913530093",
+      "browser_download_url": "https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.7/MeBot-0.9.7-verification.md"
+    },
+    {
+      "name": "mebot-0.9.7.apk",
+      "size": 17637544,
+      "digest": "sha256:ad37bed35e04e995def5be99cd21e5131bb1690c307b3484f247c21e5fd43138",
+      "browser_download_url": "https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.7/mebot-0.9.7.apk"
+    },
+    {
+      "name": "release-metadata.json",
+      "size": 1355,
+      "digest": "sha256:6783b39e497f53788ab98f537740387c592c0d38bffb1af1f7d5111a69d19feb",
+      "browser_download_url": "https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.7/release-metadata.json"
+    },
+    {
+      "name": "RELEASE-NOTES.md",
+      "size": 879,
+      "digest": "sha256:1a79af7b97baa7ac2ac0f74b69b44bf66adacbcb8225135ebe0f3f17fc613652",
+      "browser_download_url": "https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.7/RELEASE-NOTES.md"
+    },
+    {
+      "name": "SHA256SUMS.txt",
+      "size": 436,
+      "digest": "sha256:e2551360684c907772a6098e102c159d2ba123adf1a137c35de9a899370a78dd",
+      "browser_download_url": "https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.7/SHA256SUMS.txt"
+    }
+  ],
+  "application_id": "mebot.nguli.com",
+  "package": "mebot.nguli.com",
+  "label": "MeBot",
+  "version_code": 24,
+  "min_sdk": 26,
+  "target_sdk": 36,
+  "personal_profile_asset_present": false,
+  "apk_signature_verified": true,
+  "signature_schemes_verified": [
+    "v2",
+    "v3"
+  ],
+  "zip_alignment_16k_verified": true,
+  "anonymous_asset_verification_at": "2026-10-28T05:37:00Z",
+  "verification_file": "MeBot-0.9.7-verification.md",
+  "verification_sha256": "e48733b0ee7d8fd49ba75b66aa1f7437bc96b25d12c9adf1a2fd80f913530093",
+  "verification_size_bytes": 4072,
+  "release_notes_file": "RELEASE-NOTES.md",
+  "release_notes_sha256": "1a79af7b97baa7ac2ac0f74b69b44bf66adacbcb8225135ebe0f3f17fc613652",
+  "release_notes_size_bytes": 879,
+  "checksums_file": "SHA256SUMS.txt",
+  "checksums_sha256": "e2551360684c907772a6098e102c159d2ba123adf1a137c35de9a899370a78dd",
+  "checksums_size_bytes": 436,
+  "release_metadata_file": "release-metadata.json",
+  "release_metadata_sha256": "6783b39e497f53788ab98f537740387c592c0d38bffb1af1f7d5111a69d19feb",
+  "release_metadata_size_bytes": 1355
+}
