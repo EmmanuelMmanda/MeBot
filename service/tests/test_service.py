@@ -101,6 +101,9 @@ def test_feed_contract_and_real_provider_request_shape(build):
         assert item["moduleId"] == "news"
         assert item["aiGenerated"] is True
         assert item["citations"][0]["url"] == ARTICLE
+        assert item["acquisition"] == "legacy_unknown"
+        assert item["authorship"] == "legacy_unknown"
+        assert item["sections"] == [] and item["furtherReading"] == []
         upstream = json.loads(seen[0].content)
         assert upstream["store"] is False
         assert upstream["model"] == "gpt-6-luna"
@@ -261,6 +264,50 @@ def test_ask_returns_source_links(build):
         response = client.post("/v1/ask", headers=AUTH, json={"question": "What does this mean for my work?", "context": []})
         assert response.status_code == 200
         assert response.json()["citations"][0]["url"] == ARTICLE
+
+
+def test_ask_accepts_original_read_and_sends_only_its_explicitly_scoped_context(build):
+    def handler(request):
+        response = model_response()
+        response["output"][-1]["content"][0]["text"] = json.dumps({"answer": "A concise answer grounded in the selected reading.", "citations": []})
+        return httpx.Response(200, json=response)
+
+    client, _, seen = build(handler)
+    first_body = ("The reading gives background and a concrete example. " * 12).strip()
+    second_body = ("The second section considers limits and practical trade-offs. " * 12).strip()
+    item = {
+        "id": "original-read-ask", "moduleId": "technology", "kind": "technology",
+        "title": "A substantial technology reading", "summary": "A short preview of the durable reading.",
+        "contentType": "original_read", "acquisition": "original_read", "authorship": "ai",
+        "aiGenerated": True, "sourceName": "", "sourceUrl": "", "publishedAtMillis": 0,
+        "fetchedAtMillis": int(time.time() * 1000), "deadline": "", "citations": [],
+        "sections": [
+            {"heading": "The core idea", "body": first_body},
+            {"heading": "Practical trade-offs", "body": second_body},
+        ],
+        "furtherReading": [{"title": "A related reference", "url": ARTICLE}],
+    }
+    request = {
+        "question": "What is one practical implication of this reading?",
+        "moduleKind": "technology", "item": item,
+        "context": [
+            {"id": "tech-note", "text": "Confirmed technical interest", "scopes": ["technology"]},
+            {"id": "career-note", "text": "Unrelated private career detail", "scopes": ["opportunities"]},
+        ],
+    }
+    with client:
+        response = client.post("/v1/ask", headers=AUTH, json=request)
+        assert response.status_code == 200, response.text
+        upstream = json.loads(seen[0].content)
+        payload = json.loads(upstream["input"][1]["content"])
+        assert payload["item"]["contentType"] == "original_read"
+        assert payload["item"]["acquisition"] == "original_read"
+        assert payload["item"]["authorship"] == "ai"
+        assert payload["item"]["sections"] == item["sections"]
+        assert payload["item"]["furtherReading"] == item["furtherReading"]
+        assert payload["context"] == [{"text": "Confirmed technical interest", "category": "interest", "status": "confirmed", "updatedAtMillis": payload["context"][0]["updatedAtMillis"]}]
+        assert "Unrelated private career detail" not in seen[0].content.decode()
+        assert response.json()["answer"] == "A concise answer grounded in the selected reading."
 
 
 @pytest.mark.parametrize("summary", ["", "s" * 5000])

@@ -20,8 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -31,6 +31,11 @@ import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.FeedUiState
 import mebot.nguli.com.feed.AiActivity
 import mebot.nguli.com.feed.ResourceChecks
+import mebot.nguli.com.feed.SuggestionGenerationHandle097
+import mebot.nguli.com.feed.SuggestionSheetSnapshot097
+import mebot.nguli.com.feed.SuggestionSheetStatus097
+import mebot.nguli.com.feed.SuggestionTargetSnapshot097
+import mebot.nguli.com.feed.SuggestionTargets097
 import kotlinx.coroutines.launch
 import mebot.nguli.com.ui.*
 import java.net.URI
@@ -40,7 +45,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 
-/** The detail view expands verified metadata and useful actions, never invents article text. */
+/** Expands source-backed metadata or validated AI-authored Original Reads with clear provenance. */
 @Composable
 fun FeedDetail(
     ui: FeedUiState,
@@ -57,10 +62,17 @@ fun FeedDetail(
     onRetryBrief: () -> Unit = {},
     onFollowUp: ((String) -> Unit)? = null,
     onConnect: (() -> Unit)? = null,
-    onPrepareSuggestion: (String, String) -> Unit = { _, _ -> },
+    onUseSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> },
+    onEditSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> },
+    onSuggestionSheet: (SuggestionTargetSnapshot097, String) -> SuggestionSheetSnapshot097 = { target, _ ->
+        SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.NEEDS_GENERATION, emptyList())
+    },
+    onGenerateSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
+    onCancelSuggestionGeneration: (String) -> Unit = {},
 ) {
     val state = ui.state
     val item = state?.items?.find { it.id == id }
+    val isOriginalRead = item?.let(FeedLogic::isValidOriginalReadShape) == true
     val context = LocalContext.current
     val relevanceContext = LocalRelevanceContext.current
     val now = LocalFeedClock.current
@@ -75,7 +87,9 @@ fun FeedDetail(
     DisposableEffect(previewKey) { onDispose { MediaPreviewSession.clear(previewKey) } }
     fun openResource(url: String) { if(RichContent.type(url) in setOf("youtube", "audio", "video")) MediaPreviewSession.select(previewKey) else openSource(context,url) }
     val loadBrief by rememberUpdatedState(onLoadBrief)
-    LaunchedEffect(item?.id, ui.connected) { if (item != null) loadBrief() }
+    LaunchedEffect(item?.id, ui.connected, isOriginalRead) {
+        if (item != null && !isOriginalRead) loadBrief()
+    }
     ScreenContainer(Modifier.testTag("detail-screen"), scrollKey = id.orEmpty()) {
         if (item == null || state == null) {
             AppCard {
@@ -90,19 +104,20 @@ fun FeedDetail(
                     .filter { FeedLogic.safeUrl(it.url) }.distinctBy { FeedLogic.canonicalUrl(it.url) }
             }
             val originalAvailable = FeedLogic.safeUrl(item.sourceUrl)
-            val appLanguage = if (LocalConfiguration.current.locales[0]?.language == "sw") "sw" else "en"
-            val suggestedQuestions = suggestionChips095(
-                ui, state, item, now, appLanguage, LocalSuggestionFallback095.DETAIL,
-                priorUserQuestions = ui.detailTurns.filter { it.role == "user" }.map { it.text },
-            )
+            val appLanguage = if (ui.appLanguage == "sw") "sw" else "en"
+            val suggestionTarget = remember(state, item.id, appLanguage) { SuggestionTargets097.item(state, item.id, appLanguage) }
             val related = remember(state.items, state.hiddenIds, state.modules, state.timezone, item.id, now / 60_000) {
                 FeedLogic.visible(state, now).filter { it.id != item.id && it.moduleId == item.moduleId }
                     .sortedByDescending { it.publishedAtMillis.takeIf { date -> date > 0 } ?: it.fetchedAtMillis }.take(6)
             }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(publisherLabel(item).ifBlank { stringResource(moduleNameResource(item.kind)) },
-                        Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        if (isOriginalRead) stringResource(R.string.original_read_authorship_098)
+                        else publisherLabel(item).ifBlank { stringResource(moduleNameResource(item.kind)) },
+                        Modifier.weight(1f).then(if (isOriginalRead) Modifier.testTag("detail-original-read-authorship") else Modifier),
+                        style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                    )
                     if (onHide != null) Box {
                         IconButton(onClick = { menu = true }, modifier = Modifier.testTag("detail-menu")) {
                             Icon(Icons.Outlined.MoreHoriz, stringResource(R.string.detail_more_actions))
@@ -124,8 +139,15 @@ fun FeedDetail(
                     }
                 }
                 Text(item.title, style = MaterialTheme.typography.headlineMedium)
-                Text(if (item.kind == "horoscope") stringResource(R.string.feed_entertainment) else itemTimestamp(item),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    when {
+                        isOriginalRead -> stringResource(R.string.original_read_created_098, detailDate(item.fetchedAtMillis, state.timezone))
+                        item.kind == "horoscope" -> stringResource(R.string.feed_entertainment)
+                        else -> itemTimestamp(item)
+                    },
+                    Modifier.then(if (isOriginalRead) Modifier.testTag("detail-original-read-created") else Modifier),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             if (!showPlayer) item.media?.let { media ->
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -174,8 +196,11 @@ fun FeedDetail(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = section == "overview", onClick = { section = "overview" },
                     label = { Text(stringResource(R.string.detail_overview)) }, modifier = Modifier.testTag("detail-tab-overview"))
+                val sourceTabLabel = if (isOriginalRead)
+                    stringResource(R.string.original_read_evidence_count_098, item.citations.size)
+                else stringResource(R.string.detail_sources_count, sources.size)
                 FilterChip(selected = section == "sources", onClick = { section = "sources" },
-                    label = { Text(stringResource(R.string.detail_sources_count, sources.size)) }, modifier = Modifier.testTag("detail-tab-sources"))
+                    label = { Text(sourceTabLabel) }, modifier = Modifier.testTag("detail-tab-sources"))
             }
             if (section == "overview") {
                 // Stable introduction never depends on which stream emits first. A new
@@ -186,60 +211,96 @@ fun FeedDetail(
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     RichResponse(DetailPresentation.introduction(item.summary))
                 }
-                DetailBrief(ui, item, onRetryBrief, onCancelBrief, onFollowUp, onConnect ?: onAsk)
+                if (isOriginalRead) {
+                    OriginalReadSections(item)
+                    if (item.citations.isNotEmpty() || item.furtherReading.isNotEmpty()) {
+                        OriginalReadReferences(item, "detail-original-read-overview")
+                    }
+                } else {
+                    DetailBrief(ui, item, onRetryBrief, onCancelBrief, onFollowUp, onConnect ?: onAsk)
+                }
                 item.weather?.let { weather ->
                     WeatherStrip(item, state?.timezone.orEmpty()) { openSource(context, item.sourceUrl) }
                     Text(stringResource(R.string.edition_feels_like, weather.feelsLikeC.toInt()), style = MaterialTheme.typography.bodyMedium)
                 }
-                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { storyNotesOpen = !storyNotesOpen }, modifier = Modifier.heightIn(min = 48.dp)
-                            .testTag("detail-story-notes"), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {
-                            Text(stringResource(if (storyNotesOpen) R.string.detail_collapse_notes else R.string.detail_expand_notes))
-                            Spacer(Modifier.width(6.dp))
-                            Icon(if (storyNotesOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
+                if (!isOriginalRead || item.keyPoints.isNotEmpty() || item.nextStep.isNotBlank() ||
+                    item.caveat.isNotBlank() || item.why.isNotBlank() || item.deadline.isNotBlank()) {
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { storyNotesOpen = !storyNotesOpen }, modifier = Modifier.heightIn(min = 48.dp)
+                                .testTag("detail-story-notes"), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {
+                                Text(stringResource(if (storyNotesOpen) R.string.detail_collapse_notes else R.string.detail_expand_notes))
+                                Spacer(Modifier.width(6.dp))
+                                Icon(if (storyNotesOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
+                            }
+                            if (storyNotesOpen) {
+                    if (item.summary.isNotBlank() && DetailPresentation.introduction(item.summary) != item.summary.trim()) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(stringResource(if (item.aiGenerated) R.string.detail_ai_summary else R.string.detail_source_summary),
+                            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        SelectionContainer { Text(item.summary, style = MaterialTheme.typography.bodyLarge) }
+                    }
+                    if (item.keyPoints.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SectionLabel(stringResource(R.string.detail_key_points))
+                        item.keyPoints.forEach { point -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Icon(Icons.Outlined.Check, null, Modifier.padding(top = 3.dp).size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                            val formatted = remember(point) { DetailKeyPoint.parse(point) }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                if (formatted.text.isNotBlank()) SelectionContainer {
+                                    Text(formatted.text, style = MaterialTheme.typography.bodyMedium)
+                                }
+                                formatted.references.forEach { reference ->
+                                    TextButton(onClick = { openInAppSource(context, reference.url) },
+                                        modifier = Modifier.heightIn(min = 48.dp).testTag("detail-key-point-source"),
+                                        contentPadding = PaddingValues(horizontal = 0.dp)) {
+                                        Text(reference.title.ifBlank { URI(reference.url).host.removePrefix("www.") },
+                                            maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                        Spacer(Modifier.width(6.dp))
+                                        Icon(Icons.AutoMirrored.Outlined.OpenInNew, stringResource(R.string.feed_open_source), Modifier.size(14.dp))
+                                    }
+                                }
+                            }
+                        } }
+                    }
+                    if (item.nextStep.isNotBlank()) AppCard(color = MeBotPalette.current.mintSurface) {
+                        Text(stringResource(R.string.detail_next_step), style = MaterialTheme.typography.titleMedium, color = MeBotPalette.current.onMint)
+                        Text(item.nextStep, style = MaterialTheme.typography.bodyMedium, color = MeBotPalette.current.onMint)
+                    }
+                    if (item.caveat.isNotBlank()) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(stringResource(R.string.detail_caveat), style = MaterialTheme.typography.titleSmall)
+                        Text(item.caveat, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (item.why.isNotBlank()) AppCard(color = MaterialTheme.colorScheme.primaryContainer) {
+                        Text(stringResource(R.string.feed_why), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text(item.why, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                    if (item.deadline.isNotBlank()) Surface(color = MeBotPalette.current.mintSurface, shape = RoundedCornerShape(16.dp)) {
+                        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Icon(Icons.Outlined.EventAvailable, null, tint = MeBotPalette.current.onMint)
+                            Text(stringResource(R.string.feed_deadline, item.deadline), style = MaterialTheme.typography.titleSmall, color = MeBotPalette.current.onMint)
                         }
-                        if (storyNotesOpen) {
-                if (item.summary.isNotBlank() && DetailPresentation.introduction(item.summary) != item.summary.trim()) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(if (item.aiGenerated) R.string.detail_ai_summary else R.string.detail_source_summary),
-                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    SelectionContainer { Text(item.summary, style = MaterialTheme.typography.bodyLarge) }
-                }
-                if (item.keyPoints.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SectionLabel(stringResource(R.string.detail_key_points))
-                    item.keyPoints.forEach { point -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Outlined.Check, null, Modifier.padding(top = 3.dp).size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                        SelectionContainer { Text(point, style = MaterialTheme.typography.bodyMedium) }
-                    } }
-                }
-                if (item.nextStep.isNotBlank()) AppCard(color = MeBotPalette.current.mintSurface) {
-                    Text(stringResource(R.string.detail_next_step), style = MaterialTheme.typography.titleMedium, color = MeBotPalette.current.onMint)
-                    Text(item.nextStep, style = MaterialTheme.typography.bodyMedium, color = MeBotPalette.current.onMint)
-                }
-                if (item.caveat.isNotBlank()) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(stringResource(R.string.detail_caveat), style = MaterialTheme.typography.titleSmall)
-                    Text(item.caveat, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (item.why.isNotBlank()) AppCard(color = MaterialTheme.colorScheme.primaryContainer) {
-                    Text(stringResource(R.string.feed_why), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text(item.why, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                }
-                if (item.deadline.isNotBlank()) Surface(color = MeBotPalette.current.mintSurface, shape = RoundedCornerShape(16.dp)) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Outlined.EventAvailable, null, tint = MeBotPalette.current.onMint)
-                        Text(stringResource(R.string.feed_deadline, item.deadline), style = MaterialTheme.typography.titleSmall, color = MeBotPalette.current.onMint)
+                    }
+                            }
+                        }
                     }
                 }
-                        }
-                    }
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onAsk, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp).testTag("detail-ask"), shape = RoundedCornerShape(16.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(onClick = onAsk, modifier = Modifier.weight(1f).heightIn(min = 50.dp).testTag("detail-ask"), shape = RoundedCornerShape(16.dp)) {
                         Icon(Icons.Outlined.ChatBubbleOutline, null, Modifier.size(19.dp)); Spacer(Modifier.width(9.dp)); Text(stringResource(R.string.detail_discuss))
                     }
-                    SuggestionRail095(suggestedQuestions, "detail-question") { stableId ->
-                        onPrepareSuggestion(item.id, stableId)
-                    }
+                    SuggestionAction097(
+                        target = suggestionTarget,
+                        contextLabel = item.title,
+                        language = appLanguage,
+                        connected = ui.connected,
+                        busy = ui.asking || ui.importWorking || ui.suggestionWorking,
+                        onReadSnapshot = onSuggestionSheet,
+                        onGenerate = onGenerateSuggestion,
+                        onCancelGeneration = onCancelSuggestionGeneration,
+                        onConnect = { onConnect?.invoke() },
+                        onUse = onUseSuggestion,
+                        onEdit = onEditSuggestion,
+                        testTag = "detail-suggestions-${item.id}",
+                    )
                 }
                 if (module != null && onModule != null) Surface(onClick = { onModule(module.id) },
                     color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(18.dp), modifier = Modifier.testTag("detail-module")) {
@@ -269,14 +330,17 @@ fun FeedDetail(
                     }
                 }
             } else {
-                AppCard {
+                if (!isOriginalRead) AppCard {
                     Text(stringResource(R.string.detail_about_update), style = MaterialTheme.typography.titleMedium)
                     DetailMetadata(R.string.detail_published, detailDate(item.publishedAtMillis, state.timezone))
                     DetailMetadata(R.string.detail_retrieved, detailDate(item.fetchedAtMillis, state.timezone))
                     DetailMetadata(R.string.detail_summary_type, stringResource(if (item.aiGenerated) R.string.detail_ai_summary else R.string.detail_source_summary))
                     if (item.kind == "horoscope") SupportingText(stringResource(R.string.feed_entertainment))
                 }
-                if (sources.isEmpty()) SupportingText(stringResource(R.string.detail_no_sources))
+                if (isOriginalRead) {
+                    if (item.citations.isEmpty() && item.furtherReading.isEmpty()) SupportingText(stringResource(R.string.detail_no_sources))
+                    else OriginalReadReferences(item, "detail-original-read-sources")
+                } else if (sources.isEmpty()) SupportingText(stringResource(R.string.detail_no_sources))
                 else ConversationSources(sources, "detail-citation")
             }
         }
@@ -288,6 +352,68 @@ private fun DetailMetadata(label: Int, value: String) {
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text(stringResource(label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun OriginalReadSections(item: FeedItem) {
+    if (!FeedLogic.isValidOriginalReadShape(item)) return
+    Column(
+        Modifier.fillMaxWidth().testTag("detail-original-read-sections"),
+        verticalArrangement = Arrangement.spacedBy(22.dp),
+    ) {
+        item.sections.forEachIndexed { index, section ->
+            Column(
+                Modifier.fillMaxWidth().testTag("detail-original-read-section-$index"),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    section.heading,
+                    Modifier.fillMaxWidth().testTag("detail-original-read-heading-$index"),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                SelectionContainer {
+                    Text(
+                        section.body,
+                        Modifier.fillMaxWidth().testTag("detail-original-read-body-$index"),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Evidence substantiates claims; optional further reading is deliberately a separate group. */
+@Composable
+private fun OriginalReadReferences(item: FeedItem, tagPrefix: String) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (item.citations.isNotEmpty()) Column(
+            Modifier.fillMaxWidth().testTag("$tagPrefix-evidence"),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                stringResource(R.string.original_read_evidence_098),
+                Modifier.testTag("$tagPrefix-evidence-heading"),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            item.citations.forEachIndexed { index, citation ->
+                DetailSource(citation, Modifier.testTag("$tagPrefix-evidence-$index"))
+            }
+        }
+        if (item.furtherReading.isNotEmpty()) Column(
+            Modifier.fillMaxWidth().testTag("$tagPrefix-further-reading"),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                stringResource(R.string.original_read_further_reading_098),
+                Modifier.testTag("$tagPrefix-further-reading-heading"),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            item.furtherReading.forEachIndexed { index, source ->
+                DetailSource(source, Modifier.testTag("$tagPrefix-further-reading-$index"))
+            }
+        }
     }
 }
 
@@ -362,7 +488,7 @@ private fun DetailBrief(ui: FeedUiState, item: FeedItem, onRetry: () -> Unit, on
 }
 
 @Composable
-private fun detailDate(millis: Long, timezone: String): String {
+internal fun detailDate(millis: Long, timezone: String): String {
     if (millis <= 0) return stringResource(R.string.feed_time_unavailable)
     val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
     val zone = runCatching { ZoneId.of(timezone) }.getOrDefault(ZoneId.systemDefault())

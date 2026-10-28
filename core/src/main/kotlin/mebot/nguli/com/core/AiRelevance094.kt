@@ -12,10 +12,13 @@ object AiRelevance094 {
     private val digestPattern = Regex("[0-9a-f]{64}")
 
     /** Hash only the public content presented to the model and its stable source identity. */
-    fun contentDigest(item: FeedItem): String = digest(listOf(
-        "mebot-ai-fit-content-v1", item.id, item.moduleId, item.kind,
-        FeedLogic.canonicalUrl(item.sourceUrl), item.title, item.summary, item.publishedAtMillis.toString(),
-    ))
+    fun contentDigest(item: FeedItem): String = digest(buildList {
+        addAll(listOf("mebot-ai-fit-content-v1", item.id, item.moduleId, item.kind,
+            FeedLogic.canonicalUrl(item.sourceUrl), item.title, item.summary, item.publishedAtMillis.toString(),
+            item.contentType, item.acquisition, item.authorship))
+        item.sections.forEachIndexed { index, section -> addAll(listOf("section:$index", section.heading, section.body)) }
+        item.furtherReading.forEach { addAll(listOf("further-reading", it.title, FeedLogic.canonicalUrl(it.url))) }
+    })
 
     /** A non-secret fingerprint of the exact module scope, explicit feedback and selected provider identity. */
     fun scopeProviderDigest(state: FeedState, module: FeedModule): String {

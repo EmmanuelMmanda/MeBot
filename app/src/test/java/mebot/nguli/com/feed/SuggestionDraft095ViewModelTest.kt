@@ -37,6 +37,13 @@ class SuggestionDraft095ViewModelTest {
         sources = listOf(FeedSource("Example publisher", "https://example.com/feed.xml")))
     private val note = ContextEntry(id = "news-interest", text = "Confirmed interest in public technology updates", scopes = setOf("news"))
     private val interaction = AiSuggestedInteraction(label = "Check the source date", prompt = "Which publication date does this source show?")
+    private val interactions = listOf(
+        interaction,
+        AiSuggestedInteraction(label = "Examine evidence", prompt = "What evidence supports the principal claim in this source?"),
+        AiSuggestedInteraction(label = "Test assumption", prompt = "Which assumption could materially change this conclusion?"),
+        AiSuggestedInteraction(label = "Compare options", prompt = "How does the reported cost compare with practical alternatives?"),
+        AiSuggestedInteraction(label = "Find limitation", prompt = "What unresolved limitation matters most for the proposed use?"),
+    )
 
     @Before fun setUp() {
         runBlocking {
@@ -45,6 +52,7 @@ class SuggestionDraft095ViewModelTest {
             app.chatGptAuth.clearAll()
             app.chatGptAuth.restoreSavedAccount()
             app.feedSecrets.write("synthetic-local-provider-key")
+            app.suggestionQuestions = interactions.map { it.prompt }
             app.feedRepository.update { state("story-one") }
             app.repository.update { AppState(settings = Settings(language = "en")) }
             app.asked.clear(); app.askedQuestions.clear(); app.askedContexts.clear(); app.checked.clear()
@@ -66,7 +74,7 @@ class SuggestionDraft095ViewModelTest {
         val before = state("story-one", conversations = listOf(oldThread))
         app.feedRepository.update { before }
         val item = before.items.single()
-        val stableId = AiSuggestedInteractions095.suggestionId(item, interaction)
+        val stableId = optionId(item.id)
         val requestsBefore = before.requestsToday
 
         vm.prepareSuggestion(item.id, stableId, "en").join()
@@ -96,18 +104,17 @@ class SuggestionDraft095ViewModelTest {
     }
 
     @Test fun staleContentContextOrLogoutCannotResolveAnOldAiChipId() = runBlocking {
-        listOf("content", "context", "logout").forEach { change ->
+        listOf("content", "context").forEach { change ->
             val before = state("stale-$change")
             app.feedRepository.update { before }
             val item = before.items.single()
-            val stableId = AiSuggestedInteractions095.suggestionId(item, interaction)
+            val stableId = optionId(item.id)
             when (change) {
                 "content" -> app.feedRepository.update { current -> current.copy(items = current.items.map {
                     if (it.id == item.id) it.copy(summary = "Changed source content after rendering the chip.") else it
                 }) }
                 "context" -> app.feedRepository.update { current -> current.copy(context = listOf(
                     ContextEntry(id = "changed-scope", text = "A different confirmed priority", scopes = setOf("news")))) }
-                "logout" -> vm.disconnect().join()
             }
             val countBeforeSelection = app.feedRepository.current().conversations.size
 
@@ -119,27 +126,19 @@ class SuggestionDraft095ViewModelTest {
         }
     }
 
-    @Test fun disconnectedReaderCanPrefillItemSpecificLocalPromptAndAcknowledgementsAreIdempotent() = runBlocking {
+    @Test fun disconnectedReaderCannotReuseProviderBoundCacheOrGetALocalFallback() = runBlocking {
+        val before = app.feedRepository.current()
+        val item = before.items.single()
+        val id = optionId(item.id)
         vm.disconnect().join()
-        val item = app.feedRepository.current().items.single()
         val requestsBefore = app.feedRepository.current().requestsToday
 
-        vm.prepareSuggestion(item.id, "local:explain", "en").join()
+        vm.prepareSuggestion(item.id, id, "en").join()
 
-        val first = requireNotNull(vm.ui.value.suggestionDraft) { "offline fallback should create a local draft" }
-        assertTrue(first.text.contains(item.title))
+        assertNull("disconnect invalidates exact provider-bound cache", vm.ui.value.suggestionDraft)
         assertTrue(app.askedQuestions.isEmpty())
         assertEquals(requestsBefore, app.feedRepository.current().requestsToday)
-        vm.suggestionDraftApplied("stale-ack")
-        assertEquals(first, vm.ui.value.suggestionDraft)
-
-        vm.prepareSuggestion(item.id, "local:explain", "en").join()
-        val current = requireNotNull(vm.ui.value.suggestionDraft) { "second local draft should replace the first" }
-        assertNotEquals(first.id, current.id)
-        vm.suggestionDraftApplied(first.id) // A late effect cannot clear a newer draft.
-        assertEquals(current, vm.ui.value.suggestionDraft)
-        vm.suggestionDraftApplied(current.id)
-        vm.suggestionDraftApplied(current.id)
+        vm.prepareSuggestion(item.id, id, "en").join()
         assertNull(vm.ui.value.suggestionDraft)
         assertTrue(app.askedQuestions.isEmpty())
         assertEquals(requestsBefore, app.feedRepository.current().requestsToday)
@@ -148,7 +147,7 @@ class SuggestionDraft095ViewModelTest {
     @Test fun contextImportAndResetClearSuggestionDraftAndDerivedCacheWithoutLosingSourceFacts() = runBlocking {
         var current = app.feedRepository.current()
         val item = current.items.single()
-        vm.prepareSuggestion(item.id, AiSuggestedInteractions095.suggestionId(item, interaction), "en").join()
+        vm.prepareSuggestion(item.id, optionId(item.id), "en").join()
         assertNotNull(vm.ui.value.suggestionDraft)
 
         val imported = PersonalContextImport(name = current.name, region = current.region, timezone = current.timezone,
@@ -167,8 +166,7 @@ class SuggestionDraft095ViewModelTest {
         // Re-seed an applicable local cache solely to verify reset removes it and pending UI state.
         val reseeded = state("reset-item")
         app.feedRepository.update { reseeded }
-        vm.prepareSuggestion(reseeded.items.single().id,
-            AiSuggestedInteractions095.suggestionId(reseeded.items.single(), interaction), "en").join()
+        vm.prepareSuggestion(reseeded.items.single().id, optionId(reseeded.items.single().id), "en").join()
         assertNotNull(vm.ui.value.suggestionDraft)
         vm.reset().join()
         assertNull(vm.ui.value.suggestionDraft)
@@ -179,7 +177,7 @@ class SuggestionDraft095ViewModelTest {
     @Test fun savedContextAndModuleScopeChangesClearOnlyDerivedSuggestions() = runBlocking {
         val original = app.feedRepository.current()
         val item = original.items.single()
-        vm.prepareSuggestion(item.id, AiSuggestedInteractions095.suggestionId(item, interaction), "en").join()
+        vm.prepareSuggestion(item.id, optionId(item.id), "en").join()
         assertNotNull(vm.ui.value.suggestionDraft)
 
         vm.saveContext(original.name, original.region, original.timezone,
@@ -192,8 +190,7 @@ class SuggestionDraft095ViewModelTest {
 
         val reseeded = state("module-scope-item")
         app.feedRepository.update { reseeded }
-        vm.prepareSuggestion(reseeded.items.single().id,
-            AiSuggestedInteractions095.suggestionId(reseeded.items.single(), interaction), "en").join()
+        vm.prepareSuggestion(reseeded.items.single().id, optionId(reseeded.items.single().id), "en").join()
         assertNotNull(vm.ui.value.suggestionDraft)
         vm.saveModule(module.copy(query = "a changed news focus"))!!.join()
         assertNull(vm.ui.value.suggestionDraft)
@@ -207,7 +204,7 @@ class SuggestionDraft095ViewModelTest {
     @Test fun reviewedFullBackupNeverRestoresSuggestionCacheOrPendingDraft() = runBlocking {
         val original = app.feedRepository.current()
         val item = original.items.single()
-        vm.prepareSuggestion(item.id, AiSuggestedInteractions095.suggestionId(item, interaction), "en").join()
+        vm.prepareSuggestion(item.id, optionId(item.id), "en").join()
         assertNotNull(vm.ui.value.suggestionDraft)
 
         val file = File(app.cacheDir, "suggestion-backup-synthetic.json").apply {
@@ -243,11 +240,24 @@ class SuggestionDraft095ViewModelTest {
             dailyRequestLimit = 20, usageDate = FeedLogic.dateAt(System.currentTimeMillis(), "Africa/Dar_es_Salaam"),
             conversations = conversations)
         val cached = raw.copy(
-            suggestedInteractions = listOf(interaction),
+            suggestedInteractions = interactions,
             suggestedInteractionsContentDigest = AiSuggestedInteractions095.contentDigest(raw),
             suggestedInteractionsScopeProviderDigest = AiSuggestedInteractions095.scopeProviderDigest(base, module, "en"),
             suggestedInteractionsGeneratedAtMillis = System.currentTimeMillis(),
         )
-        return base.copy(items = listOf(cached))
+        val cachedState = base.copy(items = listOf(cached))
+        val target = requireNotNull(SuggestionTargets097.item(cachedState, itemId, "en"))
+        val set = AiSuggestionSet097("item", itemId, target.revision, interactions.map { it.prompt },
+            cached.suggestedInteractionsGeneratedAtMillis)
+        return cachedState.copy(suggestionSets097 = listOf(set))
+    }
+
+    private fun optionId(itemId: String): String {
+        val current = runBlocking { app.feedRepository.current() }
+        val target = requireNotNull(SuggestionTargets097.item(current, itemId, "en"))
+        val cached = requireNotNull(current.suggestionSets097.singleOrNull {
+            AiSuggestionCache097.isFresh(it, "item", itemId, target.revision, System.currentTimeMillis())
+        })
+        return AiSuggestionCache097.optionId(cached, cached.questions.first())
     }
 }

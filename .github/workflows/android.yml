@@ -54,7 +54,7 @@ jobs:
       - name: Test, lint and assemble
         run: |
           python3 scripts/prepare-build.py
-          gradle :core:test :app:testDebugUnitTest :app:assembleRelease :app:lintRelease --no-daemon --stacktrace -Pkotlin.incremental=false
+          bash scripts/ci-verify-observed.sh
 
       - name: Upload unsigned build evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -77,6 +77,7 @@ jobs:
             app/build/reports/lint-results-*.html
             app/build/reports/lint-results-*.xml
             app/build/outputs/screenshots/
+            ci-diagnostics/
           if-no-files-found: warn
           retention-days: 14
 

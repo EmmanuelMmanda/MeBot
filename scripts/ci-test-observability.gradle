@@ -1,0 +1,11 @@
+// CI-only progress markers: no test selection, assertion, scheduler or timeout changes.
+allprojects {
+    tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
+        beforeTest { descriptor ->
+            logger.lifecycle("MEBOT_TEST_START ${java.time.Instant.now()} ${descriptor.className}#${descriptor.name}")
+        }
+        afterTest { descriptor, result ->
+            logger.lifecycle("MEBOT_TEST_END ${java.time.Instant.now()} ${descriptor.className}#${descriptor.name} ${result.resultType}")
+        }
+    }
+}

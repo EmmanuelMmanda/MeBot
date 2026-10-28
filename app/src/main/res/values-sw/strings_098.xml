@@ -1,0 +1,11 @@
+<resources>
+    <string name="original_read_authorship_098">Usomaji asilia ulioandikwa na AI</string>
+    <string name="original_read_created_098">Iliundwa %1$s</string>
+    <string name="original_read_evidence_098">Ushahidi</string>
+    <string name="original_read_evidence_count_098">Ushahidi · %1$d</string>
+    <string name="original_read_further_reading_098">Usomaji wa ziada</string>
+    <string name="daily_selection_098_title">Kwa ajili yako leo</string>
+    <string name="today_verified_section_098_title">Zilizothibitishwa kuwa za leo</string>
+    <string name="today_verified_section_098_empty">Hakuna taarifa nyingine zilizothibitishwa za vyanzo kwa leo.</string>
+    <string name="today_verified_section_098_covered">Taarifa zote za leo zilizothibitishwa zipo tayari kwenye uteuzi wako hapo juu.</string>
+</resources>

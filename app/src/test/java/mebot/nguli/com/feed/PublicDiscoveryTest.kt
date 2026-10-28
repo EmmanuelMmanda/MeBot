@@ -154,6 +154,129 @@ class PublicDiscoveryTest {
         assertTrue(http.bearers.all { it == null })
     }
 
+    @Test fun githubExactRepositoryQueriesUseBoundedUnauthenticatedReleasesWithHonestMetadata() = runBlocking {
+        val releases = buildList {
+            add(githubRelease("example", "project", 1, publishedAt = "2026-10-22T12:00:00Z"))
+            add(githubRelease("example", "project", 2, prerelease = true, publishedAt = null))
+            add(githubRelease("example", "project", 3, draft = true))
+            add(githubRelease("attacker", "other-repo", 4)) // Cross-repository links are never exposed.
+            add(githubRelease("example", "project", 5, publishedAt = "not-a-timestamp"))
+            (6..10).forEach { add(githubRelease("example", "project", it)) }
+        }.joinToString(",", prefix = "[", postfix = "]")
+        val http = RecordingHttp(listOf(releases))
+        val provider = PublicDiscoveryProvider(http)
+        val state = FeedState(context = listOf(ContextEntry(text = "Private repo note", scopes = setOf("github"))))
+        val module = FeedModule(id = "github", kind = "github", query = "example/project")
+
+        val items = provider.discover(state, module, "en", now)
+        assertEquals(6, items.size) // The API response is bounded to its first eight records; drafts/bad links are skipped.
+        assertEquals("https://api.github.com/repos/example/project/releases?per_page=8", http.urls.single())
+        assertTrue(http.bearers.all { it == null })
+        assertTrue(http.urls.none { it.contains("Private repo note") })
+        val published = items.first()
+        assertEquals("https://github.com/example/project/releases/tag/v1", published.sourceUrl)
+        assertEquals(FeedLogic.itemId(published.sourceUrl), published.id)
+        assertEquals("GitHub Releases", published.sourceName)
+        assertEquals(FeedAcquisition.PUBLIC_API, published.acquisition)
+        assertEquals(FeedAuthorship.PUBLISHER, published.authorship)
+        assertEquals(Instant.parse("2026-10-22T12:00:00Z").toEpochMilli(), published.publishedAtMillis)
+        assertEquals(TemporalProvenance.PUBLISHER, published.temporal!!.provenance)
+
+        val pre = items.first { "v2" in it.title }
+        assertTrue(pre.title.contains("[pre-release]"))
+        assertEquals(0L, pre.publishedAtMillis)
+        assertNull(pre.temporal)
+        assertFalse(items.any { "v3" in it.title }) // Drafts are never exposed.
+        assertFalse(items.any { "v4" in it.title }) // A release link from a different repository is never exposed.
+        val unknownDate = items.single { "v5" in it.title }
+        assertEquals(0L, unknownDate.publishedAtMillis)
+        assertNull(unknownDate.temporal)
+        assertFalse(items.any { "v9" in it.title }) // No implicit second page/request.
+
+        provider.discover(state, module, "en", now + 1_000)
+        assertEquals(1, http.urls.size) // The existing per-module GitHub cache covers release queries.
+    }
+
+    @Test fun onlyCanonicalRepositoryTargetsUseReleasesAndOtherQueriesKeepRepositorySearch() = runBlocking {
+        val directQueries = listOf("example/project", "https://github.com/example/project")
+        directQueries.forEachIndexed { index, query ->
+            val http = RecordingHttp(listOf("[]"))
+            val result = PublicDiscoveryProvider(http).discover(
+                FeedState(), FeedModule(id = "github-$index", kind = "github", query = query), "en", now,
+            )
+            assertTrue(result.isEmpty())
+            assertEquals("https://api.github.com/repos/example/project/releases?per_page=8", http.urls.single())
+            assertTrue(http.bearers.all { it == null })
+        }
+
+        val searchQueries = listOf(
+            "https://github.com/example/project/",
+            "https://github.com.evil.example/example/project",
+            "example/project?sort=stars",
+            "example/project with another topic",
+        )
+        searchQueries.forEachIndexed { index, query ->
+            val http = RecordingHttp(listOf("""{"incomplete_results":false,"items":[]}"""))
+            val result = PublicDiscoveryProvider(http).discover(
+                FeedState(), FeedModule(id = "github-search-$index", kind = "github", query = query), "en", now,
+            )
+            assertTrue(result.isEmpty())
+            assertTrue("Expected legacy search path for $query, got ${http.urls.single()}", http.urls.single().contains("/search/repositories?"))
+            assertFalse(http.urls.single().contains("/releases?"))
+        }
+    }
+
+    @Test fun prereleaseMarkerFollowsSelectedResponseLanguage() = runBlocking {
+        val response = "[${githubRelease("example", "project", 1, prerelease = true)}]"
+        val module = FeedModule(id = "github", kind = "github", query = "example/project")
+        val english = PublicDiscoveryProvider(RecordingHttp(listOf(response))).discover(FeedState(), module, "en", now).single()
+        val swahili = PublicDiscoveryProvider(RecordingHttp(listOf(response))).discover(FeedState(), module, "sw", now).single()
+        assertTrue(english.title.contains("[pre-release]"))
+        assertTrue(swahili.title.contains("[toleo la awali]"))
+        assertEquals(english.sourceUrl, swahili.sourceUrl)
+        assertEquals(english.publishedAtMillis, swahili.publishedAtMillis)
+    }
+
+    @Test fun releaseCacheIsBoundToRepositoryAndRateFailuresAreNotCachedOrRetried() = runBlocking {
+        val first = githubRelease("example", "one", 1)
+        val second = githubRelease("example", "two", 2)
+        val http = RecordingHttp(listOf("[$first]", "[$second]"))
+        val provider = PublicDiscoveryProvider(http)
+        provider.discover(FeedState(), FeedModule(id = "github", kind = "github", query = "example/one"), "en", now)
+        provider.discover(FeedState(), FeedModule(id = "github", kind = "github", query = "example/two"), "en", now + 1_000)
+        assertEquals("https://api.github.com/repos/example/one/releases?per_page=8", http.urls[0])
+        assertEquals("https://api.github.com/repos/example/two/releases?per_page=8", http.urls[1])
+
+        var calls = 0
+        val limited = PublicDiscoveryProvider(object : FeedHttp {
+            override suspend fun request(url: String, method: String, body: String?, bearer: String?): String {
+                calls++
+                if (calls == 1) throw FeedFailure("rate_limit")
+                return "[]"
+            }
+        })
+        val target = FeedModule(id = "github", kind = "github", query = "example/limited")
+        val failure = runCatching { limited.discover(FeedState(), target, "en", now) }.exceptionOrNull()
+        assertEquals("rate_limit", (failure as FeedFailure).code)
+        assertEquals(1, calls) // No hidden retry after the public API's rate limit.
+        assertTrue(limited.discover(FeedState(), target, "en", now + 1_000).isEmpty())
+        assertEquals(2, calls) // Failed responses do not poison the cache.
+    }
+
+    @Test fun explicitReleaseDiscoveryPreservesCancellationAndRejectsMalformedPayloads() = runBlocking {
+        val cancelled = PublicDiscoveryProvider(object : FeedHttp {
+            override suspend fun request(url: String, method: String, body: String?, bearer: String?): String =
+                throw CancellationException("cancelled fixture")
+        })
+        val target = FeedModule(id = "github", kind = "github", query = "example/project")
+        assertTrue(runCatching { cancelled.discover(FeedState(), target, "en", now) }.exceptionOrNull() is CancellationException)
+
+        val malformed = runCatching {
+            PublicDiscoveryProvider(RecordingHttp(listOf("""{"items": []}"""))).discover(FeedState(), target, "en", now)
+        }.exceptionOrNull()
+        assertEquals("invalid_response", (malformed as FeedFailure).code)
+    }
+
     @Test fun incompleteGitHubSearchIsReportedInsteadOfPretendingCompleteDiscovery() = runBlocking {
         val failure = runCatching { PublicDiscoveryProvider(RecordingHttp(listOf("""{"incomplete_results":true,"items":[]}"""))).discover(
             FeedState(), FeedModule(id = "github", kind = "github"), "en", now) }.exceptionOrNull()
@@ -198,4 +321,13 @@ class PublicDiscoveryTest {
 
     private val geocode = """{"results":[{"name":"Example City","country":"Example Country","latitude":-6.8,"longitude":39.2,"timezone":"Africa/Dar_es_Salaam"}]}"""
     private val forecast = """{"current":{"time":1792742400,"temperature_2m":28.4,"apparent_temperature":32.2,"weather_code":3},"hourly":{"time":[1792738800,1792742400,1792746000],"precipitation_probability":[10,35,60]}}"""
+
+    private fun githubRelease(
+        owner: String,
+        repository: String,
+        number: Int,
+        draft: Boolean = false,
+        prerelease: Boolean = false,
+        publishedAt: String? = "2026-10-22T12:00:00Z",
+    ): String = """{"id":$number,"tag_name":"v$number","name":"Release v$number","body":"A documented public release with a concrete change.","html_url":"https://github.com/$owner/$repository/releases/tag/v$number","draft":$draft,"prerelease":$prerelease,"published_at":${publishedAt?.let { "\"$it\"" } ?: "null"}}"""
 }
