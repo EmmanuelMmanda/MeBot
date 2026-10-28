@@ -1,5 +1,7 @@
 package mebot.nguli.com.ui
 
+import androidx.lifecycle.ViewModelProvider
+import mebot.nguli.com.feed.FeedViewModel
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -69,7 +71,14 @@ class MeBotShowcase098JourneyTest {
 
         setAppearance(language = "sw", theme = "light", accent = "sage", skin = "paper", capturedAt = now)
         compose.onNodeWithTag("filter-today").performScrollTo().performClick()
-        compose.waitUntil(15_000) { runBlocking { app.feedRepository.current() }.personalDailySelection098?.itemIds?.isNotEmpty() == true }
+        val viewModel = ViewModelProvider(compose.activity)[FeedViewModel::class.java]
+        // Localising item text invalidates selection revisions. Wait for the same emitted
+        // projection used by the UI, not merely non-empty IDs from the previous language.
+        compose.waitUntil(15_000) {
+            val renderedState = viewModel.ui.value.state ?: return@waitUntil false
+            PersonalDailySelectionLogic098.resolve(renderedState, now).isNotEmpty()
+        }
+        compose.onNodeWithTag("filter-today").assertIsSelected()
         scrollFeedTo("today-personal-selection-heading")
         compose.onNodeWithTag("today-personal-selection-heading").assertIsDisplayed()
         // None of the pack's public stories is dated 28 October. Do not relabel a fetch as news from today.

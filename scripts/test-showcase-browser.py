@@ -74,7 +74,8 @@ def required_font(page, guide=False):
     if metrics['captionTitle'] is not None:
         assert metrics['captionTitle'] == '600', metrics
     assert metrics['body'] == '24px', metrics
-    assert metrics['p'] in ('24px', '27px', '28.5px'), metrics
+    # A 17px mobile hero lead at 1.5 line-height resolves to 25.5px.
+    assert metrics['p'] in ('24px', '25.5px', '27px', '28.5px'), metrics
     if guide and metrics['caption']:
         assert metrics['caption'] in ('18px','19.8px'), metrics
     elif not guide and metrics['caption']:
@@ -191,8 +192,9 @@ try:
                         main=page.locator('main').inner_text()
                         assert not re.search(r'MeBot\s+0\.9\.\d',main),name
                         if name.endswith('install.html'):
-                            assert 'three stages: connect ChatGPT' in main
-                            assert 'Continue with public feeds' in main
+                            for step in ('three stages','Continue with ChatGPT','Continue with public feeds',
+                                         'Add personal context','Choose feed topics','Start my feed'):
+                                assert step in main,(step,main)
                         if name.endswith('personal-context.html'):
                             assert 'does not automatically read or sync ChatGPT memory or conversation history after sign-in' in main
                             assert 'manual, reviewed import' in main
