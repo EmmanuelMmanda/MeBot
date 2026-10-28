@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 ModuleKind = Literal["news", "opportunities", "watch", "horoscope", "technology", "security", "scholarships", "business", "science", "learning", "entertainment", "music", "events", "travel", "weather", "github", "media", "food", "farming", "family", "sport", "home", "wellbeing"]
-ContentType = Literal["article", "video", "podcast", "repository", "course", "event", "opportunity", "weather", "entertainment"]
+ContentType = Literal["article", "video", "podcast", "repository", "course", "event", "opportunity", "weather", "entertainment", "original_read"]
 Identifier = Annotated[str, Field(min_length=1, max_length=100)]
 
 # Mirrors the Android ModulePreferences registry. Values select content; they
@@ -159,6 +159,32 @@ class FeedCitation(StrictModel):
     url: str = Field(max_length=2048)
     _valid_url = field_validator("url")(public_url)
 
+    @field_validator("title")
+    @classmethod
+    def plain_title(cls, value: str) -> str:
+        if has_control_characters(value):
+            raise ValueError("Invalid citation title")
+        return value
+
+
+class FeedContentSection(StrictModel):
+    heading: str = Field(min_length=1, max_length=120)
+    body: str = Field(min_length=1, max_length=6000)
+
+    @field_validator("heading")
+    @classmethod
+    def plain_heading(cls, value: str) -> str:
+        if has_control_characters(value):
+            raise ValueError("Invalid section heading")
+        return value
+
+    @field_validator("body")
+    @classmethod
+    def plain_body(cls, value: str) -> str:
+        if any((ord(char) < 32 and char not in "\n\r\t") or 127 <= ord(char) <= 159 for char in value):
+            raise ValueError("Invalid section body")
+        return value
+
 
 class FeedMedia(StrictModel):
     url: str = Field(max_length=2048)
@@ -203,16 +229,57 @@ class FeedItem(StrictModel):
     keyPoints: list[Annotated[str, Field(min_length=1, max_length=400)]] = Field(default_factory=list, max_length=4)
     nextStep: str = Field(default="", max_length=800)
     caveat: str = Field(default="", max_length=600)
+    # New provenance fields are migration-safe: old feed data remains legacy/unknown.
+    # They are not evidence by themselves; app acquisition parsers establish provenance.
+    acquisition: str = Field(default="legacy_unknown", min_length=1, max_length=40)
+    authorship: str = Field(default="legacy_unknown", min_length=1, max_length=40)
+    sections: list[FeedContentSection] = Field(default_factory=list, max_length=8)
+    furtherReading: list[FeedCitation] = Field(default_factory=list, max_length=5)
 
     @field_validator("sourceUrl")
     @classmethod
     def source_may_be_empty(cls, value: str) -> str:
         return public_url(value) if value else value
 
+    @field_validator("acquisition", "authorship")
+    @classmethod
+    def plain_provenance_code(cls, value: str) -> str:
+        if has_control_characters(value):
+            raise ValueError("Invalid provenance code")
+        return value
+
     @model_validator(mode="after")
-    def typed_weather(self) -> "FeedItem":
+    def typed_content_contract(self) -> "FeedItem":
         if self.weather is not None and (self.kind != "weather" or self.contentType != "weather"):
             raise ValueError("Weather data belongs to weather items")
+        if self.contentType == "original_read":
+            if (
+                self.acquisition != "original_read" or self.authorship != "ai" or not self.aiGenerated or
+                self.kind in {"weather", "horoscope"} or self.deadline or self.sourceUrl or self.sourceName or
+                not self.summary or self.publishedAtMillis != 0 or self.fetchedAtMillis < 1 or self.media is not None or self.weather is not None or
+                len(self.sections) not in {2, 3, 4}
+            ):
+                raise ValueError("Invalid Original Read provenance or metadata")
+            section_body_lengths = [len(section.body.strip()) for section in self.sections]
+            if any(length < 180 for length in section_body_lengths) or not 1000 <= sum(section_body_lengths) <= 12000:
+                raise ValueError("Original Read must contain a substantial bounded body")
+        else:
+            if self.acquisition == "original_read":
+                raise ValueError("Original Read provenance requires original_read content")
+            # Preserve construction of pre-v0.9.8 model instances that omitted both
+            # optional fields, but do not let an explicitly unknown acquisition or
+            # blank source field become a source-less factual item in a request.
+            if self.kind != "horoscope" and not self.sourceUrl and (
+                "sourceUrl" in self.model_fields_set or "acquisition" in self.model_fields_set
+            ):
+                raise ValueError("Sourced feed item requires a public source URL")
+            if self.acquisition in {"publisher_rss", "public_api"} and not self.sourceName:
+                raise ValueError("Public acquisition requires a source name")
+            if self.acquisition in {"ai_web_grounded", "ai_source_grounded"} and (
+                not self.aiGenerated or not self.sourceName or not self.sourceUrl or not self.citations
+            ):
+                # Further-reading links do not establish evidence for either AI acquisition path.
+                raise ValueError("AI-grounded items require direct evidence citations")
         return self
 
 
@@ -337,6 +404,10 @@ class AskRequest(StrictModel):
             raise ValueError("Attachments are too long")
         if self.item is not None and self.moduleKind not in {None, "", self.item.kind}:
             raise ValueError("Conversation scope does not match its item")
+        if self.item is not None and self.item.contentType != "original_read" and self.item.kind != "horoscope" and not self.item.sourceUrl:
+            # A source-less legacy item may still be decoded from old local data,
+            # but it cannot bypass public-source requirements at the ask boundary.
+            raise ValueError("Factual item follow-up requires a public source URL")
         if self.module is not None:
             if self.moduleKind not in {None, self.module.kind}:
                 raise ValueError("Conversation scope does not match its module")

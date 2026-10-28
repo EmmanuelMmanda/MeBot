@@ -104,9 +104,8 @@ class FeedEngineTest {
             // Public content is committed before the selected provider's optional ranking output arrives.
             assertTrue(repository.current().items.any { it.id == candidate.id })
             FeedDiscoveryResult(emptyList(), listOf(FeedCandidateFit(candidate.id, 90)), listOf(
-                FeedCandidateInteractions(candidate.id, listOf(AiSuggestedInteraction(
-                    label = "Check the source date", prompt = "Which publication date does the source show?"))))
-            )
+                FeedCandidateInteractions(candidate.id, testInteractions(candidate.id))
+            ))
         }
 
         engine(reader).refresh()
@@ -117,7 +116,7 @@ class FeedEngineTest {
         assertEquals(90, enriched.aiRelevance?.fitEstimate)
         assertEquals(AiRelevance094.contentDigest(enriched), enriched.aiRelevance?.contentDigest)
         assertEquals(AiRelevance094.scopeProviderDigest(repository.current(), configured), enriched.aiRelevance?.scopeProviderDigest)
-        assertEquals("Which publication date does the source show?", enriched.suggestedInteractions.single().prompt)
+        assertEquals(5, enriched.suggestedInteractions.size)
         assertTrue(AiSuggestedInteractions095.isApplicable(repository.current(), enriched, System.currentTimeMillis(), "en"))
     }
 
@@ -182,8 +181,7 @@ class FeedEngineTest {
             requestedIds += candidates.map { it.id }
             FeedDiscoveryResult(emptyList(),
                 if (candidates.isEmpty()) emptyList() else listOf(FeedCandidateFit(candidate.id, 80)),
-                if (candidates.isEmpty()) emptyList() else listOf(FeedCandidateInteractions(candidate.id, listOf(
-                    AiSuggestedInteraction(label = "Check the update", prompt = "What change does this source announce?")))),
+                if (candidates.isEmpty()) emptyList() else listOf(FeedCandidateInteractions(candidate.id, testInteractions(candidate.id))),
             )
         }
         val engine = engine(reader)
@@ -211,8 +209,8 @@ class FeedEngineTest {
                 entered.complete(candidates)
                 release.await()
                 FeedDiscoveryResult(emptyList(), listOf(FeedCandidateFit(candidate.id, 95)), listOf(
-                    FeedCandidateInteractions(candidate.id, listOf(AiSuggestedInteraction(
-                        label = "Check the deadline", prompt = "Which deadline does the source state?")))))
+                    FeedCandidateInteractions(candidate.id, testInteractions(candidate.id))
+                ))
             }
             val reader = object : SourceReader {
                 override suspend fun read(source: FeedSource, module: FeedModule, now: Long) = listOf(candidate)
@@ -350,6 +348,301 @@ class FeedEngineTest {
         assertEquals("suggestion_changed", failure?.code)
         assertEquals("changed scope must be rejected before the budget is reserved", 0, repository.current().requestsToday)
         assertEquals("stale suggestion must not reach the provider", 0, provider.askCalls.get())
+    }
+
+    @Test fun explicitSuggestionGenerationUsesOneBudgetedRequestAndCachesExactlyFiveProviderQuestions() = runBlocking {
+        vault.value = "synthetic-test-credential"
+        val item = article("suggestion-set")
+        val pending = AiAttachment(id = "pending", name = "private.txt", text = "PRIVATE PENDING ATTACHMENT")
+        val thread = AiConversation(id = "suggestion-chat", itemId = item.id, moduleId = news.id,
+            turns = listOf(AiTurn(id = "turn", role = "user", text = "What changed in this update?")),
+            attachments = listOf(pending))
+        val date = FeedLogic.dateAt(System.currentTimeMillis(), "UTC")
+        repository.update { it.copy(modules = listOf(news), items = listOf(item), conversations = listOf(thread),
+            connection = AiConnection(model = "fixture-model"), timezone = "UTC", dailyRequestLimit = 1,
+            usageDate = date, requestsToday = 0) }
+        provider.suggestAction = { testSuggestionQuestions(item.title) }
+        var dispatches = 0
+        val current = repository.current()
+        val target = requireNotNull(SuggestionTargets097.item(current, item.id, "en"))
+
+        val record = engine().generateSuggestionSet097(target, "en",
+            expectedCurrent = { state -> SuggestionTargets097.current(state, target, "en") },
+            onRequestDispatch = { dispatches++ })
+
+        assertEquals(testSuggestionQuestions(item.title), record.questions)
+        assertEquals(1, provider.suggestCalls.get())
+        assertEquals(0, provider.askCalls.get())
+        assertEquals(1, dispatches)
+        assertEquals(1, repository.current().requestsToday)
+        assertEquals(listOf(record), repository.current().suggestionSets097)
+        assertTrue(AiSuggestionCache097.isFresh(record, "item", item.id, target.revision, System.currentTimeMillis()))
+        assertEquals(emptyList<AiSuggestionSet097>(), provider.lastSuggestionState?.suggestionSets097)
+        assertEquals(listOf(item.id), provider.lastSuggestionState?.items?.map { it.id })
+        assertTrue("item generation must not serialize unrelated conversation drafts", provider.lastSuggestionState?.conversations.isNullOrEmpty())
+        assertFalse("unused attachment bytes must not reach provider state",
+            provider.lastSuggestionState.toString().contains("PRIVATE PENDING ATTACHMENT"))
+        assertTrue("persisted draft attachment remains untouched", repository.current().conversations.single().attachments.single() == pending)
+
+        val second = runCatching { engine().generateSuggestionSet097(target, "en", onRequestDispatch = {}) }.exceptionOrNull()
+        assertEquals("limit_reached", (second as FeedFailure).code)
+        assertEquals(1, provider.suggestCalls.get())
+        assertEquals(1, repository.current().requestsToday)
+    }
+
+    @Test fun forgedWeatherAndHoroscopeItemOrConversationTargetsFailBeforeBudgetReservation() = runBlocking {
+        vault.value = "synthetic-test-credential"
+        val weatherModule = FeedModule(id = "weather-suggestion-test", kind = "weather")
+        val horoscopeModule = FeedModule(id = "horoscope-suggestion-test", kind = "horoscope", zodiacSign = "leo")
+        val weatherItem = FeedItem(id = "weather-suggestion-item", moduleId = weatherModule.id,
+            title = "Synthetic forecast", summary = "Test-only weather fixture.", kind = "weather", contentType = "weather",
+            sourceUrl = "https://example.com/synthetic-forecast",
+            weather = FeedWeather(temperatureC = 20.0, feelsLikeC = 20.0, precipitationChance = 10, weatherCode = 1, location = "Test"))
+        val horoscopeItem = FeedItem(id = "horoscope-suggestion-item", moduleId = horoscopeModule.id,
+            title = "Synthetic horoscope", summary = "Test-only horoscope fixture.", kind = "horoscope", contentType = "entertainment")
+        val weatherChat = AiConversation(id = "weather-suggestion-chat", itemId = weatherItem.id, moduleId = weatherModule.id)
+        val horoscopeChat = AiConversation(id = "horoscope-suggestion-chat", itemId = horoscopeItem.id, moduleId = horoscopeModule.id)
+        repository.update { it.copy(modules = listOf(weatherModule, horoscopeModule), items = listOf(weatherItem, horoscopeItem),
+            conversations = listOf(weatherChat, horoscopeChat), dailyRequestLimit = 5,
+            usageDate = FeedLogic.dateAt(System.currentTimeMillis(), "UTC"), timezone = "UTC", requestsToday = 0) }
+
+        val forgedTargets = listOf(
+            SuggestionTargetSnapshot097(SuggestionTargetKind097.ITEM, weatherItem.id, weatherModule.id, weatherItem.id, "a".repeat(64)),
+            SuggestionTargetSnapshot097(SuggestionTargetKind097.CONVERSATION, weatherChat.id, weatherModule.id, weatherItem.id, "b".repeat(64)),
+            SuggestionTargetSnapshot097(SuggestionTargetKind097.ITEM, horoscopeItem.id, horoscopeModule.id, horoscopeItem.id, "c".repeat(64)),
+            SuggestionTargetSnapshot097(SuggestionTargetKind097.CONVERSATION, horoscopeChat.id, horoscopeModule.id, horoscopeItem.id, "d".repeat(64)),
+        )
+        forgedTargets.forEach { target ->
+            val failure = runCatching {
+                engine().generateSuggestionSet097(target, "en", expectedCurrent = { true }, onRequestDispatch = {})
+            }.exceptionOrNull()
+            assertTrue("unsupported target $target must fail closed", failure is FeedFailure)
+            assertEquals("unsupported targets never reserve or reach the AI provider", 0, repository.current().requestsToday)
+            assertEquals(0, provider.suggestCalls.get())
+        }
+    }
+
+    @Test fun suggestionGenerationRechecksScopeAfterProviderSemaphoreBeforeDispatch() = runBlocking {
+        vault.value = "synthetic-test-credential"
+        val item = article("suggestion-queued")
+        val note = ContextEntry(id = "suggestion-scope", text = "A confirmed topic", scopes = setOf(news.kind))
+        repository.update { it.copy(modules = listOf(news), items = listOf(item), context = listOf(note),
+            dailyRequestLimit = RequestBudget.UNLIMITED, usageDate = FeedLogic.dateAt(System.currentTimeMillis(), "UTC"),
+            timezone = "UTC", requestsToday = 0) }
+        val target = requireNotNull(SuggestionTargets097.item(repository.current(), item.id, "en"))
+        val firstEntered = CompletableDeferred<Unit>()
+        val secondEntered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val blockerA = async {
+            AiActivityRegistry.run("block-a", "news", "answer") { firstEntered.complete(Unit); release.await() }
+        }
+        val blockerB = async {
+            AiActivityRegistry.run("block-b", "news", "answer") { secondEntered.complete(Unit); release.await() }
+        }
+        withTimeout(5_000) { firstEntered.await(); secondEntered.await() }
+        var dispatches = 0
+        val generation = async {
+            runCatching { engine().generateSuggestionSet097(target, "en",
+                expectedCurrent = { state -> SuggestionTargets097.current(state, target, "en") },
+                onRequestDispatch = { dispatches++ }) }
+        }
+        withTimeout(5_000) { while (repository.current().requestsToday != 1) yield() }
+        repository.update { it.copy(context = listOf(note.copy(text = "Changed confirmed topic"))) }
+        release.complete(Unit)
+
+        val failure = generation.await().exceptionOrNull() as? FeedFailure
+        blockerA.await(); blockerB.await()
+        assertEquals("suggestion_changed", failure?.code)
+        assertEquals(0, provider.suggestCalls.get())
+        assertEquals(0, dispatches)
+        assertTrue(repository.current().suggestionSets097.isEmpty())
+        assertEquals(1, repository.current().requestsToday) // Explicit request reserved conservatively before it became stale.
+    }
+
+    @Test fun conversationSuggestionGenerationUsesOnlyPreviouslySentAttachments() = runBlocking {
+        vault.value = "synthetic-test-credential"
+        val sourceItem = article("suggestion-private-attachment")
+        val approvedGlobal = ContextEntry(id = PersonalProfile085.PROFILE_ID, category = PersonalProfile085.PROFILE_CATEGORY,
+            text = "Approved global context", scopes = emptySet(), global = true)
+        val approvedNews = ContextEntry(id = "approved-news", text = "Approved news context", scopes = setOf("news"))
+        val privateOtherScope = ContextEntry(id = "private-security", text = "PRIVATE UNRELATED CONTEXT", scopes = setOf("security"))
+        val unconfirmed = ContextEntry(id = "unconfirmed-test", text = "UNCONFIRMED CONTEXT", confirmed = false)
+        val approvedContext = listOf(approvedGlobal, approvedNews, privateOtherScope, unconfirmed)
+        val providerStateForDigest = FeedState(modules = listOf(news), items = listOf(sourceItem), timezone = "UTC", context = approvedContext)
+        val item = sourceItem.copy(
+            temporal = FeedTemporal(TemporalProvenance.PUBLISHER, publishedAtMillis = sourceItem.publishedAtMillis),
+            aiRelevance = AiRelevanceEstimate(
+                fitEstimate = 82,
+                assessedAtMillis = System.currentTimeMillis(),
+                contentDigest = AiRelevance094.contentDigest(sourceItem),
+                scopeProviderDigest = AiRelevance094.scopeProviderDigest(providerStateForDigest, news),
+            ),
+        )
+        val unrelatedItem = article("suggestion-other-item")
+        val sent = AiAttachment(id = "sent", name = "sent.txt", text = "Previously sent context", usedAtMillis = 100L)
+        val pending = AiAttachment(id = "pending", name = "pending.txt", text = "PRIVATE UNSENT ATTACHMENT BODY")
+        val selectedTurns = (0..16).map { index ->
+            AiTurn(id = "selected-turn-$index", role = if (index % 2 == 0) "user" else "assistant",
+                text = if (index == 0) "PRIVATE OUT-OF-WINDOW CHAT MARKER" else "Synthetic bounded history turn $index.")
+        }
+        val thread = AiConversation(id = "suggestion-private-chat", itemId = item.id, moduleId = news.id,
+            turns = selectedTurns,
+            attachments = listOf(sent, pending))
+        val unrelatedThread = AiConversation(id = "suggestion-other-chat", moduleId = news.id,
+            turns = listOf(AiTurn(id = "private-turn", role = "user", text = "PRIVATE UNRELATED CHAT MARKER")),
+            attachments = listOf(AiAttachment(id = "other-file", name = "unrelated.txt", text = "PRIVATE UNRELATED ATTACHMENT")))
+        repository.update { it.copy(modules = listOf(news), items = listOf(item, unrelatedItem), conversations = listOf(thread, unrelatedThread),
+            context = approvedContext,
+            dailyRequestLimit = RequestBudget.UNLIMITED, timezone = "UTC",
+            usageDate = FeedLogic.dateAt(System.currentTimeMillis(), "UTC"), requestsToday = 0) }
+        provider.suggestAction = { testSuggestionQuestions(item.title) }
+        val target = requireNotNull(SuggestionTargets097.conversation(repository.current(), thread.id, "en"))
+
+        engine().generateSuggestionSet097(target, "en", expectedCurrent = { latest ->
+            SuggestionTargets097.current(latest, target, "en")
+        }, onRequestDispatch = {})
+
+        assertEquals(listOf(sent), provider.lastSuggestionConversation?.attachments)
+        assertEquals(listOf(sent), provider.lastSuggestionState?.conversations?.single()?.attachments)
+        assertFalse(provider.lastSuggestionState.toString().contains("PRIVATE UNSENT ATTACHMENT BODY"))
+        val boundedThread = thread.copy(turns = ConversationLogic.requestHistory(thread), attachments = listOf(sent))
+        assertEquals(listOf(boundedThread), provider.lastSuggestionState?.conversations)
+        assertEquals(boundedThread.turns, provider.lastSuggestionConversation?.turns)
+        assertFalse("out-of-window history must not be included in provider request state",
+            provider.lastSuggestionState.toString().contains("PRIVATE OUT-OF-WINDOW CHAT MARKER"))
+        assertFalse(provider.lastSuggestionConversation.toString().contains("PRIVATE OUT-OF-WINDOW CHAT MARKER"))
+        assertEquals(listOf(item.id), provider.lastSuggestionState?.items?.map { it.id })
+        assertNull(provider.lastSuggestionState?.items?.single()?.aiRelevance)
+        assertNull(provider.lastSuggestionState?.items?.single()?.temporal)
+        assertNull(provider.lastSuggestionItem?.aiRelevance)
+        assertNull(provider.lastSuggestionItem?.temporal)
+        assertTrue(provider.lastSuggestionState.toString().contains("Previously sent context"))
+        assertFalse(provider.lastSuggestionState.toString().contains("PRIVATE UNRELATED CHAT MARKER"))
+        assertFalse(provider.lastSuggestionState.toString().contains("PRIVATE UNRELATED ATTACHMENT"))
+        assertEquals(listOf("Approved global context", "Approved news context"),
+            provider.lastSuggestionState?.context?.map { it.text })
+        assertFalse(provider.lastSuggestionState.toString().contains("PRIVATE UNRELATED CONTEXT"))
+        assertFalse(provider.lastSuggestionState.toString().contains("UNCONFIRMED CONTEXT"))
+        assertEquals(listOf(FeedModule(id = news.id, kind = news.kind)), provider.lastSuggestionState?.modules)
+        val stored = repository.current()
+        assertEquals(item, stored.items.single { it.id == item.id })
+        assertEquals(unrelatedItem, stored.items.single { it.id == unrelatedItem.id })
+        assertEquals(thread, stored.conversations.single { it.id == thread.id })
+        assertEquals(unrelatedThread, stored.conversations.single { it.id == unrelatedThread.id })
+        assertEquals(selectedTurns, stored.conversations.single { it.id == thread.id }.turns)
+        assertNotNull(stored.items.single { it.id == item.id }.aiRelevance)
+        assertNotNull(stored.items.single { it.id == item.id }.temporal)
+        assertEquals(1, provider.suggestCalls.get())
+    }
+
+    @Test fun engineRejectsIncompleteProviderSetWithoutPaddingOrCaching() = runBlocking {
+        vault.value = "synthetic-test-credential"
+        val item = article("incomplete-suggestion-set")
+        repository.update { it.copy(modules = listOf(news), items = listOf(item), dailyRequestLimit = RequestBudget.UNLIMITED,
+            timezone = "UTC", usageDate = FeedLogic.dateAt(System.currentTimeMillis(), "UTC"), requestsToday = 0) }
+        provider.suggestAction = { testSuggestionQuestions(item.title).take(4) }
+        val target = requireNotNull(SuggestionTargets097.item(repository.current(), item.id, "en"))
+
+        val failure = runCatching { engine().generateSuggestionSet097(target, "en", onRequestDispatch = {}) }
+            .exceptionOrNull() as? FeedFailure
+
+        assertEquals("suggestion_incomplete", failure?.code)
+        assertEquals(1, provider.suggestCalls.get())
+        assertTrue(repository.current().suggestionSets097.isEmpty())
+        assertEquals(1, repository.current().requestsToday)
+    }
+
+    @Test fun suggestionResultIsDiscardedAfterItsItemChangesDuringTheProviderCall() = runBlocking {
+        vault.value = "synthetic-test-credential"
+        val item = article("late-suggestion-result")
+        repository.update { it.copy(modules = listOf(news), items = listOf(item), dailyRequestLimit = RequestBudget.UNLIMITED,
+            timezone = "UTC", usageDate = FeedLogic.dateAt(System.currentTimeMillis(), "UTC"), requestsToday = 0) }
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        provider.suggestAction = { entered.complete(Unit); release.await(); testSuggestionQuestions(item.title) }
+        val target = requireNotNull(SuggestionTargets097.item(repository.current(), item.id, "en"))
+        val generation = async {
+            runCatching { engine().generateSuggestionSet097(target, "en", onRequestDispatch = {}) }
+        }
+        withTimeout(5_000) { entered.await() }
+        repository.update { state -> state.copy(items = state.items.map {
+            if (it.id == item.id) it.copy(summary = "The source facts changed while generation was active.") else it
+        }) }
+        release.complete(Unit)
+
+        val failure = generation.await().exceptionOrNull() as? FeedFailure
+        assertEquals("suggestion_changed", failure?.code)
+        assertEquals(1, provider.suggestCalls.get())
+        assertTrue(repository.current().suggestionSets097.isEmpty())
+        assertEquals(1, repository.current().requestsToday)
+    }
+
+    @Test fun staleSuggestionTargetAtInitialOrAtomicReservationCheckUsesNoBudgetOrProviderCall() = runBlocking {
+        vault.value = "synthetic-test-credential"
+        val item = article("suggestion-stale")
+        repository.update { it.copy(modules = listOf(news), items = listOf(item), dailyRequestLimit = 4,
+            usageDate = FeedLogic.dateAt(System.currentTimeMillis(), "UTC"), timezone = "UTC", requestsToday = 0) }
+        val target = requireNotNull(SuggestionTargets097.item(repository.current(), item.id, "en"))
+        val failure = runCatching { engine().generateSuggestionSet097(target, "en", expectedCurrent = { false }, onRequestDispatch = {}) }
+            .exceptionOrNull() as? FeedFailure
+        assertEquals("suggestion_changed", failure?.code)
+        assertEquals(0, provider.suggestCalls.get())
+        assertEquals(0, repository.current().requestsToday)
+    }
+
+    @Test fun suggestionTargetChangedDuringCredentialLookupIsRejectedInsideAtomicReservation() = runBlocking {
+        val enteredCredential = CompletableDeferred<Unit>()
+        val releaseCredential = CompletableDeferred<Unit>()
+        val auth = object : ChatGptAuthManager(context) {
+            override suspend fun accessToken(id: String): String {
+                enteredCredential.complete(Unit)
+                releaseCredential.await()
+                return "synthetic-access-token"
+            }
+        }
+        val item = article("suggestion-credential-race")
+        val note = ContextEntry(id = "generation-context", text = "Confirmed original context", scopes = setOf(news.kind))
+        repository.update { it.copy(modules = listOf(news), items = listOf(item), context = listOf(note),
+            connection = AiConnection(mode = "chatgpt", model = "fixture-model", accountId = "synthetic-account"),
+            dailyRequestLimit = 20, requestsToday = 0, usageDate = FeedLogic.dateAt(System.currentTimeMillis(), "UTC"), timezone = "UTC") }
+        val target = requireNotNull(SuggestionTargets097.item(repository.current(), item.id, "en"))
+        val guarded = FeedEngine(repository, vault, provider = provider, chatGpt = auth, language = { "en" })
+        val request = async {
+            runCatching { guarded.generateSuggestionSet097(target, "en",
+                expectedCurrent = { latest -> SuggestionTargets097.current(latest, target, "en") },
+                onRequestDispatch = {}) }
+        }
+        withTimeout(5_000) { enteredCredential.await() }
+        repository.update { it.copy(context = listOf(note.copy(text = "Changed during credential lookup"))) }
+        releaseCredential.complete(Unit)
+
+        val failure = request.await().exceptionOrNull() as? FeedFailure
+        assertEquals("suggestion_changed", failure?.code)
+        assertEquals(0, repository.current().requestsToday)
+        assertEquals(0, provider.suggestCalls.get())
+    }
+
+    @Test fun unavailableAiSuggestionsNeverBlockTheIndependentPublicRssFeed() = runBlocking {
+        val publicItem = article("offline-public-item")
+        val configured = news.copy(sources = listOf(FeedSource("Public", "https://example.com/rss.xml")))
+        repository.update { it.copy(modules = listOf(configured), items = emptyList(), connection = AiConnection(), requestsToday = 0) }
+        val reader = object : SourceReader {
+            override suspend fun read(source: FeedSource, module: FeedModule, now: Long) = listOf(publicItem)
+        }
+
+        val outcome = engine(reader).refresh()
+        val failure = runCatching {
+            engine(reader).generateSuggestionSet097(
+                requireNotNull(SuggestionTargets097.item(repository.current(), publicItem.id, "en")), "en", onRequestDispatch = {},
+            )
+        }.exceptionOrNull() as? FeedFailure
+
+        assertEquals("suggestion_unavailable", failure?.code)
+        assertEquals(1, outcome.newItems)
+        assertEquals(publicItem.title, repository.current().items.single().title)
+        assertTrue(repository.current().items.single().suggestedInteractions.isEmpty())
+        assertEquals(0, provider.suggestCalls.get())
+        assertTrue("the unconfigured public RSS flow remains useful", repository.current().items.single().sourceUrl.isNotBlank())
     }
 
     @Test fun guardedSuggestionPayloadExcludesUnsentAttachmentBytesAndStoredDraftIsUnchanged() = runBlocking {
@@ -518,6 +811,37 @@ class FeedEngineTest {
         assertEquals(false,RelevanceFeedback.current(repository.current(),article("feedback-seed")))
     }
 
+    @Test fun originalReadCommitsWithPublicContentInOneBudgetedDiscoveryAndSurvivesDisconnect() = runBlocking {
+        vault.value = "synthetic-test-credential"
+        repository.update { it.copy(modules = listOf(news.copy(sources = listOf(
+            FeedSource("Example publisher", "https://example.com/feed.xml")))), dailyRequestLimit = 3) }
+        val created = System.currentTimeMillis()
+        val read = FeedItem("read-fixture", news.id, "A reversible workflow experiment", "A complete synthetic reflection.",
+            fetchedAtMillis = created, kind = news.kind, aiGenerated = true,
+            acquisition = FeedAcquisition.ORIGINAL_READ, authorship = FeedAuthorship.AI, contentType = "original_read",
+            sections = listOf(
+                FeedContentSection("Notice a repeated interruption", "Describe one recurring interruption and review what happens before and after it without assuming a cause. ".repeat(7)),
+                FeedContentSection("Try a modest change", "Choose a reversible experiment, preserve existing work, and review its usefulness before changing anything else. ".repeat(7)),
+            ))
+        provider.feedAction = { listOf(read, read.copy(id = "read-invalid", sections = emptyList())) }
+        val publicItem = article("public-alongside-read").copy(fetchedAtMillis = created)
+        val reader = object : SourceReader {
+            override suspend fun read(source: FeedSource, module: FeedModule, now: Long) = listOf(publicItem)
+        }
+        val currentEngine = engine(reader)
+        currentEngine.refresh()
+        val result = repository.current()
+        assertEquals(1, provider.discoveryCalls.get())
+        assertEquals(1, result.requestsToday)
+        assertTrue(result.items.any { it.id == publicItem.id })
+        assertEquals(read.sections, result.items.single { it.id == read.id }.sections)
+        assertEquals(0L, result.items.single { it.id == read.id }.publishedAtMillis)
+        assertTrue(result.items.none { it.id == "read-invalid" })
+        currentEngine.disconnect()
+        assertEquals(read.sections, repository.current().items.single { it.id == read.id }.sections)
+        assertEquals(1, provider.discoveryCalls.get())
+    }
+
     private fun engine(reader: SourceReader = object : SourceReader {
         override suspend fun read(source: FeedSource, module: FeedModule, now: Long) = emptyList<FeedItem>()
     }) = FeedEngine(repository, vault, reader, provider)
@@ -526,6 +850,22 @@ class FeedEngineTest {
         id = id, moduleId = "news", title = "Synthetic update $id", summary = "Test-only content.",
         sourceUrl = "https://example.com/$id", publishedAtMillis = 1_790_000_000_000,
         fetchedAtMillis = 1_790_000_010_000,
+    )
+
+    private fun testInteractions(label: String) = listOf(
+        AiSuggestedInteraction(label = "Timeline", prompt = "What timeline does this source give for $label?"),
+        AiSuggestedInteraction(label = "Affected groups", prompt = "Which groups does the source identify as affected by $label?"),
+        AiSuggestedInteraction(label = "Supporting evidence", prompt = "What evidence supports the main claim about $label?"),
+        AiSuggestedInteraction(label = "Costs and limits", prompt = "Which stated cost or limitation could affect using $label?"),
+        AiSuggestedInteraction(label = "Compare context", prompt = "What context would help compare $label with current alternatives?"),
+    )
+
+    private fun testSuggestionQuestions(topic: String) = listOf(
+        "What timeline does this source give for $topic?",
+        "Which groups does the source identify as affected by $topic?",
+        "What evidence supports the main claim about $topic?",
+        "Which stated limitation could change how someone uses $topic?",
+        "What context would help compare $topic with current alternatives?",
     )
 
     private class MemoryVault(context: Context) : SecretVault(context) {
@@ -540,8 +880,13 @@ class FeedEngineTest {
         var feedAction: suspend () -> List<FeedItem> = { emptyList() }
         var discoverAction: (suspend (List<FeedItem>) -> FeedDiscoveryResult)? = null
         var askAction: suspend () -> AiAnswer = { AiAnswer("A test answer.") }
+        var suggestAction: suspend () -> List<String> = { emptyList() }
         val askCalls = AtomicInteger()
         val discoveryCalls = AtomicInteger()
+        val suggestCalls = AtomicInteger()
+        var lastSuggestionState: FeedState? = null
+        var lastSuggestionConversation: AiConversation? = null
+        var lastSuggestionItem: FeedItem? = null
         override suspend fun check(connection: AiConnection, secret: String) { checkAction() }
         override suspend fun feed(state: FeedState, module: FeedModule, secret: String, language: String) = feedAction()
         override suspend fun discover(state: FeedState, module: FeedModule, secret: String, language: String, candidates: List<FeedItem>): FeedDiscoveryResult {
@@ -551,6 +896,10 @@ class FeedEngineTest {
         override suspend fun ask(state: FeedState, item: FeedItem?, question: String, secret: String, language: String): AiAnswer {
             askCalls.incrementAndGet()
             return askAction()
+        }
+        override suspend fun suggest(state: FeedState, item: FeedItem?, conversation: AiConversation?, module: FeedModule?, secret: String, language: String): List<String> {
+            suggestCalls.incrementAndGet(); lastSuggestionState = state; lastSuggestionItem = item; lastSuggestionConversation = conversation
+            return suggestAction()
         }
     }
 }

@@ -56,6 +56,8 @@ import mebot.nguli.com.ui.*
 import mebot.nguli.com.ui.feed.*
 import mebot.nguli.com.feed.FeedViewModel
 import mebot.nguli.com.feed.FeedUiState
+import mebot.nguli.com.feed.SuggestionGenerationHandle097
+import mebot.nguli.com.feed.SuggestionSheetSnapshot097
 import mebot.nguli.com.feed.SuggestionTargetSnapshot097
 import mebot.nguli.com.feed.auth.ChatGptReturnLink
 import androidx.compose.ui.platform.testTag
@@ -258,11 +260,12 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
     val owner = LocalLifecycleOwner.current
     val context = LocalContext.current
     val resources = LocalResources.current
-    val suggestionLanguage = LocalConfiguration.current.locales[0].language
-    val prepareSuggestion: (String, String) -> Unit = { id, suggestion ->
-        if (page != "ai") aiReturn = if (page == "item") "item" else "feed"
-        feedVm.prepareSuggestion(id, suggestion, suggestionLanguage); page = "ai"
+    val readSuggestionSheet: (SuggestionTargetSnapshot097, String) -> SuggestionSheetSnapshot097 = feedVm::suggestionSheet097
+    val generateSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = generate@{ target, language ->
+        if ((context.applicationContext as MeBotApplication).appLock.state.value.locked) return@generate null
+        feedVm.generateSuggestions097(target, language)
     }
+    val cancelSuggestionGeneration: (String) -> Unit = feedVm::cancelSuggestionGeneration097
     // Only a distinct, explicit sheet action can send. Opening the sheet is UI-only.
     val useSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = use@{ target, optionId, language ->
         if ((context.applicationContext as MeBotApplication).appLock.state.value.locked) return@use
@@ -455,9 +458,12 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                                 }, onSearch = { page = "search" }, returnToTopRequest = feedTopRequest, onRefreshModule = feedVm::refreshModule,
                                 onExploreModules = { openModuleCatalog(ModuleDiscovery.DISABLED) },
                                 onContext = { contextReturn = "feed"; page = "context" }, onDismissNotice = feedVm::dismissSetupNotice,
-                                onLoadMore = feedVm::loadMore, onPrepareSuggestion = prepareSuggestion,
+                                onLoadMore = feedVm::loadMore,
+                                onEnsureDailySelection = feedVm::ensurePersonalDailySelection098,
                                 onUseSuggestion = useSuggestion, onEditSuggestion = editSuggestion,
-                            onSuggestionOptions = feedVm::suggestionOptions097)
+                                onSuggestionSheet = readSuggestionSheet,
+                                onGenerateSuggestion = generateSuggestion,
+                                onCancelSuggestionGeneration = cancelSuggestionGeneration)
                         }
                         "modules" -> ModulesScreen(feed, state,
                             onEdit = ::openModule, onToggle = feedVm::setModuleEnabled,
@@ -523,15 +529,19 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                             onLoadBrief = { itemId?.let { feedVm.loadDetail(it) } }, onCancelBrief = feedVm::cancelDetail,
                             onRetryBrief = { itemId?.let { feedVm.retryDetail(it) } },
                             onFollowUp = { prompt -> itemId?.let { feedVm.followUpDetail(it, prompt) } }, onConnect = ::openConnection,
-                            onPrepareSuggestion = prepareSuggestion, onUseSuggestion = useSuggestion, onEditSuggestion = editSuggestion,
-                            onSuggestionOptions = feedVm::suggestionOptions097)
+                            onUseSuggestion = useSuggestion, onEditSuggestion = editSuggestion,
+                            onSuggestionSheet = readSuggestionSheet,
+                            onGenerateSuggestion = generateSuggestion,
+                            onCancelSuggestionGeneration = cancelSuggestionGeneration)
                         "ai" -> AiWorkspace(feedUi, feedVm::newConversation, feedVm::selectConversation, feedVm::deleteConversation,
                             feedVm::sendConversation, feedVm::clearAnswer, ::openConnection,
                             { contextReturn = "ai"; feedVm.clearMessage(); page = "context" },
                             feedVm::importTextAttachment, feedVm::removeAttachment, onSelectModel = feedVm::switchModel, onDismissNotice = feedVm::dismissSetupNotice, onSpeechPreferences = feedVm::updateSpeechPreferences,
-                            onPrepareSuggestion = prepareSuggestion, onSuggestionDraftApplied = feedVm::suggestionDraftApplied,
+                            onSuggestionDraftApplied = feedVm::suggestionDraftApplied,
                             onUseSuggestion = useSuggestion, onEditSuggestion = editSuggestion,
-                            onSuggestionOptions = feedVm::suggestionOptions097)
+                            onSuggestionSheet = readSuggestionSheet,
+                            onGenerateSuggestion = generateSuggestion,
+                            onCancelSuggestionGeneration = cancelSuggestionGeneration)
                         "search" -> SearchScreen(feedUi, feedVm::search, ::openItem, feedVm::toggleSaved, ::openConnection, feedVm::cancelSearch)
                         "ask" -> AskScreen(feedUi, itemId, { question -> feedVm.ask(itemId, question) }, ::openConnection)
                         "daily" -> {

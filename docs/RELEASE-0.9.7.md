@@ -3,11 +3,12 @@
 **In preparation. Not yet a published update.**
 
 - Open Suggestions from a compact icon instead of an extra prompt in your reading flow.
-- See next steps for the story, module or conversation you are exploring.
+- Explore five different AI-suggested questions about the story, module or conversation at hand.
 - Send a suggested question directly, or use the pencil to edit it first.
 - Keep your unsent drafts and continue in the right conversation.
-- Read available public and RSS content without connecting AI. Local suggestions remain available to edit; sending requires a connection.
+- Read clean Key Points, with source links separated from the explanation.
+- Read available public and RSS content without connecting AI. Suggestions are a separate AI feature, with a clear preparation option when no current set is ready.
 
-Original sources remain accessible from story details. Suggestions do not send anything until you choose Send.
+Original sources remain accessible from story details. Opening Suggestions does not generate or send anything. Choose Generate only when a new set is needed, then Send to ask a question or the pencil to edit first.
 
 Build, test, source and signature evidence will be recorded separately in the release verification report. This candidate has not yet completed its release gates.

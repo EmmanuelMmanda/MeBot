@@ -41,8 +41,10 @@ import androidx.compose.ui.unit.dp
 import mebot.nguli.com.R
 import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.FeedUiState
+import mebot.nguli.com.feed.SuggestionGenerationHandle097
 import mebot.nguli.com.feed.SuggestedConversationDraft
-import mebot.nguli.com.feed.SuggestionOptionSnapshot097
+import mebot.nguli.com.feed.SuggestionSheetSnapshot097
+import mebot.nguli.com.feed.SuggestionSheetStatus097
 import mebot.nguli.com.feed.SuggestionTargetSnapshot097
 import mebot.nguli.com.feed.SuggestionTargets097
 import mebot.nguli.com.ui.MeBotMark
@@ -66,11 +68,14 @@ fun AiWorkspace(
     onSelectModel: (String) -> Unit = {},
     onDismissNotice: ((String) -> Unit)? = null,
     onSpeechPreferences: (Float, String) -> Unit = { _, _ -> },
-    onPrepareSuggestion: (String, String) -> Unit = { _, _ -> },
     onSuggestionDraftApplied: (String) -> Unit = {},
     onUseSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> },
     onEditSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> },
-    onSuggestionOptions: (SuggestionTargetSnapshot097, String) -> List<SuggestionOptionSnapshot097> = { _, _ -> emptyList() },
+    onSuggestionSheet: (SuggestionTargetSnapshot097, String) -> SuggestionSheetSnapshot097 = { target, _ ->
+        SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.NEEDS_GENERATION, emptyList())
+    },
+    onGenerateSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
+    onCancelSuggestionGeneration: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
@@ -188,7 +193,7 @@ fun AiWorkspace(
     val hasConfirmedAboutYou = state?.context.orEmpty().any {
         PersonalProfile085.isGlobal(it) && it.confirmed && it.text.isNotBlank()
     }
-    val appLanguage = if (locale.language == "sw") "sw" else "en"
+    val appLanguage = if (ui.appLanguage == "sw") "sw" else "en"
     val suggestionTarget = remember(state, ui.activeConversationId, conversation?.id, module?.id, appLanguage) {
         when {
             state == null -> null
@@ -197,10 +202,6 @@ fun AiWorkspace(
             module != null -> SuggestionTargets097.module(state, module.id, appLanguage)
             else -> SuggestionTargets097.general(state, appLanguage)
         }
-    }
-    val suggestionFreshnessMinute = LocalFeedClock.current / 60_000
-    val suggestionOptions = remember(state, ui.connected, suggestionTarget, appLanguage, suggestionFreshnessMinute) {
-        suggestionTarget?.let { onSuggestionOptions(it, appLanguage) }.orEmpty()
     }
     val suggestionContext = when {
         story != null -> story.title
@@ -345,11 +346,13 @@ fun AiWorkspace(
                         }
                         SuggestionAction097(
                             target = suggestionTarget,
-                            options = suggestionOptions,
                             contextLabel = suggestionContext,
                             language = appLanguage,
                             connected = ui.connected,
                             busy = ui.asking || ui.importWorking || ui.suggestionWorking || ui.conversationOpening || !ui.conversationReady,
+                            onReadSnapshot = onSuggestionSheet,
+                            onGenerate = onGenerateSuggestion,
+                            onCancelGeneration = onCancelSuggestionGeneration,
                             onConnect = onConnect,
                             onUse = onUseSuggestion,
                             onEdit = onEditSuggestion,

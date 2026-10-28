@@ -38,7 +38,7 @@ class PublicDiscoveryProvider(private val http: FeedHttp = SecureFeedHttp()) : P
         val items = try {
             when (module.kind) {
                 "weather" -> weather(state, module, language, now)
-                "github" -> github(module, now)
+                "github" -> github(module, language, now)
                 "news" -> if (RegionalDefaults.useTechnicalNewsAdapter(state, module)) hackerNews(module, now) else emptyList()
                 else -> emptyList()
             }
@@ -105,12 +105,14 @@ class PublicDiscoveryProvider(private val http: FeedHttp = SecureFeedHttp()) : P
         return listOf(FeedItem(
             id = FeedLogic.itemId(sourceUrl), moduleId = module.id, title = name, summary = "",
             sourceName = "Open-Meteo", sourceUrl = sourceUrl, publishedAtMillis = validAt, fetchedAtMillis = now,
+                acquisition = FeedAcquisition.PUBLIC_API, authorship = FeedAuthorship.PUBLISHER,
             kind = module.kind, relevance = 75, contentType = "weather", weather = weather, temporal = temporal,
             citations = listOf(FeedCitation("Open-Meteo", sourceUrl), FeedCitation("GeoNames", "https://www.geonames.org/")),
         ))
     }
 
-    private suspend fun github(module: FeedModule, now: Long): List<FeedItem> {
+    private suspend fun github(module: FeedModule, language: String, now: Long): List<FeedItem> {
+        explicitGithubRepository(module)?.let { return githubReleases(module, it, language, now) }
         val since = Instant.ofEpochMilli(now).atZone(ZoneOffset.UTC).toLocalDate().minusDays(7)
         // Custom terms are owner-entered module configuration, never inferred private profile notes.
         val terms = module.query.takeIf { it != ModuleCatalog.preset(module.kind)?.defaultQuery }.orEmpty().trim().take(180)
@@ -139,10 +141,82 @@ class PublicDiscoveryProvider(private val http: FeedHttp = SecureFeedHttp()) : P
             val published = parseTime(repo.text("created_at"), now)
             FeedItem(FeedLogic.itemId(link), module.id, title, repo.text("description").take(1500),
                 sourceName = "GitHub", sourceUrl = link, publishedAtMillis = published, fetchedAtMillis = now,
+                acquisition = FeedAcquisition.PUBLIC_API, authorship = FeedAuthorship.PUBLISHER,
                 kind = module.kind, relevance = 60, contentType = "repository", citations = listOf(FeedCitation(title, link)),
                 temporal = published.takeIf { it > 0 }?.let { FeedTemporal(TemporalProvenance.PUBLISHER, publishedAtMillis = it) })
         }
     }
+
+    private data class GithubRepositoryTarget(val owner: String, val repository: String)
+
+    /** Only a single, explicit public repository target opts into release discovery. */
+    private fun explicitGithubRepository(module: FeedModule): GithubRepositoryTarget? {
+        val query = module.query.trim()
+        val defaultQuery = ModuleCatalog.preset(module.kind)?.defaultQuery?.trim().orEmpty()
+        if (query.isBlank() || query == defaultQuery) return null
+
+        val segment = "[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?"
+        val slug = Regex("^($segment)/($segment)$").matchEntire(query)
+        if (slug != null) {
+            val owner = slug.groupValues[1]
+            val repository = slug.groupValues[2]
+            if (repository.endsWith(".git", ignoreCase = true)) return null
+            return GithubRepositoryTarget(owner, repository)
+        }
+
+        val uri = runCatching { URI(query) }.getOrNull() ?: return null
+        if (uri.scheme != "https" || !uri.host.equals("github.com", ignoreCase = true) ||
+            uri.userInfo != null || uri.port != -1 || uri.rawQuery != null || uri.rawFragment != null
+        ) return null
+        val path = uri.rawPath ?: return null
+        val pathMatch = Regex("^/($segment)/($segment)$").matchEntire(path) ?: return null
+        val repository = pathMatch.groupValues[2]
+        if (repository.endsWith(".git", ignoreCase = true)) return null
+        return GithubRepositoryTarget(pathMatch.groupValues[1], repository)
+    }
+
+    private suspend fun githubReleases(module: FeedModule, target: GithubRepositoryTarget, language: String, now: Long): List<FeedItem> {
+        val url = "https://api.github.com/repos/${target.owner}/${target.repository}/releases?per_page=8"
+        val response = FeedJson.parseToJsonElement(http.request(url)) as? JsonArray ?: throw FeedFailure("invalid_response")
+        return response.take(8).mapNotNull { element ->
+            val release = element as? JsonObject ?: return@mapNotNull null
+            val draft = release["draft"]?.jsonPrimitive?.booleanOrNull ?: return@mapNotNull null
+            if (draft) return@mapNotNull null
+            val prerelease = release["prerelease"]?.jsonPrimitive?.booleanOrNull ?: return@mapNotNull null
+            val tag = release.text("tag_name").trim().take(100)
+            if (tag.isBlank()) return@mapNotNull null
+            val link = release.text("html_url")
+            if (!githubReleaseUrl(link, target)) return@mapNotNull null
+            val releaseName = release.text("name").trim().take(200).ifBlank { tag }
+            val title = "${target.owner}/${target.repository} — $releaseName" +
+                if (prerelease) " [${preReleaseLabel(language)}]" else ""
+            val notes = clean(release.text("body")).take(1500)
+            val summary = notes
+            val published = parseTime(release.text("published_at"), now)
+            FeedItem(
+                id = FeedLogic.itemId(link), moduleId = module.id, title = title.take(300), summary = summary,
+                sourceName = "GitHub Releases", sourceUrl = link, publishedAtMillis = published,
+                fetchedAtMillis = now, kind = module.kind, relevance = 65, contentType = "repository",
+                acquisition = FeedAcquisition.PUBLIC_API, authorship = FeedAuthorship.PUBLISHER,
+                citations = listOf(FeedCitation(releaseName, link)),
+                temporal = published.takeIf { it > 0 }?.let { FeedTemporal(TemporalProvenance.PUBLISHER, publishedAtMillis = it) },
+            )
+        }.distinctBy { it.id }
+    }
+
+    private fun preReleaseLabel(language: String): String = if (language == "sw") "toleo la awali" else "pre-release"
+
+    private fun githubReleaseUrl(value: String, target: GithubRepositoryTarget): Boolean = runCatching {
+        if (!FeedLogic.safeUrl(value, httpsOnly = true)) return false
+        val uri = URI(value)
+        val prefix = "/${target.owner}/${target.repository}/releases/"
+        uri.host.equals("github.com", ignoreCase = true) && uri.userInfo == null && uri.port == -1 &&
+            uri.rawQuery == null && uri.rawFragment == null && uri.rawPath.startsWith(prefix, ignoreCase = true) &&
+            uri.rawPath.removePrefixIgnoreCase(prefix).isNotBlank()
+    }.getOrDefault(false)
+
+    private fun String.removePrefixIgnoreCase(prefix: String): String =
+        if (startsWith(prefix, ignoreCase = true)) substring(prefix.length) else this
 
     private suspend fun hackerNews(module: FeedModule, now: Long): List<FeedItem> {
         val params = linkedMapOf("tags" to "story", "hitsPerPage" to "8",
@@ -163,6 +237,7 @@ class PublicDiscoveryProvider(private val http: FeedHttp = SecureFeedHttp()) : P
             FeedItem(FeedLogic.itemId(link), module.id, title, clean(story.text("story_text")).take(1000),
                 sourceName = if (URI(link).host == "news.ycombinator.com") "Hacker News" else URI(link).host.removePrefix("www.").take(200), sourceUrl = link,
                 publishedAtMillis = 0, fetchedAtMillis = now, kind = module.kind, relevance = 40,
+                acquisition = FeedAcquisition.PUBLIC_API, authorship = FeedAuthorship.PUBLISHER,
                 citations = (listOf(FeedCitation(title, link)) + listOfNotNull(discussion?.let { FeedCitation("Hacker News", it) })).distinctBy { it.url })
         }
     }

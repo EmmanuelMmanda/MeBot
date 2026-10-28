@@ -33,6 +33,9 @@ import java.util.concurrent.atomic.AtomicLong
 
 data class SuggestedConversationDraft(val id: String, val conversationId: String, val text: String)
 
+/** Handle returned synchronously for the one explicit, budgeted generation request. */
+data class SuggestionGenerationHandle097(val requestId: String, val job: Job)
+
 private data class SuggestionSelectionSnapshot097(
     val conversationId: String?,
     val itemId: String?,
@@ -47,24 +50,9 @@ private data class SuggestionRollback097(
     val epoch: Long,
 )
 
-/** Bounded unit-test trace for suggestion cleanup; never includes prompt/turn text. */
-internal data class SuggestionRollbackTrace097(
-    val phase: String,
-    val threadId: String?,
-    val epochMatches: Boolean?,
-    val selectionGenerationMatches: Boolean?,
-    val originalThreadId: String?,
-    val appendedThreadId: String?,
-    val currentThreadId: String?,
-    val currentTurnCount: Int?,
-    val currentMatchesOriginal: Boolean?,
-    val currentMatchesAppended: Boolean?,
-    val conversations: List<String>,
-    val restoreApplied: Boolean? = null,
-)
-
 data class FeedUiState(
     val state: FeedState? = null, val loading: Boolean = true,
+    val appLanguage: String = "en",
     val refreshing: Boolean = false, val refreshingModuleId: String? = null, val connecting: Boolean = false,
     val connected: Boolean = false, val error: String? = null, val notice: String? = null,
     val asking: Boolean = false, val answer: String? = null,
@@ -77,6 +65,7 @@ data class FeedUiState(
     val conversationReady: Boolean = true,
     val suggestionWorking: Boolean = false,
     val suggestionDraft: SuggestedConversationDraft? = null,
+    val suggestionGeneration: SuggestionGenerationState097? = null,
     val contextSaving: Boolean = false,
     val deliverySaving: Boolean = false,
     val moduleSavingId: String? = null,
@@ -136,9 +125,14 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     ))
     val ui = _ui.asStateFlow()
     private var refreshJob: Job? = null
+    private var dailySelectionJob098: Job? = null
     private var askJob: Job? = null
     private val suggestionActionLock = Any()
+    private val suggestionGenerationLock = Any()
     private var suggestionActionJob: Job? = null
+    private var suggestionGenerationJob: Job? = null
+    private var suggestionGenerationRequestId: String? = null
+    private var suggestionGenerationTarget: SuggestionTargetSnapshot097? = null
     private var suggestionAskJob: Job? = null
     private var suggestionDispatchStarted = false
     private var pendingSuggestionThreadId: String? = null
@@ -147,8 +141,6 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     private var pendingSuggestionAppendedThread: AiConversation? = null
     /** Fences delayed suggestion cleanup from restoring/deleting rows after backup/reset replacement. */
     @Volatile private var suggestionRollbackEpoch = 0L
-    /** Optional unit-test observer; production leaves null. Trace contains IDs/counts only. */
-    internal var suggestionRollbackTraceForTest: ((SuggestionRollbackTrace097) -> Unit)? = null
     private var lastSuggestionSendKey: String? = null
     private var lastSuggestionSendAtElapsed: Long = 0L
     private var connectJob: Job? = null
@@ -183,6 +175,15 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     init {
         viewModelScope.launch { engine.progress.collect { p -> _ui.update { it.copy(refreshProgress=p) } } }
         viewModelScope.launch { AiActivityRegistry.state.collect { tasks -> _ui.update { it.copy(activities = tasks.values.toList()) } } }
+        viewModelScope.launch {
+            app.repository.state.collect { appState ->
+                val selectedLanguage = when (val language = appState.settings.language) {
+                    "en", "sw" -> language
+                    else -> if (app.resources.configuration.locales[0]?.language == "sw") "sw" else "en"
+                }
+                _ui.update { it.copy(appLanguage = selectedLanguage) }
+            }
+        }
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { repository.applyOptionalSeed(app) }
@@ -236,6 +237,7 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     fun clearAnswer() = clearAnswerInternal(suppressSuggestionRollback = false)
     private fun clearAnswerInternal(suppressSuggestionRollback: Boolean) {
         suggestionGeneration.incrementAndGet()
+        cancelActiveSuggestionGeneration097()
         cancelSuggestionAction(pendingOnly = false,
             restorePreviousSelection = !suppressSuggestionRollback,
             rollbackOnCancel = !suppressSuggestionRollback)
@@ -351,17 +353,19 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             conversationReady = false, error = failureCode(error, "storage_error")) }
     }
     /** Invalidate an in-flight selection when leaving the workspace; late work is generation-fenced. */
-    fun cancelConversationOpen() {
+    fun cancelConversationOpen(): Job? =
         cancelConversationOpenInternal(restoreSuggestionSelection = true, rollbackSuggestion = true)
-    }
-    private fun cancelConversationOpenInternal(restoreSuggestionSelection: Boolean, rollbackSuggestion: Boolean) {
-        cancelSuggestionAction(pendingOnly = true, restorePreviousSelection = restoreSuggestionSelection,
+
+    private fun cancelConversationOpenInternal(restoreSuggestionSelection: Boolean, rollbackSuggestion: Boolean): Job? {
+        cancelActiveSuggestionGeneration097()
+        val rollbackJob = cancelSuggestionAction(pendingOnly = true, restorePreviousSelection = restoreSuggestionSelection,
             rollbackOnCancel = rollbackSuggestion)
-        if (!_ui.value.conversationOpening) return
+        if (!_ui.value.conversationOpening) return rollbackJob
         conversationSelectionGeneration++
         _ui.update { it.copy(activeConversationId = null, conversationOpening = false,
             // Keep the pending intent durably bound while hidden; it can be resumed on return.
             conversationReady = false, error = null) }
+        return rollbackJob
     }
     /** Reopen a cancelled item target when the user returns to the workspace. */
     fun resumeConversationOpenIfNeeded() {
@@ -407,6 +411,13 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         lastLoadMoreAttemptMillis = now
         refreshInternal(manual = false, moduleId = moduleId)
     }
+    /** Local projection only: no provider call, quota reservation, or source timestamp mutation. */
+    fun ensurePersonalDailySelection098() {
+        if (dailySelectionJob098?.isActive == true || app.appLock.state.value.locked) return
+        dailySelectionJob098 = work {
+            repository.update { state -> PersonalDailySelectionLogic098.ensure(state, System.currentTimeMillis()) }
+        }
+    }
     fun refresh() = refreshInternal(manual = true)
     fun refreshModule(moduleId: String?) = refreshInternal(manual = true, moduleId = moduleId)
     private fun refreshInternal(manual: Boolean, moduleId: String? = null) {
@@ -417,7 +428,10 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             try {
                 if (manual) repository.update { it.copy(editionSequence = (it.editionSequence + 1) % 1_000_000_000L) }
                 val result = withContext(Dispatchers.IO) { if (moduleId == null) engine.refresh(allowPlanRetry = manual) else engine.refreshModule(moduleId, allowPlanRetry = manual) }
-                if (generation == refreshGeneration) _ui.update { it.copy(error = result.error, notice = result.notice) }
+                if (generation == refreshGeneration) {
+                    repository.update { state -> PersonalDailySelectionLogic098.ensure(state, System.currentTimeMillis(), refresh = manual) }
+                    _ui.update { it.copy(error = result.error, notice = result.notice) }
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (e: Exception) { if (generation == refreshGeneration) _ui.update { it.copy(error = (e as? FeedFailure)?.code ?: "provider_error") } }
             finally { if (generation == refreshGeneration) _ui.update { it.copy(refreshing = false, refreshingModuleId = null) } }
@@ -813,7 +827,7 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         }
     }
 
-    /** Resolve against current persisted content, then prepare a new scoped draft; never infer here. */
+    /** Legacy convenience seam: only a current provider-authored option may populate a draft. */
     fun prepareSuggestion(itemId: String, stableSuggestionId: String, appLanguage: String): Job {
         clearAnswer()
         val suggestionToken = suggestionGeneration.get()
@@ -821,23 +835,14 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         return viewModelScope.launch {
             try {
                 val language = appLanguage.takeIf { it == "sw" } ?: "en"
-                val configuration = android.content.res.Configuration(app.resources.configuration).apply {
-                    setLocale(java.util.Locale.forLanguageTag(language))
-                }
-                val localized = app.createConfigurationContext(configuration)
+                if (briefLanguage() != language) throw FeedFailure("suggestion_changed")
                 var prepared: SuggestedConversationDraft? = null
                 var preparedThread: AiConversation? = null
                 repository.update { state ->
                     if (suggestionToken != suggestionGeneration.get() || selectionToken != conversationSelectionGeneration) return@update state
                     val item = state.items.find { it.id == itemId } ?: return@update state
-                    val prompt = if (stableSuggestionId.startsWith("local:")) {
-                        val resource = localSuggestionPromptResource095(item.kind, stableSuggestionId) ?: return@update state
-                        localized.getString(resource, item.title)
-                    } else {
-                        if (!_ui.value.connected) return@update state
-                        AiSuggestedInteractions095.resolve(state, itemId, stableSuggestionId,
-                            System.currentTimeMillis(), language)?.prompt ?: return@update state
-                    }
+                    val target = SuggestionTargets097.item(state, itemId, language) ?: return@update state
+                    val prompt = resolveSuggestion097(state, target, stableSuggestionId, language) ?: return@update state
                     if (state.conversations.size >= ConversationLogic.maxConversations) throw FeedFailure("conversation_limit")
                     // A new thread preserves any unsent text in the previous conversation.
                     val thread = AiConversation(moduleId = item.moduleId, itemId = item.id)
@@ -858,167 +863,193 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         }
     }
 
-    /**
-     * Builds the bounded render-time option set from current persisted feed state. This is a pure
-     * local read: opening a suggestion sheet never generates a prompt through a provider or sends
-     * a request. `displayText` is only a preview; Send/Edit re-resolve the option ID below.
-     */
-    fun suggestionOptions097(target: SuggestionTargetSnapshot097, appLanguage: String): List<SuggestionOptionSnapshot097> {
-        val current = _ui.value
-        val state = current.state ?: return emptyList()
-        return suggestionOptionsForState097(state, current.connected, target, appLanguage)
+    /** Read-only prepared snapshot. This never contacts the provider or changes a draft. */
+    fun suggestionSheet097(target: SuggestionTargetSnapshot097, appLanguage: String): SuggestionSheetSnapshot097 {
+        val uiState = _ui.value
+        val state = uiState.state ?: return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.UNAVAILABLE,
+            failureCode = "suggestion_unavailable")
+        val language = appLanguage.takeIf { it in setOf("en", "sw") } ?: "en"
+        if (uiState.appLanguage != language)
+            return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.STALE_TARGET, failureCode = "suggestion_changed")
+        if (!SuggestionTargets097.current(state, target, language))
+            return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.STALE_TARGET, failureCode = "suggestion_changed")
+        val preparedSet = cachedSuggestionSet097(state, target, language, System.currentTimeMillis())
+        val prepared = preparedSet?.questions?.map { question -> SuggestionOptionSnapshot097(
+            AiSuggestionCache097.optionId(preparedSet, question), question, preparedSet.generatedAtMillis)
+        }.orEmpty()
+        if (prepared.isNotEmpty()) return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.READY,
+            prepared, validUntilMillis = preparedSet!!.generatedAtMillis + AiSuggestionCache097.CACHE_TTL_MILLIS)
+        val generation = uiState.suggestionGeneration?.takeIf { it.target == target }
+        if (generation?.status == SuggestionSheetStatus097.GENERATING) return SuggestionSheetSnapshot097(target,
+            SuggestionSheetStatus097.GENERATING, requestId = generation.requestId)
+        generation?.let { return SuggestionSheetSnapshot097(target, it.status, requestId = it.requestId, failureCode = it.failureCode) }
+        if (!uiState.connected || app.appLock.state.value.locked)
+            return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.UNAVAILABLE, failureCode = "suggestion_unavailable")
+        return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.NEEDS_GENERATION)
     }
 
-    private fun suggestionOptionsForState097(
+    /** Compatibility accessor for non-sheet clients; options are never fabricated locally. */
+    fun suggestionOptions097(target: SuggestionTargetSnapshot097, appLanguage: String): List<SuggestionOptionSnapshot097> =
+        suggestionSheet097(target, appLanguage).options
+
+    private fun optionsForState097(
         state: FeedState,
-        connected: Boolean,
         target: SuggestionTargetSnapshot097,
         appLanguage: String,
+        now: Long,
     ): List<SuggestionOptionSnapshot097> {
-        val language = appLanguage.takeIf { it == "sw" } ?: "en"
-        if (!SuggestionTargets097.current(state, target, language)) return emptyList()
-        val configuration = android.content.res.Configuration(app.resources.configuration).apply {
-            setLocale(java.util.Locale.forLanguageTag(language))
-        }
-        val localized = app.createConfigurationContext(configuration)
-        val option = { id: String, label: Int, text: String ->
-            SuggestionOptionSnapshot097(id, localized.getString(label), text.take(2000), SuggestionOptionSource097.LOCAL)
-        }
-
-        fun forItem(item: FeedItem): List<SuggestionOptionSnapshot097> {
-            if (connected && AiSuggestedInteractions095.isApplicable(state, item, System.currentTimeMillis(), language)) {
-                val cached = item.suggestedInteractions.take(AiSuggestedInteractions095.MAX_INTERACTIONS).map { interaction ->
-                    SuggestionOptionSnapshot097(
-                        AiSuggestedInteractions095.suggestionId(item, interaction), interaction.label,
-                        interaction.prompt, SuggestionOptionSource097.CACHED_AI,
-                    )
-                }
-                if (cached.isNotEmpty()) return cached
-            }
-            val title = cleanSuggestionTopic097(item.title).take(120)
-            val resources = when (item.kind) {
-                "opportunities", "scholarships" -> listOf(
-                    R.string.suggestion097_label_verify to R.string.suggestion097_module_opportunity_eligibility,
-                    R.string.suggestion097_label_prepare to R.string.suggestion097_module_opportunity_prepare,
-                )
-                "security" -> listOf(
-                    R.string.suggestion097_label_verify to R.string.suggestion097_module_security_verify,
-                    R.string.suggestion097_label_risk to R.string.suggestion097_module_security_mitigate,
-                )
-                "technology" -> listOf(
-                    R.string.suggestion097_label_plan to R.string.suggestion097_module_technology_pilot,
-                    R.string.suggestion097_label_risk to R.string.suggestion097_module_technology_risk,
-                )
-                else -> listOf(
-                    R.string.suggestion097_label_verify to R.string.suggestion097_item_verify,
-                    R.string.suggestion097_label_next to R.string.suggestion097_item_next,
-                )
-            }
-            return resources.mapIndexed { index, (label, prompt) ->
-                option("local097:item:${if (index == 0) "verify" else "next"}", label,
-                    localized.getString(prompt, title))
-            }
-        }
-
-        val options = when (target.kind) {
-            SuggestionTargetKind097.ITEM -> {
-                val item = state.items.singleOrNull { it.id == target.itemId } ?: return emptyList()
-                forItem(item)
-            }
-            SuggestionTargetKind097.CONVERSATION -> {
-                val thread = state.conversations.singleOrNull { it.id == target.targetId } ?: return emptyList()
-                val item = thread.itemId?.let { id -> state.items.singleOrNull { it.id == id } }
-                if (thread.turns.isNotEmpty()) {
-                    // Never turn assistant boilerplate into a pseudo-personalized next step.
-                    // Item-scoped chats have an authoritative title; other chats use the latest
-                    // user-authored topic or their local thread title.
-                    val latestUserTopic = thread.turns.lastOrNull { it.role == "user" && it.text.isNotBlank() }?.text
-                    val topic = cleanSuggestionTopic097(item?.title ?: latestUserTopic ?: thread.title)
-                        .ifBlank { thread.moduleId?.let { id -> state.modules.singleOrNull { it.id == id }?.title }.orEmpty() }
-                        .ifBlank { localized.getString(R.string.suggestion097_topic_conversation) }
-                    listOf(
-                        option("local097:chat:next", R.string.suggestion097_label_next,
-                            localized.getString(R.string.suggestion097_chat_next, topic)),
-                        option("local097:chat:verify", R.string.suggestion097_label_verify,
-                            localized.getString(R.string.suggestion097_chat_verify, topic)),
-                    )
-                } else if (item != null) forItem(item)
-                else if (thread.moduleId != null) {
-                    val module = state.modules.singleOrNull { it.id == thread.moduleId && it.enabled } ?: return emptyList()
-                    moduleSuggestionOptions097(module, localized.resources, option)
-                } else generalSuggestionOptions097(state, localized.resources, option)
-            }
-            SuggestionTargetKind097.MODULE -> {
-                val module = state.modules.singleOrNull { it.id == target.moduleId && it.enabled } ?: return emptyList()
-                moduleSuggestionOptions097(module, localized.resources, option)
-            }
-            SuggestionTargetKind097.GENERAL -> generalSuggestionOptions097(state, localized.resources, option)
-        }
-        if (target.kind != SuggestionTargetKind097.CONVERSATION) return options
-        val thread = state.conversations.singleOrNull { it.id == target.targetId } ?: return emptyList()
-        val previouslyAsked = thread.turns.filter { it.role == "user" }
-            .map { normalizeSuggestionText097(it.text) }.toSet()
-        return options.filterNot { normalizeSuggestionText097(it.displayText) in previouslyAsked }
-    }
-
-    private fun moduleSuggestionOptions097(
-        module: FeedModule,
-        localized: android.content.res.Resources,
-        makeOption: (String, Int, String) -> SuggestionOptionSnapshot097,
-    ): List<SuggestionOptionSnapshot097> {
-        val resources = moduleSuggestionResources097(module.kind)
-        val title = cleanSuggestionTopic097(module.title).take(80)
-        val query = cleanSuggestionTopic097(module.query).take(100)
-        val topic = if (query.isBlank() || normalizeSuggestionText097(query) == normalizeSuggestionText097(title)) title
-            else "$title — $query"
-        return resources.mapIndexed { index, (label, prompt) ->
-            makeOption("local097:module:${if (index == 0) "verify" else "next"}", label, localized.getString(prompt, topic))
+        if (!SuggestionTargets097.current(state, target, appLanguage)) return emptyList()
+        val set = cachedSuggestionSet097(state, target, appLanguage, now) ?: return emptyList()
+        if (!AiSuggestionCache097.areValidQuestions(set.questions)) return emptyList()
+        return set.questions.map { question -> SuggestionOptionSnapshot097(
+            AiSuggestionCache097.optionId(set, question), question, set.generatedAtMillis)
         }
     }
 
-    private fun moduleSuggestionResources097(kind: String): List<Pair<Int, Int>> = when (kind) {
-        "opportunities", "scholarships" -> listOf(
-            R.string.suggestion097_label_verify to R.string.suggestion097_module_opportunity_eligibility,
-            R.string.suggestion097_label_prepare to R.string.suggestion097_module_opportunity_prepare,
-        )
-        "security" -> listOf(
-            R.string.suggestion097_label_verify to R.string.suggestion097_module_security_verify,
-            R.string.suggestion097_label_risk to R.string.suggestion097_module_security_mitigate,
-        )
-        "technology" -> listOf(
-            R.string.suggestion097_label_plan to R.string.suggestion097_module_technology_pilot,
-            R.string.suggestion097_label_risk to R.string.suggestion097_module_technology_risk,
-        )
-        else -> listOf(
-            R.string.suggestion097_label_verify to R.string.suggestion097_module_default_verify,
-            R.string.suggestion097_label_next to R.string.suggestion097_module_default_next,
-        )
-    }
-
-    private fun generalSuggestionOptions097(
+    private fun cachedSuggestionSet097(
         state: FeedState,
-        localized: android.content.res.Resources,
-        makeOption: (String, Int, String) -> SuggestionOptionSnapshot097,
-    ): List<SuggestionOptionSnapshot097> {
-        val hasApprovedGlobalContext = state.context.any { it.confirmed && PersonalProfile085.isGlobal(it) && it.text.isNotBlank() }
-        val fitQuestion = localized.getString(if (hasApprovedGlobalContext) R.string.suggestion097_general_fit
-            else R.string.suggestion097_general_no_context)
-        return listOf(
-            makeOption("local097:general:fit", R.string.suggestion097_label_fit, fitQuestion),
-            makeOption("local097:general:next", R.string.suggestion097_label_next,
-                localized.getString(R.string.suggestion097_general_next)),
-        )
+        target: SuggestionTargetSnapshot097,
+        appLanguage: String,
+        now: Long,
+    ): AiSuggestionSet097? {
+        val kind = target.kind.name.lowercase(java.util.Locale.ROOT)
+        val stored = state.suggestionSets097.lastOrNull { record ->
+            AiSuggestionCache097.isFresh(record, kind, target.targetId, target.revision, now)
+        }
+        val itemCache = if (target.kind == SuggestionTargetKind097.ITEM) {
+            state.items.singleOrNull { it.id == target.itemId }?.takeIf {
+                AiSuggestedInteractions095.isApplicable(state, it, now, appLanguage)
+            }?.let { item -> AiSuggestionSet097(kind, target.targetId, target.revision,
+                item.suggestedInteractions.map { it.prompt }, item.suggestedInteractionsGeneratedAtMillis) }
+        } else if (target.kind == SuggestionTargetKind097.CONVERSATION) {
+            val thread = state.conversations.singleOrNull { it.id == target.targetId }
+            val item = thread?.takeIf { it.turns.isEmpty() && it.attachments.isEmpty() }?.itemId?.let { id ->
+                state.items.singleOrNull { it.id == id }
+            }
+            item?.takeIf { AiSuggestedInteractions095.isApplicable(state, it, now, appLanguage) }
+                ?.let { AiSuggestionSet097(kind, target.targetId, target.revision,
+                    it.suggestedInteractions.map { interaction -> interaction.prompt }, it.suggestedInteractionsGeneratedAtMillis) }
+        } else null
+        return listOfNotNull(stored, itemCache).filter { AiSuggestionCache097.isValid(it) }
+            .maxByOrNull { it.generatedAtMillis }
     }
 
-    private fun cleanSuggestionTopic097(value: String): String = value
-        .replace(Regex("https?://\\S+", RegexOption.IGNORE_CASE), "")
-        .replace(Regex("[\\p{Cntrl}\\r\\n]+"), " ")
-        .replace(Regex("\\s+"), " ")
-        .replace('"', ' ')
-        .trim().take(90)
+    /** Explicit single request; opening a sheet is read-only. Duplicate taps share this job. */
+    fun generateSuggestions097(target: SuggestionTargetSnapshot097, appLanguage: String): SuggestionGenerationHandle097? {
+        val language = appLanguage.takeIf { it in setOf("en", "sw") } ?: "en"
+        synchronized(suggestionGenerationLock) {
+            suggestionGenerationJob?.takeIf { it.isActive }?.let { active ->
+                if (suggestionGenerationTarget == target) return SuggestionGenerationHandle097(
+                    suggestionGenerationRequestId ?: return null, active)
+                return null
+            }
+            val currentUi = _ui.value
+            val state = currentUi.state ?: return null
+            val actionAlreadyWorking = synchronized(suggestionActionLock) { suggestionActionJob?.isActive == true }
+            if (!currentUi.connected || currentUi.appLanguage != language || currentUi.asking || currentUi.importWorking || currentUi.conversationOpening ||
+                currentUi.suggestionWorking || actionAlreadyWorking || app.appLock.state.value.locked ||
+                !SuggestionTargets097.current(state, target, language)) return null
+            // A full, fresh AI set needs no second request. Generate/Retry is only valid when
+            // prepared data is missing, expired, or was explicitly rejected as incomplete.
+            if (cachedSuggestionSet097(state, target, language, System.currentTimeMillis()) != null) return null
+            val requestId = java.util.UUID.randomUUID().toString()
+            lateinit var launched: Job
+            launched = viewModelScope.launch(start = CoroutineStart.LAZY) {
+                try {
+                    _ui.update { it.copy(suggestionGeneration = SuggestionGenerationState097(
+                        requestId, target, SuggestionSheetStatus097.GENERATING)) }
+                    if (briefLanguage() != language || app.appLock.state.value.locked) throw FeedFailure("suggestion_changed")
+                    val initial = repository.current()
+                    if (!SuggestionTargets097.current(initial, target, language)) throw FeedFailure("suggestion_changed")
+                    if (target.kind == SuggestionTargetKind097.CONVERSATION && _ui.value.activeConversationId != target.targetId)
+                        throw FeedFailure("suggestion_changed")
+                    withContext(Dispatchers.IO) {
+                        engine.generateSuggestionSet097(
+                            target = target,
+                            expectedLanguage = language,
+                            expectedCurrent = { latest ->
+                                _ui.value.appLanguage == language && !app.appLock.state.value.locked &&
+                                    !_ui.value.asking && !_ui.value.importWorking &&
+                                    synchronized(suggestionGenerationLock) {
+                                        suggestionGenerationRequestId == requestId && suggestionGenerationJob?.isActive == true
+                                    } && synchronized(suggestionActionLock) { suggestionActionJob?.isActive != true } &&
+                                    SuggestionTargets097.current(latest, target, language)
+                            },
+                            onRequestDispatch = {
+                                synchronized(suggestionGenerationLock) {
+                                    if (suggestionGenerationRequestId != requestId || suggestionGenerationJob?.isActive != true ||
+                                        app.appLock.state.value.locked)
+                                        throw CancellationException("Suggestion generation cancelled before dispatch")
+                                }
+                            },
+                        )
+                    }
+                    val updated = repository.current()
+                    if (!SuggestionTargets097.current(updated, target, language) || briefLanguage() != language ||
+                        app.appLock.state.value.locked) throw FeedFailure("suggestion_changed")
+                    _ui.update { it.copy(state = updated, suggestionGeneration = null, error = null) }
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: Exception) {
+                    val rawCode = failureCode(error, "suggestion_failed")
+                    val code = when (rawCode) {
+                        "suggestion_incomplete", "suggestion_changed", "suggestion_unavailable" -> rawCode
+                        "unauthorized", "chatgpt_reauth", "quota", "limit_reached", "rate_limit", "offline" -> rawCode
+                        else -> "suggestion_failed"
+                    }
+                    _ui.update { current ->
+                        val sameGeneration = current.suggestionGeneration?.requestId == requestId
+                        if (sameGeneration) current.copy(suggestionGeneration = SuggestionGenerationState097(
+                            requestId, target,
+                            when (code) {
+                                "suggestion_incomplete" -> SuggestionSheetStatus097.INCOMPLETE
+                                "suggestion_unavailable", "unauthorized", "chatgpt_reauth", "offline" -> SuggestionSheetStatus097.UNAVAILABLE
+                                else -> SuggestionSheetStatus097.ERROR
+                            },
+                            code)) else current
+                    }
+                } finally {
+                    val released = synchronized(suggestionGenerationLock) {
+                        if (suggestionGenerationRequestId == requestId) {
+                            suggestionGenerationJob = null
+                            suggestionGenerationRequestId = null
+                            suggestionGenerationTarget = null
+                            true
+                        } else false
+                    }
+                    if (released) _ui.update { current ->
+                        val generation = current.suggestionGeneration
+                        if (generation?.requestId == requestId && generation.status == SuggestionSheetStatus097.GENERATING)
+                            current.copy(suggestionGeneration = null) else current
+                    }
+                }
+            }
+            suggestionGenerationJob = launched
+            suggestionGenerationRequestId = requestId
+            suggestionGenerationTarget = target
+            _ui.update { it.copy(suggestionGeneration = SuggestionGenerationState097(
+                requestId, target, SuggestionSheetStatus097.GENERATING)) }
+            launched.start()
+            return SuggestionGenerationHandle097(requestId, launched)
+        }
+    }
 
-    private fun normalizeSuggestionText097(value: String): String =
-        value.trim().replace(Regex("\\s+"), " ").lowercase(java.util.Locale.ROOT)
+    fun cancelSuggestionGeneration097(requestId: String) {
+        val job = synchronized(suggestionGenerationLock) {
+            if (suggestionGenerationRequestId != requestId) return
+            val current = suggestionGenerationJob
+            suggestionGenerationJob = null
+            suggestionGenerationRequestId = null
+            suggestionGenerationTarget = null
+            current
+        }
+        job?.cancel()
+        _ui.update { if (it.suggestionGeneration?.requestId == requestId) it.copy(suggestionGeneration = null) else it }
+    }
+
+    private fun cancelActiveSuggestionGeneration097() {
+        val requestId = synchronized(suggestionGenerationLock) { suggestionGenerationRequestId } ?: return
+        cancelSuggestionGeneration097(requestId)
+    }
 
     private fun resolveSuggestion097(
         state: FeedState,
@@ -1026,9 +1057,14 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         stableOptionId: String,
         appLanguage: String,
     ): String? {
-        if (!SuggestionTargets097.current(state, target, appLanguage)) return null
-        return suggestionOptionsForState097(state, _ui.value.connected, target, appLanguage)
-            .singleOrNull { it.id == stableOptionId }?.displayText
+        optionsForState097(state, target, appLanguage, System.currentTimeMillis())
+            .singleOrNull { it.id == stableOptionId }?.let { return it.questionText }
+        // Compatibility for a previously rendered provider-generated item ID. This still resolves
+        // only from a fresh complete AI cache; no local or caller-supplied text can pass this path.
+        if (target.kind == SuggestionTargetKind097.ITEM) return target.itemId?.let { id ->
+            AiSuggestedInteractions095.resolve(state, id, stableOptionId, System.currentTimeMillis(), appLanguage)?.prompt
+        }
+        return null
     }
 
     private fun startSuggestionAction(action: suspend () -> Unit): Job = synchronized(suggestionActionLock) {
@@ -1071,7 +1107,7 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         pendingOnly: Boolean,
         restorePreviousSelection: Boolean = false,
         rollbackOnCancel: Boolean = true,
-    ) {
+    ): Job? {
         var cancelledThreadId: String? = null
         var selectionToRestore: SuggestionSelectionSnapshot097? = null
         var originalThread: AiConversation? = null
@@ -1106,59 +1142,28 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                 true
             }
         }
-        if (!cancelled) return
+        if (!cancelled) return null
         _ui.update { it.copy(suggestionWorking = false) }
-        val rollback = SuggestionRollback097(cancelledThreadId, originalThread, appendedThread,
-            selectionToRestore, rollbackEpochAtCancel)
-        traceSuggestionRollback097("scheduled", rollback, selectionGenerationAtCancel)
-        viewModelScope.launch {
-            traceSuggestionRollback097("entered", rollback, selectionGenerationAtCancel)
-            var restoredOriginal = false
-            var removedNewThread = false
-            try {
-                val updated = repository.update { state ->
-                    var conversations = state.conversations
-                    val id = cancelledThreadId
-                    val original = originalThread
-                    val appended = appendedThread
-                    val epochMatches = rollbackEpochAtCancel == suggestionRollbackEpoch
-                    if (rollbackBeforeDispatch && epochMatches && original != null && appended != null &&
-                        conversations.singleOrNull { it.id == original.id } == appended) {
-                        conversations = conversations.map { if (it.id == original.id) original else it }
-                        restoredOriginal = true
-                    }
-                    if (rollbackBeforeDispatch && epochMatches && id != null) {
-                        val pending = conversations.singleOrNull { it.id == id }
-                        if (pending != null && pending.turns.isEmpty() && pending.attachments.isEmpty()) {
-                            conversations = conversations.filterNot { it.id == id }
-                            removedNewThread = true
-                        }
-                    }
-                    traceSuggestionRollback097("transform", rollback, selectionGenerationAtCancel,
-                        state = state, restoreApplied = restoredOriginal || removedNewThread)
-                    if (conversations != state.conversations) state.copy(conversations = conversations) else state
+        return viewModelScope.launch {
+            val updated = repository.update { state ->
+                var conversations = state.conversations
+                val id = cancelledThreadId
+                val original = originalThread
+                val appended = appendedThread
+                if (rollbackBeforeDispatch && rollbackEpochAtCancel == suggestionRollbackEpoch && original != null && appended != null &&
+                    conversations.singleOrNull { it.id == original.id } == appended) {
+                    conversations = conversations.map { if (it.id == original.id) original else it }
                 }
-                traceSuggestionRollback097("committed", rollback, selectionGenerationAtCancel, updated,
-                    restoreApplied = restoredOriginal || removedNewThread)
-                val mayRestoreSelection = rollbackBeforeDispatch && rollbackEpochAtCancel == suggestionRollbackEpoch &&
-                    conversationSelectionGeneration == selectionGenerationAtCancel
-                var selectionRestored = false
-                if (mayRestoreSelection) selectionToRestore?.let {
-                    restoreSuggestionSelection(it, updated)
-                    selectionRestored = true
+                if (rollbackBeforeDispatch && rollbackEpochAtCancel == suggestionRollbackEpoch && id != null) {
+                    val pending = conversations.singleOrNull { it.id == id }
+                    if (pending != null && pending.turns.isEmpty() && pending.attachments.isEmpty())
+                        conversations = conversations.filterNot { it.id == id }
                 }
-                traceSuggestionRollback097(if (selectionRestored) "finished-restored" else "finished-skipped",
-                    rollback, selectionGenerationAtCancel, updated,
-                    restoreApplied = restoredOriginal || removedNewThread || selectionRestored)
-            } catch (cancelled: CancellationException) {
-                traceSuggestionRollback097("cleanup-cancelled", rollback, selectionGenerationAtCancel,
-                    restoreApplied = restoredOriginal || removedNewThread)
-                throw cancelled
-            } catch (failure: Exception) {
-                traceSuggestionRollback097("cleanup-failed:${failure::class.simpleName}", rollback,
-                    selectionGenerationAtCancel, restoreApplied = restoredOriginal || removedNewThread)
-                throw failure
+                if (conversations != state.conversations) state.copy(conversations = conversations) else state
             }
+            if (rollbackBeforeDispatch && rollbackEpochAtCancel == suggestionRollbackEpoch &&
+                conversationSelectionGeneration == selectionGenerationAtCancel)
+                selectionToRestore?.let { restoreSuggestionSelection(it, updated) }
         }
     }
 
@@ -1182,36 +1187,6 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                     conversationReady = false, error = it.error ?: "invalid_input") }
             }
         }
-    }
-
-    private fun traceSuggestionRollback097(
-        phase: String,
-        rollback: SuggestionRollback097,
-        expectedSelectionGeneration: Long?,
-        state: FeedState? = null,
-        restoreApplied: Boolean? = null,
-    ) {
-        val observer = suggestionRollbackTraceForTest ?: return
-        val targetId = rollback.createdThreadId ?: rollback.originalThread?.id
-        val current = targetId?.let { id -> state?.conversations?.singleOrNull { it.id == id } }
-        val trace = SuggestionRollbackTrace097(
-            phase = phase,
-            threadId = targetId,
-            epochMatches = rollback.epoch == suggestionRollbackEpoch,
-            selectionGenerationMatches = expectedSelectionGeneration?.let { it == conversationSelectionGeneration },
-            originalThreadId = rollback.originalThread?.id,
-            appendedThreadId = rollback.appendedThread?.id,
-            currentThreadId = current?.id,
-            currentTurnCount = current?.turns?.size,
-            currentMatchesOriginal = rollback.originalThread?.let { current == it },
-            currentMatchesAppended = rollback.appendedThread?.let { current == it },
-            conversations = state?.conversations.orEmpty().take(ConversationLogic.maxConversations).map {
-                "${it.id}:${it.turns.size}:${it.attachments.size}"
-            },
-            restoreApplied = restoreApplied,
-        )
-        // Test-only observer must never alter rollback semantics.
-        runCatching { observer(trace) }
     }
 
     /** Primary next-step action: re-resolve the displayed ID and immediately send exactly once. */
@@ -1789,7 +1764,7 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             context = imported.entries.map { it.copy(origin = "imported", global = false) },
             modules = ModuleCatalog.mergeCatalog(imported.modules.ifEmpty { s.modules }),
             items = s.items.map { AiSuggestedInteractions095.clear(it.copy(why = "", relevance = 0, aiRelevance = null)) },
-            briefs = emptyList(), lastAiRefreshMillis = 0, lastRefreshMillis = 0) }
+            briefs = emptyList(), suggestionSets097 = emptyList(), personalDailySelection098 = null, lastAiRefreshMillis = 0, lastRefreshMillis = 0) }
         // Publish the exact DataStore result before the completion signal returns to the editor.
         // The repository collector will converge on the same snapshot; this avoids briefly
         // restoring a stale saveable context draft as the user lands on the notes list.
@@ -1803,6 +1778,7 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         // A blank plan account prevents old API credentials being used if cleanup fails.
         repository.update { candidate.copy(notifications = false, personalSeedApplied = true, modules = ModuleCatalog.mergeCatalog(candidate.modules),
             items = candidate.items.map { AiSuggestedInteractions095.clear(it.copy(aiRelevance = null)) },
+            suggestionSets097 = emptyList(), personalDailySelection098 = null,
             connection = AiConnection(mode = "chatgpt", model = candidate.connection.model), aiPauseCode = "") }
         apiPresence.definitive(false)
         FeedWorker.cancel(app)
@@ -1900,6 +1876,8 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     fun exportFeedBackup(uri: Uri) = work {
         val state = repository.current()
         write(uri, Json { prettyPrint = true; encodeDefaults = true }.encodeToString(state.copy(
+            items = state.items.map(AiSuggestedInteractions095::clear),
+            suggestionSets097 = emptyList(), personalDailySelection098 = null,
             connection = state.connection.copy(accountId = ""), aiPauseCode = "")))
         _ui.update { it.copy(notice = "saved", error = null) }
     }

@@ -141,6 +141,8 @@ class FeedNetworkTest {
         assertEquals(1, http.requests.size)
         val body = FeedJson.parseToJsonElement(http.requests.single().body!!).jsonObject
         val inputText = body["input"]!!.jsonPrimitive.content
+        assertTrue(body["instructions"]!!.jsonPrimitive.content.contains(
+            "Keep keyPoints as plain readable prose: no Markdown links, raw URLs or provider citation markup; sourceUrl and referenceUrls carry factual links."))
         val input = FeedJson.parseToJsonElement(inputText).jsonObject
         assertTrue(input["groundingSources"]!!.jsonArray.isNotEmpty())
         val grounding = input["groundingSources"]!!.jsonArray.single().jsonObject
@@ -171,10 +173,7 @@ class FeedNetworkTest {
             put("candidateFits", buildJsonArray { add(buildJsonObject { put("id", candidate.id); put("fitEstimate", 70) }) })
             put("candidateInteractions", buildJsonArray { add(buildJsonObject {
                 put("id", candidate.id)
-                put("interactions", buildJsonArray { add(buildJsonObject {
-                    put("intent", "ASK_ABOUT_ITEM"); put("label", "Check the deadline")
-                    put("prompt", "Which deadline does the source state?")
-                }) })
+                put("interactions", interactionRows("the announced deadline"))
             }) })
         }.toString()
         val http = FakeHttp(response(responseJson, emptyList()))
@@ -184,8 +183,8 @@ class FeedNetworkTest {
 
         assertEquals(1, http.requests.size)
         assertEquals(listOf(FeedCandidateFit(candidate.id, 70)), result.candidateFits)
-        assertEquals(listOf(FeedCandidateInteractions(candidate.id, listOf(AiSuggestedInteraction(
-            label = "Check the deadline", prompt = "Which deadline does the source state?")))), result.candidateInteractions)
+        assertEquals(5, result.candidateInteractions.single().interactions.size)
+        assertEquals(fiveQuestions("the announced deadline"), result.candidateInteractions.single().interactions.map { it.prompt })
         val body = FeedJson.parseToJsonElement(http.requests.single().body!!).jsonObject
         val input = FeedJson.parseToJsonElement(body["input"]!!.jsonPrimitive.content).jsonObject
         assertEquals(candidate.id, input["publicCandidates"]!!.jsonArray.single().jsonObject["id"]!!.jsonPrimitive.content)
@@ -193,12 +192,9 @@ class FeedNetworkTest {
         listOf("suggestedInteractions", "suggestedInteractionsContentDigest", "suggestedInteractionsScopeProviderDigest",
             "suggestedInteractionsGeneratedAtMillis").forEach { assertFalse(publicCandidate.containsKey(it)) }
         val instructions = body["instructions"]!!.jsonPrimitive.content
-        assertTrue(instructions.contains("user-click questions only"))
-        assertTrue(instructions.contains("genuine decision value"))
-        assertTrue(instructions.contains("eligibility or application checklist"))
-        assertTrue(instructions.contains("costs, risks, versions or trade-offs"))
-        assertTrue(instructions.contains("Avoid merely paraphrasing the summary"))
-        assertTrue(instructions.contains("concrete verification, eligibility, cost/risk, practical-use or next-decision question"))
+        assertTrue(instructions.contains("exactly five genuinely distinct substantive questions"))
+        assertTrue(instructions.contains("Do not pad or lightly rephrase"))
+        assertTrue(instructions.contains("fixed angle/category labels"))
     }
 
     @Test fun malformedCandidateQuestionsAreIgnoredAsAWholeAndNeverCoerced() = runBlocking {
@@ -216,17 +212,19 @@ class FeedNetworkTest {
             val responseJson = """{"items":[],"candidateFits":[{"id":"candidate-mixed","fitEstimate":55}],"candidateInteractions":$rows}"""
             val result = OpenAiFeedProvider(FakeHttp(response(responseJson, emptyList()))).discover(
                 FeedState(modules = listOf(module)), module, "test-provider-key-not-real", "en", listOf(candidate))
-            assertTrue("invalid candidate interaction batch accepted: $rows", result.candidateInteractions.isEmpty())
+            assertTrue("invalid candidate interaction batch accepted: $rows",
+                result.candidateInteractions.isEmpty() || result.candidateInteractions.all { it.interactions.isEmpty() })
             assertEquals(1, result.candidateFits.size) // An independent valid fit batch remains usable.
         }
     }
 
     @Test fun generatedItemQuestionsAreBoundToTheVerifiedItemAndLocalizedScope() = runBlocking {
+        assertTrue("the strict set fixture includes a schema-capped display label with trailing whitespace",
+            interactionRows("the supported update").any { row ->
+                row.jsonObject["label"]!!.jsonPrimitive.content.let { it.length == AiSuggestedInteractions095.MAX_LABEL_LENGTH && it.last().isWhitespace() }
+            })
         val output = buildJsonObject { put("items", buildJsonArray { add(JsonObject(article("Supported update", "https://example.com/supported").toMutableMap().apply {
-            put("suggestedInteractions", buildJsonArray { add(buildJsonObject {
-                put("intent", "ASK_ABOUT_ITEM"); put("label", "Check the key change")
-                put("prompt", "What key change does this source describe?")
-            }) })
+            put("suggestedInteractions", interactionRows("the supported update"))
         })) }) }.toString()
         val state = FeedState(modules = listOf(module), connection = AiConnection(webSearch = false),
             context = listOf(ContextEntry(id = "approved", text = "Public technology interest", scopes = setOf("news"))))
@@ -234,11 +232,36 @@ class FeedNetworkTest {
         val item = OpenAiFeedProvider(http).feed(state, module, "test-provider-key-not-real", "en").single()
 
         assertEquals("https://example.com/supported", item.sourceUrl)
-        assertEquals(1, item.suggestedInteractions.size)
+        assertEquals(5, item.suggestedInteractions.size)
+        assertTrue("display labels are trimmed after the provider schema caps their length",
+            item.suggestedInteractions.all { it.label == it.label.trim() })
+        assertEquals(fiveQuestions("the supported update"), item.suggestedInteractions.map { it.prompt })
         assertTrue(AiSuggestedInteractions095.isApplicable(state.copy(items = listOf(item)), item, System.currentTimeMillis(), "en"))
         assertEquals(AiSuggestedInteractions095.contentDigest(item), item.suggestedInteractionsContentDigest)
         assertEquals(AiSuggestedInteractions095.scopeProviderDigest(state, module, "en"), item.suggestedInteractionsScopeProviderDigest)
         assertEquals(1, http.requests.size)
+    }
+
+    @Test fun searchPromptKeepsKeyPointsAsPlainProseAndLeavesLinksInSourceFields() = runBlocking {
+        val url = "https://example.com/search-result"
+        val output = buildJsonObject { put("items", buildJsonArray { add(buildJsonObject {
+            put("moduleId", module.id); put("title", "A sourced search result"); put("summary", "A short synthetic summary.")
+            put("why", "It matches the requested topic."); put("sourceUrl", url); put("publishedAt", "2026-10-22T08:00:00Z")
+            put("deadline", ""); put("relevance", 75); put("contentType", "article")
+            put("referenceUrls", buildJsonArray { add(JsonPrimitive(url)) })
+            put("keyPoints", buildJsonArray { add(JsonPrimitive("A plain sourced point.")) })
+            put("nextStep", "Read the linked source."); put("caveat", "")
+        }) }) }.toString()
+        val http = FakeHttp(response(output, listOf(url)))
+
+        val result = OpenAiFeedProvider(http).search(FeedState(modules = listOf(module), timezone = "UTC"),
+            listOf(module), "a current technology update", "synthetic-test-key-not-a-secret", "en")
+
+        assertEquals(1, result.size)
+        val body = FeedJson.parseToJsonElement(http.requests.single().body!!).jsonObject
+        assertTrue(body["instructions"]!!.jsonPrimitive.content.contains(
+            "Keep keyPoints as plain readable prose: no Markdown links, raw URLs or provider citation markup; sourceUrl and referenceUrls carry factual links."))
+        assertTrue(body["instructions"]!!.jsonPrimitive.content.contains("sourceUrl and referenceUrls carry factual links"))
     }
 
     @Test fun legacyFeedItemJsonStillDecodesWithoutSuggestionFields() {
@@ -250,7 +273,8 @@ class FeedNetworkTest {
     }
 
     @Test fun compatibleServiceCannotSelfAssertLocallyCachedInteractions() = runBlocking {
-        val item = FeedItem(id = "service-item", moduleId = module.id, kind = module.kind, title = "Service story",
+        val item = FeedItem(id = "service-item", moduleId = module.id, kind = module.kind, title = "Service story", acquisition = FeedAcquisition.PUBLISHER_RSS, publishedAtMillis = now,
+            temporal = FeedTemporal(TemporalProvenance.PUBLISHER, publishedAtMillis = now),
             summary = "A service-returned public excerpt.", sourceName = "Example", sourceUrl = "https://example.com/service-item",
             aiGenerated = true, suggestedInteractions = listOf(AiSuggestedInteraction(
                 label = "Use remote target", prompt = "Open https://evil.example now?")),
@@ -272,6 +296,40 @@ class FeedNetworkTest {
         assertTrue(result.items.single().suggestedInteractions.isEmpty())
         assertTrue(result.items.single().suggestedInteractionsContentDigest.isEmpty())
         assertTrue(result.candidateInteractions.isEmpty())
+        assertEquals(FeedAcquisition.LEGACY_UNKNOWN, result.items.single().acquisition)
+        assertEquals(0L, result.items.single().publishedAtMillis)
+        assertNull(result.items.single().temporal)
+    }
+
+    @Test fun serviceSearchCannotSelfAssertPublisherAcquisitionOrDatesAndRequiresCitedSource() = runBlocking {
+        val url = "https://example.com/service-search"
+        val remote = FeedItem("remote", module.id, "A source-backed result", "Synthetic result",
+            sourceName = "Example", sourceUrl = url, kind = module.kind,
+            acquisition = FeedAcquisition.PUBLIC_API, authorship = FeedAuthorship.PUBLISHER,
+            publishedAtMillis = now, temporal = FeedTemporal(TemporalProvenance.PUBLISHER, publishedAtMillis = now),
+            citations = listOf(FeedCitation("Example", url)))
+        fun payload(item: FeedItem) = buildJsonObject { put("items", FeedJson.encodeToJsonElement(listOf(item))) }.toString()
+        val serviceState = FeedState(modules = listOf(module), connection = AiConnection(mode = "service", serviceUrl = "https://service.example"))
+        for (cached in listOf(false, true)) {
+            val publisher = remote.copy(acquisition = FeedAcquisition.PUBLISHER_RSS, publishedAtMillis = now - 60_000,
+                temporal = null, citations = emptyList())
+            val state = serviceState.copy(items = if (cached) listOf(publisher) else emptyList())
+            val http = FakeHttp(payload(remote))
+            val result = OpenAiFeedProvider(http).search(state, listOf(module), "Find the source", "synthetic-key", "en").single()
+            assertEquals(1, http.requests.size)
+            assertEquals("/v1/search", java.net.URI(http.requests.single().url).path)
+            assertEquals(FeedAcquisition.AI_SOURCE_GROUNDED, result.acquisition)
+            assertEquals(FeedAuthorship.AI, result.authorship)
+            assertTrue(result.aiGenerated)
+            assertEquals(if (cached) publisher.publishedAtMillis else 0L, result.publishedAtMillis)
+            if (!cached) assertNull(result.temporal)
+            else assertEquals(publisher.publishedAtMillis, result.temporal!!.publishedAtMillis)
+        }
+        val failure = runCatching {
+            OpenAiFeedProvider(FakeHttp(payload(remote.copy(citations = emptyList()))))
+                .search(serviceState, listOf(module), "Find the source", "synthetic-key", "en")
+        }.exceptionOrNull()
+        assertEquals("invalid_response", (failure as FeedFailure).code)
     }
 
     @Test fun malformedCandidateFitBatchesAreIgnoredInsteadOfCoercedOrPartiallyApplied() = runBlocking {
@@ -301,6 +359,93 @@ class FeedNetworkTest {
         val failure = runCatching { OpenAiFeedProvider(http).ask(FeedState(), null, "Explain this", "test-key-not-real", "en") }.exceptionOrNull()
         assertTrue(failure is FeedFailure)
         assertEquals("invalid_response", (failure as FeedFailure).code)
+    }
+
+    @Test fun explicitSuggestionGenerationRequiresFiveGroundedQuestionsAndUsesOneStructuredExistingProviderCall() = runBlocking {
+        val topic = "the public launch"
+        val questions = fiveQuestions(topic)
+        val item = FeedItem("item", module.id, "Public launch", "A synthetic sourced summary.",
+            sourceName = "Example", sourceUrl = "https://example.com/launch", kind = module.kind)
+        val conversation = AiConversation(id = "chat", moduleId = module.id, itemId = item.id,
+            turns = listOf(AiTurn(role = "user", text = "What changed in the public launch?")),
+            attachments = listOf(
+                AiAttachment(id = "used", name = "used.txt", text = "Previously sent topic material.", usedAtMillis = 1L),
+                AiAttachment(id = "pending", name = "pending.txt", text = "PRIVATE UNSENT TEST ATTACHMENT"),
+            ))
+        val state = FeedState(modules = listOf(module), items = listOf(item), conversations = listOf(conversation),
+            context = listOf(
+                ContextEntry(id = "allowed", text = "Confirmed synthetic public interest", scopes = setOf(module.kind)),
+                ContextEntry(id = "not-allowed", text = "UNCONFIRMED SECRET MARKER", scopes = setOf(module.kind), confirmed = false),
+            ), suggestionSets097 = listOf(AiSuggestionSet097("general", null, "a".repeat(64),
+                fiveQuestions("PRIVATE CACHED SUGGESTION MARKER"), now)))
+        val http = FakeHttp(response(questionObject(questions), emptyList()))
+        val provider = OpenAiFeedProvider(http)
+
+        val actual = provider.suggest(state, item, conversation, module,
+            "synthetic-provider-key-not-real", "en")
+
+        assertEquals(questions, actual)
+        assertEquals(1, http.requests.size)
+        val request = http.requests.single()
+        assertEquals("https://api.openai.com/v1/responses", request.url)
+        assertEquals("synthetic-provider-key-not-real", request.bearer)
+        assertFalse(request.body!!.contains("synthetic-provider-key-not-real"))
+        assertFalse(request.body.contains("PRIVATE UNSENT TEST ATTACHMENT"))
+        assertFalse(request.body.contains("UNCONFIRMED SECRET MARKER"))
+        assertFalse(request.body.contains("PRIVATE CACHED SUGGESTION MARKER"))
+        assertTrue(request.body.contains("Confirmed synthetic public interest"))
+        val body = FeedJson.parseToJsonElement(request.body).jsonObject
+        val input = FeedJson.parseToJsonElement(body["input"]!!.jsonPrimitive.content).jsonObject
+        assertEquals("conversation", input["targetKind"]!!.jsonPrimitive.content)
+        assertFalse(body.containsKey("tools")) // One normal inference request; no hidden web/search call.
+        val schema = body["text"]!!.jsonObject["format"]!!.jsonObject["schema"]!!.jsonObject
+        val questionSchema = schema["properties"]!!.jsonObject["questions"]!!.jsonObject
+        assertEquals(5, questionSchema["maxItems"]!!.jsonPrimitive.int)
+        assertFalse("Schema must permit an honest empty set rather than force padding", questionSchema.containsKey("minItems"))
+        assertTrue(body["instructions"]!!.jsonPrimitive.content.contains("genuinely different, substantive questions"))
+        assertTrue(body["instructions"]!!.jsonPrimitive.content.contains("return an empty questions array rather than padding"))
+    }
+
+    @Test fun incompleteSuggestionSetIsDiscardedWithoutFailingTheFeedResponseOrPadding() = runBlocking {
+        val itemJson = article("Supported update", "https://example.com/supported").toMutableMap().apply {
+            put("suggestedInteractions", JsonArray(interactionRows("a supported change").take(4)))
+        }
+        val http = FakeHttp(response(buildJsonObject { put("items", buildJsonArray { add(JsonObject(itemJson)) }) }.toString(),
+            listOf("https://example.com/supported")))
+
+        val items = OpenAiFeedProvider(http).feed(FeedState(), module, "test-provider-key-not-real", "en")
+
+        assertEquals(1, items.size)
+        assertTrue(items.single().suggestedInteractions.isEmpty())
+        assertTrue(items.single().sourceUrl.isNotBlank())
+        assertEquals(1, http.requests.size)
+    }
+
+    @Test fun serviceModeUsesOneExistingAskCallAndRejectsUnstructuredSuggestionText() = runBlocking {
+        val http = FakeHttp("""{"answer":"These could be good questions."}""")
+        val state = FeedState(connection = AiConnection(mode = "service", serviceUrl = "https://service.example"), modules = listOf(module))
+        val error = runCatching {
+            OpenAiFeedProvider(http).suggest(state, null, null, module, "synthetic-service-key-not-real", "en")
+        }.exceptionOrNull()
+
+        assertEquals("suggestion_incomplete", (error as FeedFailure).code)
+        assertEquals(1, http.requests.size)
+        assertEquals("/v1/ask", java.net.URI(http.requests.single().url).path)
+        assertFalse(http.requests.single().body!!.contains("synthetic-service-key-not-real"))
+    }
+
+    @Test fun providerSuggestionParserRejectsIncompleteArraysWithoutPaddingOrRetryCalls() = runBlocking {
+        val item = FeedItem("item", module.id, "Public launch", "A synthetic sourced summary.",
+            sourceName = "Example", sourceUrl = "https://example.com/launch", kind = module.kind)
+        (0..4).forEach { count ->
+            val http = FakeHttp(response(questionObject(fiveQuestions("the public launch").take(count)), emptyList()))
+            val failure = runCatching {
+                OpenAiFeedProvider(http).suggest(FeedState(modules = listOf(module), items = listOf(item)),
+                    item, null, module, "synthetic-provider-key-not-real", "en")
+            }.exceptionOrNull() as? FeedFailure
+            assertEquals("partial response $count must not be padded", "suggestion_incomplete", failure?.code)
+            assertEquals("at most one existing provider request is made", 1, http.requests.size)
+        }
     }
 
     @Test fun allUnverifiedCandidatesAreAnErrorRatherThanAnEmptySuccessfulRefresh() = runBlocking {
@@ -400,11 +545,91 @@ class FeedNetworkTest {
         assertEquals(listOf("Verified"), result.map { it.title })
     }
 
+    @Test fun originalReadAndFiveQuestionsPiggybackOnOneScopedDiscoveryRequest() = runBlocking {
+        val row = buildJsonObject {
+            put("title", "Try a reversible workflow experiment")
+            put("summary", "A synthetic original reflection on one recurring interruption.")
+            put("why", "Fits the approved workflow interest.")
+            put("basis", "reflection")
+            put("sections", buildJsonArray {
+                add(buildJsonObject { put("heading", "Notice a recurring interruption")
+                    put("body", "Describe one interruption in your own work and note what happened before and after it, without assuming its cause. ".repeat(7)) })
+                add(buildJsonObject { put("heading", "Choose a small reversible experiment")
+                    put("body", "Try one modest change, preserve your existing work, and review whether the change helped before deciding to expand it. ".repeat(7)) })
+            })
+            put("evidenceUrls", JsonArray(emptyList()))
+            put("furtherReadingUrls", JsonArray(emptyList()))
+            put("suggestedInteractions", interactionRows("the proposed workflow experiment"))
+        }
+        val output = buildJsonObject {
+            put("items", JsonArray(emptyList()))
+            put("originalReads", JsonArray(listOf(row)))
+        }.toString()
+        val http = FakeHttp(response(output, emptyList()))
+        val state = FeedState(modules = listOf(module), context = listOf(
+            ContextEntry("workflow", "Approved workflow interest", scopes = setOf("news")),
+            ContextEntry("private", "Unrelated private context marker", scopes = setOf("horoscope")),
+        ))
+        val result = OpenAiFeedProvider(http).discover(state, module, "synthetic-key", "en", emptyList())
+        val read = result.items.single()
+        assertEquals(1, http.requests.size)
+        assertTrue(FeedLogic.isValidOriginalReadShape(read))
+        assertEquals(0L, read.publishedAtMillis)
+        assertEquals("", read.sourceUrl)
+        assertEquals(5, read.suggestedInteractions.size)
+        assertTrue(AiSuggestedInteractions095.isApplicable(state, read, System.currentTimeMillis(), "en"))
+        val request = FeedJson.parseToJsonElement(http.requests.single().body!!).jsonObject
+        val input = request["input"]!!.jsonPrimitive.content
+        assertTrue(input.contains("Approved workflow interest"))
+        assertFalse(input.contains("Unrelated private context marker"))
+        assertTrue(request["instructions"]!!.jsonPrimitive.content.contains("Do not make an extra request"))
+    }
+
+    @Test fun generatedPublicationDateIsNotTrustedButActualSourceMetadataSurvives() = runBlocking {
+        val url = "https://example.com/verified-date"
+        val output = buildJsonObject { put("items", buildJsonArray { add(article("Verified source", url)) }) }.toString()
+        val unknown = OpenAiFeedProvider(FakeHttp(response(output, listOf(url))))
+            .feed(FeedState(), module, "synthetic-key", "en").single()
+        assertEquals(0L, unknown.publishedAtMillis)
+        assertNull(unknown.temporal)
+        val publisher = unknown.copy(aiGenerated = false, acquisition = FeedAcquisition.PUBLISHER_RSS,
+            authorship = FeedAuthorship.PUBLISHER, publishedAtMillis = now - 60_000)
+        val known = OpenAiFeedProvider(FakeHttp(response(output, listOf(url))))
+            .feed(FeedState(items = listOf(publisher), connection = AiConnection(webSearch = false)), module, "synthetic-key", "en").single()
+        assertEquals(publisher.publishedAtMillis, known.publishedAtMillis)
+        assertEquals(TemporalProvenance.PUBLISHER, known.temporal!!.provenance)
+        assertEquals(FeedAcquisition.AI_SOURCE_GROUNDED, known.acquisition)
+        val web = OpenAiFeedProvider(FakeHttp(response(output, listOf(url))))
+            .feed(FeedState(connection = AiConnection(webSearch = true)), module, "synthetic-key", "en").single()
+        assertEquals(FeedAcquisition.AI_WEB_GROUNDED, web.acquisition)
+        assertEquals(0L, web.publishedAtMillis) // Search citations alone still do not attest publication time.
+    }
+
     private fun article(title: String, url: String) = buildJsonObject {
         put("title", title); put("summary", "Synthetic response used only by tests.")
         put("why", "Matches an approved interest."); put("sourceName", "Example"); put("sourceUrl", url)
         put("publishedAt", "2026-10-22T08:00:00Z"); put("deadline", ""); put("relevance", 80)
     }
+
+    private fun fiveQuestions(topic: String) = listOf(
+        "What timeline does this source give for $topic?",
+        "Which groups does the source identify as affected by $topic?",
+        "What evidence supports the main claim about $topic?",
+        "Which stated limitation could change how someone uses $topic?",
+        "What context would help compare $topic with current alternatives?",
+    )
+
+    private fun questionObject(questions: List<String>) = buildJsonObject {
+        put("questions", JsonArray(questions.map { JsonPrimitive(it) }))
+    }.toString()
+
+    private fun interactionRows(topic: String): JsonArray = JsonArray(fiveQuestions(topic).map { question ->
+        buildJsonObject {
+            put("intent", "ASK_ABOUT_ITEM")
+            put("label", question.substringBefore('?').take(48))
+            put("prompt", question)
+        }
+    })
 
     private fun response(output: String, urls: List<String>) = buildJsonObject {
         put("status", "completed")

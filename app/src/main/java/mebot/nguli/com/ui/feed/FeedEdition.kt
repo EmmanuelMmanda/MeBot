@@ -37,7 +37,9 @@ import androidx.compose.ui.unit.dp
 import mebot.nguli.com.R
 import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.FeedUiState
-import mebot.nguli.com.feed.SuggestionOptionSnapshot097
+import mebot.nguli.com.feed.SuggestionGenerationHandle097
+import mebot.nguli.com.feed.SuggestionSheetSnapshot097
+import mebot.nguli.com.feed.SuggestionSheetStatus097
 import mebot.nguli.com.feed.SuggestionTargetSnapshot097
 import mebot.nguli.com.feed.SuggestionTargets097
 import mebot.nguli.com.ui.*
@@ -56,10 +58,15 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
     onRefreshModule: ((String?) -> Unit)? = null,
     onContext: (() -> Unit)? = null, onDismissNotice: ((String) -> Unit)? = null,
     onLoadMore: ((String?) -> Unit)? = null,
-    onPrepareSuggestion: (String, String) -> Unit = { _, _ -> },
     onUseSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> },
     onEditSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> },
-    onSuggestionOptions: (SuggestionTargetSnapshot097, String) -> List<SuggestionOptionSnapshot097> = { _, _ -> emptyList() }) {
+    onSuggestionSheet: (SuggestionTargetSnapshot097, String) -> SuggestionSheetSnapshot097 = { target, _ ->
+        SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.NEEDS_GENERATION, emptyList())
+    },
+    onGenerateSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
+    onCancelSuggestionGeneration: (String) -> Unit = {},
+    onEnsureDailySelection: () -> Unit = {},
+) {
     val state = ui.state ?: return
     var filter by rememberSaveable { mutableStateOf("all") }
     val enabled = remember(state.modules) { state.modules.filter { it.enabled } }
@@ -70,6 +77,39 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
         if (filter == "today") emptyList() else FeedLogic.edition(state, now)
     }
     val today = remember(state, now, filter == "today") { if (filter == "today") TodayFeed.edition(state, now) else emptyList() }
+    val todayWindow = remember(state.timezone, now / 60_000) { TodayFeed.dayWindow(now, state.timezone) }
+    val ensureDailySelection by rememberUpdatedState(onEnsureDailySelection)
+    LaunchedEffect(
+        todayWindow.date,
+        state.timezone,
+        state.items,
+        state.modules,
+        state.hiddenIds,
+        state.savedIds,
+        state.context,
+        state.region,
+        state.connection,
+        state.relevanceSignals,
+        state.starredStories,
+        state.viewedAtMillis,
+        state.readingHistoryEnabled,
+        state.editionSequence,
+    ) {
+        // The ViewModel callback only updates the local projection; this effect never requests AI.
+        ensureDailySelection()
+    }
+    val personalTodaySelection = remember(state, now / 60_000, filter == "today") {
+        if (filter == "today") PersonalDailySelectionLogic098.resolve(state, now) else emptyList()
+    }
+    val personalTodayIds = remember(personalTodaySelection) { personalTodaySelection.mapTo(HashSet()) { it.id } }
+    val personalTodaySourceKeys = remember(personalTodaySelection) { personalTodaySelection.mapNotNullTo(HashSet(), ::todaySourceKey098) }
+    val verifiedTodayEntries = remember(today, personalTodayIds, personalTodaySourceKeys) {
+        today.filterNot { entry -> entry.item.id in personalTodayIds || todaySourceKey098(entry.item)?.let { it in personalTodaySourceKeys } == true }
+    }
+    val verifiedTodayById = remember(today) { today.associateBy { it.item.id } }
+    val verifiedTodayBySource = remember(today) {
+        today.mapNotNull { entry -> todaySourceKey098(entry.item)?.let { key -> key to entry } }.toMap()
+    }
     val items = remember(edition, today, filter) {
         if (filter == "today") today.map { it.item } else edition.filter { filter == "all" || it.moduleId == filter }
     }
@@ -77,7 +117,7 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
     val stories = remember(items) { items.filter { it.weather == null } }
     val youLabel = stringResource(R.string.feed_you_title)
     val layout = LocalConfiguration.current
-    val appLanguage = if (layout.locales[0]?.language == "sw") "sw" else "en"
+    val appLanguage = if (ui.appLanguage == "sw") "sw" else "en"
     val compact = layout.screenWidthDp < 360 || layout.fontScale > 1.15f
     // Each filter keeps its own page and position through navigation and rotation.
     // Rendering stays bounded to the viewport even after several pages are opened.
@@ -99,11 +139,11 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
         val filteredModule = state.modules.find { it.id == filter }
         val suggestionTarget = remember(state, suggestionItem?.id, filter, appLanguage) {
             suggestionItem?.let { SuggestionTargets097.item(state, it.id, appLanguage) }
-                ?: filteredModule?.let { SuggestionTargets097.module(state, it.id, appLanguage) }
+                // A weather/horoscope filter is an explicitly unsupported AI scope. Do not
+                // turn its empty state into a module or general suggestion destination.
+                ?: filteredModule?.takeIf { it.kind !in setOf("weather", "horoscope") }
+                    ?.let { SuggestionTargets097.module(state, it.id, appLanguage) }
                 ?: if (filter == "all") SuggestionTargets097.general(state, appLanguage) else null
-        }
-        val suggestionOptions = remember(state, ui.connected, suggestionTarget, appLanguage, now / 60_000) {
-            suggestionTarget?.let { onSuggestionOptions(it, appLanguage) }.orEmpty()
         }
         val suggestionContext = suggestionItem?.title ?: filteredModule?.let { moduleName(it) }
             ?: stringResource(R.string.workspace_general)
@@ -185,12 +225,6 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                         }
                     }
                 }
-                if (filter == "today") item(key = "today-note", contentType = "notice") {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(stringResource(R.string.today_090_scope), style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
                 if (newIds.isNotEmpty()) item(key="new-ready",contentType="notice") {
                     FilledTonalButton(onClick={acceptedIds=FeedPaging.acceptNew(stories,acceptedIds);visibleCount=maxOf(5,newIds.size.coerceAtMost(10));scope.launch{listState.scrollToItem(1)}},modifier=Modifier.fillMaxWidth().heightIn(min=48.dp).testTag("feed-new-results")) {
                         Text(stringResource(R.string.feed_new_items,newIds.size))
@@ -217,15 +251,15 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                 }
 
                 when {
-                    filter == "today" && items.isEmpty() -> item(key = "today-empty", contentType = "empty") {
+                    filter == "today" && items.isEmpty() && personalTodaySelection.isEmpty() -> item(key = "today-empty", contentType = "empty") {
                         EditionEmpty(R.string.today_090_empty, R.string.today_090_empty_body,
                             R.string.today_090_regular_feed, { filter = "all" })
                     }
-                    ui.refreshing && items.isEmpty() -> Unit // Activity is rendered once, above the page.
+                    ui.refreshing && items.isEmpty() && personalTodaySelection.isEmpty() -> Unit // Activity is rendered once, above the page.
                     enabled.isEmpty() -> item(key = "empty", contentType = "empty") {
                         EditionEmpty(R.string.feed_no_modules, R.string.feed_no_modules_body, R.string.feed_manage_modules, onModules)
                     }
-                    items.isEmpty() -> {
+                    items.isEmpty() && filter != "today" -> {
                         item(key = "empty", contentType = "empty") {
                             EditionEmpty(R.string.edition_empty_title, if (ui.connected) R.string.edition_empty_connected else R.string.edition_empty_body,
                                 if (ui.connected) R.string.feed_load else R.string.feed_connect, if (ui.connected) refreshSelected else onConnect)
@@ -235,33 +269,89 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                         }
                     }
                     filter == "today" -> {
-                        items(today.take(visibleCount), key = { "today-" + it.item.id }, contentType = { "story" }) { entry ->
+                        if (personalTodaySelection.isNotEmpty()) {
+                            item(key = "today-personal-heading", contentType = "section-heading") {
+                                Column(Modifier.semantics(mergeDescendants = true) {}.testTag("today-personal-selection-heading")) {
+                                    SectionHeader(stringResource(R.string.daily_selection_098_title))
+                                }
+                            }
+                            items(personalTodaySelection.take(visibleCount), key = { "today-personal-" + it.id }, contentType = { "story" }) { selectedItem ->
+                                val selectedTarget = remember(state, selectedItem.id, appLanguage) {
+                                    SuggestionTargets097.item(state, selectedItem.id, appLanguage)
+                                }
+                                val todaySourceEntry = if (FeedLogic.isValidOriginalReadShape(selectedItem)) null
+                                    else verifiedTodayById[selectedItem.id] ?: todaySourceKey098(selectedItem)?.let(verifiedTodayBySource::get)
+                                Column(Modifier.fillMaxWidth().testTag("today-personal-story-${selectedItem.id}"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    StoryRow(
+                                        selectedItem,
+                                        selectedItem.id in state.savedIds,
+                                        onItem,
+                                        onSave,
+                                        onHide,
+                                        todayMetadata = todaySourceEntry,
+                                        timestampOverride = if (todaySourceEntry != null) "" else null,
+                                        timezone = state.timezone,
+                                        suggestionTarget = selectedTarget,
+                                        suggestionLanguage = appLanguage,
+                                        suggestionsConnected = ui.connected,
+                                        suggestionsBusy = ui.asking || ui.importWorking || ui.suggestionWorking,
+                                        onConnect = onConnect,
+                                        onUseSuggestion = onUseSuggestion,
+                                        onEditSuggestion = onEditSuggestion,
+                                        onSuggestionSheet = onSuggestionSheet,
+                                        onGenerateSuggestion = onGenerateSuggestion,
+                                        onCancelSuggestionGeneration = onCancelSuggestionGeneration,
+                                    )
+                                }
+                            }
+                            if (visibleCount < personalTodaySelection.size) item(key = "today-personal-more", contentType = "action") {
+                                TextButton(onClick = { visibleCount += 5 }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                                    Text(stringResource(R.string.feed_show_more))
+                                }
+                            }
+                        }
+                        item(key = "today-verified-heading", contentType = "section-heading") {
+                            Column(Modifier.semantics(mergeDescendants = true) {}.testTag("today-verified-section-heading"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                SectionHeader(stringResource(R.string.today_verified_section_098_title))
+                                Text(stringResource(R.string.today_090_scope), style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        if (verifiedTodayEntries.isEmpty()) item(key = "today-verified-empty", contentType = "empty") {
+                            Box(Modifier.semantics(mergeDescendants = true) {}.testTag("today-verified-section-empty")) {
+                                SupportingText(stringResource(
+                                    if (today.isNotEmpty()) R.string.today_verified_section_098_covered else R.string.today_verified_section_098_empty,
+                                ))
+                            }
+                        }
+                        items(verifiedTodayEntries.take(visibleCount), key = { "today-" + it.item.id }, contentType = { "story" }) { entry ->
                             val todayTarget = remember(state, entry.item.id, appLanguage) {
                                 SuggestionTargets097.item(state, entry.item.id, appLanguage)
-                            }
-                            val todayOptions = remember(state, ui.connected, todayTarget, appLanguage, now / 60_000) {
-                                todayTarget?.let { onSuggestionOptions(it, appLanguage) }.orEmpty()
                             }
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 TodayReasonLabel090(entry, state.timezone)
                                 if (entry.item.weather != null) WeatherStrip(entry.item, state.timezone, showTimestamp = false) { onItem(entry.item.id) }
-                                else StoryRow(entry.item, entry.item.id in state.savedIds, onItem, onSave, onHide, timestampOverride = "",
+                                else StoryRow(entry.item, entry.item.id in state.savedIds, onItem, onSave, onHide, timestampOverride = "", timezone = state.timezone,
                                     suggestionTarget = todayTarget,
-                                    suggestionOptions = todayOptions,
                                     suggestionLanguage = appLanguage,
                                     suggestionsConnected = ui.connected,
                                     suggestionsBusy = ui.asking || ui.importWorking || ui.suggestionWorking,
                                     onConnect = onConnect,
                                     onUseSuggestion = onUseSuggestion,
-                                    onEditSuggestion = onEditSuggestion)
+                                    onEditSuggestion = onEditSuggestion,
+                                    onSuggestionSheet = onSuggestionSheet,
+                                    onGenerateSuggestion = onGenerateSuggestion,
+                                    onCancelSuggestionGeneration = onCancelSuggestionGeneration)
                                 if (entry.item.weather != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                                     SuggestionAction097(
                                         target = todayTarget,
-                                        options = todayOptions,
                                         contextLabel = entry.item.title,
                                         language = appLanguage,
                                         connected = ui.connected,
                                         busy = ui.asking || ui.importWorking || ui.suggestionWorking,
+                                        onReadSnapshot = onSuggestionSheet,
+                                        onGenerate = onGenerateSuggestion,
+                                        onCancelGeneration = onCancelSuggestionGeneration,
                                         onConnect = onConnect,
                                         onUse = onUseSuggestion,
                                         onEdit = onEditSuggestion,
@@ -270,7 +360,7 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                                 }
                             }
                         }
-                        if (visibleCount < today.size) item(key = "today-more", contentType = "action") {
+                        if (visibleCount < verifiedTodayEntries.size) item(key = "today-more", contentType = "action") {
                             TextButton(onClick = { visibleCount += 5 }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                                 Text(stringResource(R.string.feed_show_more))
                             }
@@ -278,15 +368,17 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                     }
                     else -> {
                         if (visible.isNotEmpty()) item(key = "story-" + visible.first().id, contentType = "lead") {
-                            LeadStory(visible.first(), visible.first().id in state.savedIds, onItem, onSave, onHide,
+                            LeadStory(visible.first(), visible.first().id in state.savedIds, onItem, onSave, onHide, state.timezone,
                                 suggestionsTarget = suggestionTarget,
-                                suggestionOptions = suggestionOptions,
                                 suggestionLanguage = appLanguage,
                                 suggestionsConnected = ui.connected,
                                 suggestionsBusy = ui.asking || ui.importWorking || ui.suggestionWorking,
                                 onConnect = onConnect,
                                 onUseSuggestion = onUseSuggestion,
                                 onEditSuggestion = onEditSuggestion,
+                                onSuggestionSheet = onSuggestionSheet,
+                                onGenerateSuggestion = onGenerateSuggestion,
+                                onCancelSuggestionGeneration = onCancelSuggestionGeneration,
                             )
                         }
                         if (weather != null) item(key = "weather-" + weather.id, contentType = "weather") {
@@ -296,16 +388,16 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                             Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
                                 SectionHeader(stringResource(R.string.edition_across_modules))
                                 if (visible.size >= 3 && compact) {
-                                    visible.subList(1, 3).forEach { item -> key(item.id) { StoryRow(item, item.id in state.savedIds, onItem, onSave, onHide) } }
+                                    visible.subList(1, 3).forEach { item -> key(item.id) { StoryRow(item, item.id in state.savedIds, onItem, onSave, onHide, timezone = state.timezone) } }
                                 } else if (visible.size >= 3) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     visible.subList(1, 3).forEach { item ->
-                                        key(item.id) { CompactStory(item, Modifier.weight(1f), item.id in state.savedIds, onSave, onItem) }
+                                        key(item.id) { CompactStory(item, Modifier.weight(1f), item.id in state.savedIds, onSave, onItem, state.timezone) }
                                     }
-                                } else key(visible[1].id) { StoryRow(visible[1], visible[1].id in state.savedIds, onItem, onSave, onHide) }
+                                } else key(visible[1].id) { StoryRow(visible[1], visible[1].id in state.savedIds, onItem, onSave, onHide, timezone = state.timezone) }
                             }
                         }
                         items(visible.drop(if (visible.size >= 3) 3 else 2), key = { "story-" + it.id }, contentType = { "story" }) { item ->
-                            StoryRow(item, item.id in state.savedIds, onItem, onSave, onHide)
+                            StoryRow(item, item.id in state.savedIds, onItem, onSave, onHide, timezone = state.timezone)
                         }
                         item(key = "page-end", contentType = "page-end") {
                             Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -336,11 +428,13 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                         Box(Modifier.weight(1f)) { EditionQuestion(ui.connected, onAsk, onConnect) }
                         SuggestionAction097(
                             target = suggestionTarget,
-                            options = suggestionOptions,
                             contextLabel = suggestionContext,
                             language = appLanguage,
                             connected = ui.connected,
                             busy = ui.asking || ui.importWorking || ui.suggestionWorking,
+                            onReadSnapshot = onSuggestionSheet,
+                            onGenerate = onGenerateSuggestion,
+                            onCancelGeneration = onCancelSuggestionGeneration,
                             onConnect = onConnect,
                             onUse = onUseSuggestion,
                             onEdit = onEditSuggestion,
@@ -383,16 +477,29 @@ private fun EditionQuestion(connected: Boolean, onAsk: () -> Unit, onConnect: ()
 }
 
 @Composable
+private fun editionAuthorLabel(item: FeedItem): String =
+    if (FeedLogic.isValidOriginalReadShape(item)) stringResource(R.string.original_read_authorship_098)
+    else publisherLabel(item).ifBlank { stringResource(moduleNameResource(item.kind)) }
+
+@Composable
+private fun editionTimestampLabel(item: FeedItem, timezone: String): String =
+    if (FeedLogic.isValidOriginalReadShape(item))
+        stringResource(R.string.original_read_created_098, detailDate(item.fetchedAtMillis, timezone))
+    else itemTimestamp(item)
+
+@Composable
 private fun LeadStory(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, onSave: (String) -> Unit,
-    onHide: (String) -> Unit,
+    onHide: (String) -> Unit, timezone: String,
     suggestionsTarget: SuggestionTargetSnapshot097?,
-    suggestionOptions: List<SuggestionOptionSnapshot097>,
     suggestionLanguage: String,
     suggestionsConnected: Boolean,
     suggestionsBusy: Boolean,
     onConnect: () -> Unit,
     onUseSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit,
     onEditSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit,
+    onSuggestionSheet: (SuggestionTargetSnapshot097, String) -> SuggestionSheetSnapshot097,
+    onGenerateSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097?,
+    onCancelSuggestionGeneration: (String) -> Unit,
 ) {
     val hasMedia = item.media != null
     val configuration = LocalConfiguration.current
@@ -417,7 +524,7 @@ private fun LeadStory(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
                             }
                         }
                         Column(Modifier.align(Alignment.BottomStart).padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(publisherLabel(item).ifBlank { stringResource(moduleNameResource(item.kind)) } + " · " + itemTimestamp(item),
+                            Text(editionAuthorLabel(item) + " · " + editionTimestampLabel(item, timezone),
                                 style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = .88f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
@@ -437,11 +544,13 @@ private fun LeadStory(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
                 Spacer(Modifier.weight(1f))
                 SuggestionAction097(
                     target = suggestionsTarget,
-                    options = suggestionOptions,
                     contextLabel = item.title,
                     language = suggestionLanguage,
                     connected = suggestionsConnected,
                     busy = suggestionsBusy,
+                    onReadSnapshot = onSuggestionSheet,
+                    onGenerate = onGenerateSuggestion,
+                    onCancelGeneration = onCancelSuggestionGeneration,
                     onConnect = onConnect,
                     onUse = onUseSuggestion,
                     onEdit = onEditSuggestion,
@@ -455,7 +564,7 @@ private fun LeadStory(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
 }
 
 @Composable
-private fun CompactStory(item: FeedItem, modifier: Modifier, saved: Boolean, onSave: (String) -> Unit, onItem: (String) -> Unit) {
+private fun CompactStory(item: FeedItem, modifier: Modifier, saved: Boolean, onSave: (String) -> Unit, onItem: (String) -> Unit, timezone: String) {
     Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface, modifier = modifier) {
         Column {
             Surface(onClick = { onItem(item.id) }, color = Color.Transparent, modifier = Modifier.testTag("item-" + item.id)) {
@@ -469,8 +578,10 @@ private fun CompactStory(item: FeedItem, modifier: Modifier, saved: Boolean, onS
                     Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 13.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         StoryCategoryTag(item, Modifier.testTag("category-${item.id}"))
                         Text(item.title, style = MaterialTheme.typography.titleMedium, maxLines = 4, overflow = TextOverflow.Ellipsis)
-                        Text(publisherLabel(item).ifBlank { stringResource(moduleNameResource(item.kind)) }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Text(editionAuthorLabel(item), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (FeedLogic.isValidOriginalReadShape(item)) Text(editionTimestampLabel(item, timezone),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -482,25 +593,35 @@ private fun CompactStory(item: FeedItem, modifier: Modifier, saved: Boolean, onS
 @Composable
 internal fun StoryRow(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, onSave: (String) -> Unit, onHide: ((String) -> Unit)?, timestampOverride: String? = null,
     suggestionTarget: SuggestionTargetSnapshot097? = null,
-    suggestionOptions: List<SuggestionOptionSnapshot097> = emptyList(),
     suggestionLanguage: String = "en",
     suggestionsConnected: Boolean = true,
     suggestionsBusy: Boolean = false,
     onConnect: () -> Unit = {},
     onUseSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> },
-    onEditSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> }) {
-    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface) {
+    onEditSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = { _, _, _ -> },
+    onSuggestionSheet: (SuggestionTargetSnapshot097, String) -> SuggestionSheetSnapshot097 = { target, _ ->
+        SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.NEEDS_GENERATION, emptyList())
+    },
+    onGenerateSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
+    onCancelSuggestionGeneration: (String) -> Unit = {},
+    timezone: String = "",
+    todayMetadata: TodayEntry? = null,
+) {
+    val originalReadTimezone = timezone.ifBlank { LocalRelevanceContext.current.state?.timezone.orEmpty() }
+    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface, modifier = Modifier.testTag("story-card-${item.id}")) {
         Column {
+            todayMetadata?.let { TodayReasonLabel090(it, originalReadTimezone) }
             Surface(onClick = { onItem(item.id) }, color = Color.Transparent, modifier = Modifier.fillMaxWidth().testTag("item-" + item.id)) {
                 Row(Modifier.padding(start = 18.dp, end = 18.dp, top = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        Text(publisherLabel(item).ifBlank { stringResource(moduleNameResource(item.kind)) }, style = MaterialTheme.typography.labelMedium,
+                        Text(editionAuthorLabel(item), Modifier.testTag("story-author-${item.id}"), style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(item.title, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
                         if (timestampOverride != null && timestampOverride.isNotBlank()) Text(timestampOverride, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         else if (timestampOverride == null && item.deadline.isNotBlank()) Text(stringResource(R.string.feed_deadline, item.deadline), style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary)
-                        else if (timestampOverride == null) Text(itemTimestamp(item), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else if (timestampOverride == null) Text(editionTimestampLabel(item, originalReadTimezone), Modifier.testTag("story-created-${item.id}"),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Box(Modifier.size(82.dp).clip(RoundedCornerShape(16.dp))) { PublisherImage(item, Modifier.fillMaxSize()) }
                 }
@@ -510,11 +631,13 @@ internal fun StoryRow(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
                 Spacer(Modifier.weight(1f))
                 if (suggestionTarget != null) SuggestionAction097(
                     target = suggestionTarget,
-                    options = suggestionOptions,
                     contextLabel = item.title,
                     language = suggestionLanguage,
                     connected = suggestionsConnected,
                     busy = suggestionsBusy,
+                    onReadSnapshot = onSuggestionSheet,
+                    onGenerate = onGenerateSuggestion,
+                    onCancelGeneration = onCancelSuggestionGeneration,
                     onConnect = onConnect,
                     onUse = onUseSuggestion,
                     onEdit = onEditSuggestion,
@@ -603,6 +726,9 @@ private fun ModuleDiscoveryTile(onModules: () -> Unit) {
         }
     }
 }
+
+private fun todaySourceKey098(item: FeedItem): String? =
+    item.sourceUrl.takeIf { FeedLogic.safeUrl(it) }?.let(FeedLogic::canonicalUrl)
 
 @Composable
 private fun EditionEmpty(title: Int, body: Int, action: Int, onAction: () -> Unit) {

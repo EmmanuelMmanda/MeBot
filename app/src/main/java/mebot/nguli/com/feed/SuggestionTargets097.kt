@@ -25,22 +25,48 @@ data class SuggestionTargetSnapshot097(
     val revision: String,
 )
 
-/** Render-only option data. `displayText` is never accepted as authority by FeedViewModel. */
-enum class SuggestionOptionSource097 { LOCAL, CACHED_AI }
-
+/** The only renderable option is a question returned and validated from the configured AI provider. */
 data class SuggestionOptionSnapshot097(
     val id: String,
-    val label: String,
-    val displayText: String,
-    val source: SuggestionOptionSource097,
+    val questionText: String,
+    val generatedAtMillis: Long,
+)
+
+enum class SuggestionSheetStatus097 {
+    READY,
+    NEEDS_GENERATION,
+    INCOMPLETE,
+    GENERATING,
+    UNAVAILABLE,
+    ERROR,
+    STALE_TARGET,
+}
+
+/** Immutable render-time result. Empty options are intentional unless status is READY. */
+data class SuggestionSheetSnapshot097(
+    val target: SuggestionTargetSnapshot097,
+    val status: SuggestionSheetStatus097,
+    val options: List<SuggestionOptionSnapshot097> = emptyList(),
+    val requestId: String? = null,
+    val failureCode: String? = null,
+    val validUntilMillis: Long? = null,
+)
+
+data class SuggestionGenerationState097(
+    val requestId: String,
+    val target: SuggestionTargetSnapshot097,
+    val status: SuggestionSheetStatus097,
+    val failureCode: String? = null,
 )
 
 /** Target fingerprints do not expose confirmed context, message text, credentials, or server settings. */
 object SuggestionTargets097 {
+    /** Bump when the provider question contract or prepared-cache semantics change. */
+    private const val REVISION_FORMAT = "mebot-ai-suggestions-097-v1"
     fun item(state: FeedState, itemId: String, appLanguage: String): SuggestionTargetSnapshot097? {
         val item = state.items.singleOrNull { it.id == itemId } ?: return null
         val module = state.modules.singleOrNull { it.id == item.moduleId && it.enabled } ?: return null
-        if (item.kind != module.kind) return null
+        if (item.kind != module.kind || item.kind in setOf("weather", "horoscope") || item.weather != null) return null
         return snapshot(SuggestionTargetKind097.ITEM, item.id, module.id, item.id,
             listOf("item", AiSuggestedInteractions095.contentDigest(item),
                 AiSuggestedInteractions095.scopeProviderDigest(state, module, language(appLanguage))))
@@ -50,8 +76,10 @@ object SuggestionTargets097 {
         val thread = state.conversations.singleOrNull { it.id == conversationId } ?: return null
         val module = thread.moduleId?.let { id -> state.modules.singleOrNull { it.id == id && it.enabled } }
         if (thread.moduleId != null && module == null) return null
+        if (module?.kind in setOf("weather", "horoscope")) return null
         val item = thread.itemId?.let { id -> state.items.singleOrNull { it.id == id } } ?: if (thread.itemId == null) null else return null
-        if (item != null && (module == null || item.moduleId != module.id || item.kind != module.kind)) return null
+        if (item != null && (module == null || item.moduleId != module.id || item.kind != module.kind ||
+                item.kind in setOf("weather", "horoscope") || item.weather != null)) return null
         val scope = module?.let { AiSuggestedInteractions095.scopeProviderDigest(state, it, language(appLanguage)) }
             ?: globalScopeDigest(state, appLanguage)
         return snapshot(SuggestionTargetKind097.CONVERSATION, thread.id, thread.moduleId, thread.itemId,
@@ -70,6 +98,7 @@ object SuggestionTargets097 {
 
     fun module(state: FeedState, moduleId: String, appLanguage: String): SuggestionTargetSnapshot097? {
         val module = state.modules.singleOrNull { it.id == moduleId && it.enabled } ?: return null
+        if (module.kind in setOf("weather", "horoscope")) return null
         return snapshot(SuggestionTargetKind097.MODULE, module.id, module.id, null,
             listOf("module", AiSuggestedInteractions095.scopeProviderDigest(state, module, language(appLanguage))))
     }
@@ -112,7 +141,7 @@ object SuggestionTargets097 {
         moduleId: String?,
         itemId: String?,
         revisionParts: List<String>,
-    ) = SuggestionTargetSnapshot097(kind, targetId, moduleId, itemId, digest(revisionParts))
+    ) = SuggestionTargetSnapshot097(kind, targetId, moduleId, itemId, digest(listOf(REVISION_FORMAT) + revisionParts))
 
     private fun digest(parts: List<String>): String {
         val bytes = ByteArrayOutputStream()

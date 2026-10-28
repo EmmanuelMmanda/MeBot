@@ -1,7 +1,6 @@
 package mebot.nguli.com.ui
 
 import android.content.Intent
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Handler
@@ -31,12 +30,15 @@ import mebot.nguli.com.R
 import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.FeedUiState
 import mebot.nguli.com.feed.SuggestionOptionSnapshot097
-import mebot.nguli.com.feed.SuggestionOptionSource097
+import mebot.nguli.com.feed.SuggestionSheetSnapshot097
+import mebot.nguli.com.feed.SuggestionSheetStatus097
 import mebot.nguli.com.feed.SuggestionTargetKind097
 import mebot.nguli.com.feed.SuggestionTargetSnapshot097
 import mebot.nguli.com.ui.feed.FeedDetail
 import mebot.nguli.com.ui.feed.FeedHome
 import mebot.nguli.com.ui.feed.LocalPublisherImageLoader
+import mebot.nguli.com.ui.feed.LocalRelevanceContext
+import mebot.nguli.com.ui.feed.RelevanceUiContext
 import mebot.nguli.com.ui.feed.storyCategoryResource
 import java.io.File
 import java.time.Instant
@@ -60,7 +62,6 @@ import org.robolectric.annotation.GraphicsMode
 class MeBotEditionUiTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val restoration = StateRestorationTester(compose)
-    private lateinit var suggestionResourcesContext: Context
     private val ui = mutableStateOf(FeedUiState(state = fixtureState(), loading = false, connected = true))
     private val prompts = mutableListOf<Pair<String?, String>>()
     private val usedSuggestions = mutableListOf<Pair<SuggestionTargetSnapshot097, String>>()
@@ -71,6 +72,7 @@ class MeBotEditionUiTest {
     private var modulesOpened = 0
     private var connectionsOpened = 0
     private var refreshed = 0
+    private var detailBriefLoads = 0
 
     @Test fun visualEditionKeepsSourcesSecondaryAndGroundedAiFollowUps() {
         show()
@@ -105,6 +107,7 @@ class MeBotEditionUiTest {
     }
 
     @Test fun firstEditionIsFiniteAndModuleChangesRemoveContentWithoutDeletingTheCache() {
+        val cachedWeatherItem = ui.value.state!!.items.single { it.weather != null }
         show()
         feedNode("feed-page-progress").assertTextEquals(pageCount(5, 7))
         compose.onNodeWithTag("item-learning-extra").assertDoesNotExist()
@@ -120,9 +123,20 @@ class MeBotEditionUiTest {
         feedNode("weather-weather").assertIsDisplayed()
         compose.onAllNodes(storyNode()).assertCountEquals(0)
         compose.runOnIdle {
-            ui.value = ui.value.copy(state = ui.value.state!!.copy(modules = ui.value.state!!.modules.map {
-                if (it.id == "weather") it.copy(enabled = false) else it
-            }))
+            val current = ui.value.state!!
+            ui.value = ui.value.copy(state = current.copy(items = current.items.filterNot { it.weather != null }))
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag("weather-weather").assertDoesNotExist()
+        // An empty, explicitly unsupported Weather filter must not silently inherit
+        // the General scope Suggestions action.
+        compose.onNodeWithTag("feed-suggestions-empty-open").assertDoesNotExist()
+        compose.runOnIdle {
+            val current = ui.value.state!!
+            ui.value = ui.value.copy(state = current.copy(
+                items = current.items + cachedWeatherItem,
+                modules = current.modules.map { if (it.id == "weather") it.copy(enabled = false) else it },
+            ))
         }
         compose.waitForIdle()
         compose.onNodeWithTag("filter-weather").assertDoesNotExist()
@@ -280,7 +294,9 @@ class MeBotEditionUiTest {
         compose.onNodeWithTag("detail-story-notes").performScrollTo().performClick()
         compose.onNodeWithText(ui.value.state!!.items.first { it.id == "google" }.summary).performScrollTo().assertIsDisplayed()
         val story = ui.value.state!!.items.single { it.id == "google" }
-        val expectedId = AiSuggestedInteractions095.suggestionId(story, story.suggestedInteractions.single())
+        // A provider-generated set may contain five approved questions; the first Send button
+        // must still re-resolve to that exact stable option rather than an arbitrary prompt.
+        val expectedId = AiSuggestedInteractions095.suggestionId(story, story.suggestedInteractions.first())
         compose.onNodeWithTag("detail-suggestions-google-open").performScrollTo().performClick()
         compose.onNodeWithTag("detail-suggestions-google-question-0").assertIsDisplayed()
         compose.onNodeWithTag("detail-suggestions-google-send-0").assertIsEnabled().performClick()
@@ -296,6 +312,123 @@ class MeBotEditionUiTest {
         assertEquals(listOf("google"), saved)
         compose.onNodeWithTag("detail-ask").performScrollTo().performClick()
         assertEquals(listOf("google"), selectedItems)
+    }
+
+    @Test fun validOriginalReadRendersAllSectionsAndSeparatesEvidenceFromFurtherReading() {
+        val original = originalReadFixture("original-read", System.currentTimeMillis())
+        assertTrue("Fixture exercises the canonical Original Read shape", FeedLogic.isValidOriginalReadShape(original))
+        ui.value = ui.value.copy(state = ui.value.state!!.copy(items = ui.value.state!!.items + original))
+        detailBriefLoads = 0
+
+        show(detail = true, detailId = original.id)
+        compose.waitForIdle()
+        screenshot("v098-original-read-en-overview")
+
+        assertEquals("A valid Original Read must not start a second automatic explanation", 0, detailBriefLoads)
+        compose.onNodeWithTag("detail-brief").assertDoesNotExist()
+        compose.onNodeWithTag("detail-source").assertDoesNotExist()
+        compose.onNodeWithTag("detail-original-read-authorship").assertTextEquals(text(R.string.original_read_authorship_098))
+        compose.onNodeWithTag("detail-original-read-created").assertTextContains("Created", substring = true)
+        compose.onNodeWithTag("detail-original-read-heading-0").performScrollTo().assertTextEquals(original.sections[0].heading)
+        compose.onNodeWithTag("detail-original-read-body-0").performScrollTo().assertTextEquals(original.sections[0].body)
+        compose.onNodeWithTag("detail-original-read-heading-1").performScrollTo().assertTextEquals(original.sections[1].heading)
+        compose.onNodeWithTag("detail-original-read-body-1").performScrollTo().assertTextEquals(original.sections[1].body)
+        screenshot("v098-original-read-en-sections")
+
+        compose.onNodeWithTag("detail-original-read-overview-evidence-heading").performScrollTo()
+            .assertTextEquals(text(R.string.original_read_evidence_098))
+        compose.onNodeWithTag("detail-original-read-overview-evidence-0").assertExists()
+        compose.onNodeWithTag("detail-original-read-overview-further-reading-heading").performScrollTo()
+            .assertTextEquals(text(R.string.original_read_further_reading_098))
+        compose.onNodeWithTag("detail-original-read-overview-further-reading-0").assertExists()
+
+        compose.onNodeWithTag("detail-tab-sources").performScrollTo().performClick()
+        compose.onNodeWithTag("detail-original-read-sources-evidence-heading").performScrollTo()
+            .assertTextEquals(text(R.string.original_read_evidence_098))
+        compose.onNodeWithTag("detail-original-read-sources-further-reading-heading").performScrollTo()
+            .assertTextEquals(text(R.string.original_read_further_reading_098))
+        compose.onNodeWithText(text(R.string.detail_published)).assertDoesNotExist()
+        compose.onNodeWithText(text(R.string.detail_retrieved)).assertDoesNotExist()
+
+        // The 0.9.7 five-question Suggestions action remains independent on an Original Read.
+        compose.onNodeWithTag("detail-tab-overview").performScrollTo().performClick()
+        compose.onNodeWithTag("detail-suggestions-${original.id}-open").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithTag("detail-suggestions-${original.id}-question-0").assertExists()
+        compose.onNodeWithTag("detail-suggestions-${original.id}-close").performClick()
+        assertTrue("Opening and dismissing Suggestions never loads another detail brief", detailBriefLoads == 0)
+    }
+
+    @Test
+    @Config(qualifiers = "sw-rTZ-w411dp-h891dp-xhdpi")
+    fun originalReadAuthorshipAndReferenceLabelsAreLocalizedInSwahili() {
+        val original = originalReadFixture("original-read-sw", System.currentTimeMillis())
+        ui.value = ui.value.copy(state = ui.value.state!!.copy(items = ui.value.state!!.items + original))
+        detailBriefLoads = 0
+
+        show(Settings(language = "sw"), detail = true, detailId = original.id)
+        compose.waitForIdle()
+        screenshot("v098-original-read-sw-overview")
+
+        compose.onNodeWithTag("detail-original-read-authorship").assertTextEquals("Usomaji asilia ulioandikwa na AI")
+        compose.onNodeWithTag("detail-original-read-created").assertTextContains("Iliundwa", substring = true)
+        compose.onNodeWithTag("detail-original-read-overview-evidence-heading").performScrollTo().assertTextEquals("Ushahidi")
+        compose.onNodeWithTag("detail-original-read-overview-further-reading-heading").performScrollTo().assertTextEquals("Usomaji wa ziada")
+        compose.onNodeWithTag("detail-original-read-body-1").performScrollTo().assertIsDisplayed()
+        screenshot("v098-original-read-sw-sections")
+        assertEquals("Original Read detail suppresses the automatic brief in Kiswahili too", 0, detailBriefLoads)
+    }
+
+    @Test fun todaySeparatesPersonalSelectionFromVerifiedSourceItemsAndDeduplicates() {
+        val now = System.currentTimeMillis()
+        val dailyState = personalTodayState(now)
+        val selectedIds = dailyState.personalDailySelection098!!.itemIds.toSet()
+        val selectedSourceId = dailyState.items.first { it.id in selectedIds && it.contentType != "original_read" }.id
+        val unselectedSourceId = dailyState.items.first { it.id !in selectedIds && it.id.startsWith("today-source-") }.id
+        ui.value = ui.value.copy(state = dailyState)
+        var ensureCalls = 0
+        show(onEnsureDailySelection = { ensureCalls++ })
+        compose.waitForIdle()
+        compose.onNodeWithTag("filter-today").performScrollTo().performClick()
+        feedNode("today-personal-selection-heading")
+            .assertTextContains(text(R.string.daily_selection_098_title), substring = true)
+        feedNode("today-personal-story-today-original").assertIsDisplayed()
+
+        compose.onNodeWithTag("story-author-today-original", useUnmergedTree = true).assertTextEquals(text(R.string.original_read_authorship_098))
+        compose.onNodeWithTag("story-created-today-original", useUnmergedTree = true).assertTextContains("Created", substring = true)
+        feedNode("item-$selectedSourceId")
+        compose.onNodeWithTag("story-author-$selectedSourceId", useUnmergedTree = true).assertTextContains("Example publisher", substring = true)
+        feedNode("today-time-$selectedSourceId").assertExists()
+        val storyCardBounds = compose.onNodeWithTag("story-card-$selectedSourceId").getUnclippedBoundsInRoot()
+        val sourceTimeBounds = compose.onNodeWithTag("today-time-$selectedSourceId").getUnclippedBoundsInRoot()
+        assertTrue("Verified selected-item date is visually inside that source card", storyCardBounds.left <= sourceTimeBounds.left &&
+            storyCardBounds.top <= sourceTimeBounds.top && storyCardBounds.right >= sourceTimeBounds.right && storyCardBounds.bottom >= sourceTimeBounds.bottom)
+        compose.onNodeWithTag("story-created-$selectedSourceId", useUnmergedTree = true).assertDoesNotExist()
+        feedNode("today-verified-section-heading").assertIsDisplayed()
+        feedNode("today-time-$unselectedSourceId").assertExists()
+        feedNode("item-$selectedSourceId").assertIsDisplayed()
+        compose.onAllNodesWithTag("item-$selectedSourceId").assertCountEquals(1)
+        feedNode("story-card-today-original").assertIsDisplayed()
+        compose.onNodeWithTag("save-today-original", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("star-today-original", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("today-suggestions-today-original-open", useUnmergedTree = true).assertIsDisplayed()
+        assertTrue("FeedHome requests only the local daily projection", ensureCalls > 0)
+        assertEquals("Selection rendering does not refresh or call a provider", 0, refreshed)
+    }
+
+    @Test
+    @Config(qualifiers = "sw-rTZ-w411dp-h891dp-xhdpi")
+    fun todayPersonalSelectionAndOriginalReadProvenanceAreLocalizedInSwahili() {
+        val now = System.currentTimeMillis()
+        ui.value = ui.value.copy(state = personalTodayState(now))
+        show(Settings(language = "sw"))
+        compose.onNodeWithTag("filter-today").performScrollTo().performClick()
+        feedNode("today-personal-selection-heading")
+            .assertTextContains("Kwa ajili yako leo", substring = true)
+        feedNode("today-personal-story-today-original")
+        compose.onNodeWithTag("story-author-today-original", useUnmergedTree = true).assertTextEquals("Usomaji asilia ulioandikwa na AI")
+        compose.onNodeWithTag("story-created-today-original", useUnmergedTree = true).assertTextContains("Iliundwa", substring = true)
+        feedNode("today-verified-section-heading")
+            .assertTextContains("Zilizothibitishwa kuwa za leo", substring = true)
     }
 
     @Test fun technologyCategoryShowsAiOnlyWhenStoryTextSupportsIt() {
@@ -318,10 +451,9 @@ class MeBotEditionUiTest {
         assertEquals(GOOGLE_SOURCE, shadowOf(compose.activity).nextStartedActivity.dataString)
     }
 
-    private fun show(settings: Settings = Settings(), fontScale: Float = 1f, detail: Boolean = false) {
-        // A Compose callback is invoked during layout; use a stable application Context rather
-        // than compose.activity (ActivityScenario) from inside that callback.
-        suggestionResourcesContext = compose.activity.applicationContext
+    private fun show(settings: Settings = Settings(), fontScale: Float = 1f, detail: Boolean = false, detailId: String = "google",
+        onEnsureDailySelection: () -> Unit = {}) {
+        ui.value = ui.value.copy(appLanguage = if (settings.language == "sw") "sw" else "en")
         val imageLoader: suspend (String) -> Bitmap? = { url ->
             imageRequests += url
             val directory = System.getenv("MEBOT_PREVIEW_MEDIA_DIR")
@@ -332,23 +464,31 @@ class MeBotEditionUiTest {
         }
         restoration.setContent {
             MeBotTheme(settings) {
-                CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale), LocalPublisherImageLoader provides imageLoader) {
+                CompositionLocalProvider(
+                    LocalDensity provides Density(LocalDensity.current.density, fontScale),
+                    LocalPublisherImageLoader provides imageLoader,
+                    LocalRelevanceContext provides RelevanceUiContext(state = ui.value.state, onStar = {}),
+                ) {
                     Scaffold(containerColor = MaterialTheme.colorScheme.background,
                         topBar = { Text(if (settings.language == "sw") "Toleo la mfano" else "Preview edition", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) },
                         bottomBar = { if (!detail) MeBotNavigation("feed") {} },
                     ) { padding ->
                         Box(Modifier.fillMaxSize().padding(padding)) {
-                            if (detail) FeedDetail(ui.value, "google", onSave = { saved += it }, onAsk = { selectedItems += "google" }, onFeed = {},
+                            if (detail) FeedDetail(ui.value, detailId, onSave = { saved += it }, onAsk = { selectedItems += detailId }, onFeed = {},
+                                onLoadBrief = { detailBriefLoads++ },
                                 onUseSuggestion = { target, id, _ -> usedSuggestions += target to id },
                                 onEditSuggestion = { target, id, _ -> editedSuggestions += target to id },
-                                onSuggestionOptions = ::suggestionOptions)
+                                onSuggestionSheet = ::suggestionSheet,
+                                onGenerateSuggestion = { _, _ -> null }, onCancelSuggestionGeneration = {})
                             else FeedHome(ui.value, onItem = { selectedItems += it }, onModules = { modulesOpened++ }, onYou = {},
                                 onConnect = { connectionsOpened++ }, onAsk = {}, onRefresh = { refreshed++ }, onSave = { saved += it },
                                 onHide = {}, onDismissError = {}, nextAlarm = null, onAlarms = {}, onPrompt = { id, question -> prompts += id to question },
                                 onUseSuggestion = { target, id, _ -> usedSuggestions += target to id },
                                 onEditSuggestion = { target, id, _ -> editedSuggestions += target to id },
-                                onSuggestionOptions = ::suggestionOptions)
+                                onSuggestionSheet = ::suggestionSheet,
+                                onGenerateSuggestion = { _, _ -> null }, onCancelSuggestionGeneration = {},
+                                onEnsureDailySelection = onEnsureDailySelection)
                         }
                     }
                 }
@@ -356,23 +496,65 @@ class MeBotEditionUiTest {
         }
     }
 
-    private fun suggestionOptions(target: SuggestionTargetSnapshot097, language: String): List<SuggestionOptionSnapshot097> {
-        val state = ui.value.state ?: return emptyList()
-        val item = target.itemId?.let { id -> state.items.singleOrNull { it.id == id } }
-        if (item != null && ui.value.connected && AiSuggestedInteractions095.isApplicable(state, item, System.currentTimeMillis(), language)) {
-            return item.suggestedInteractions.map { interaction ->
-                SuggestionOptionSnapshot097(
-                    AiSuggestedInteractions095.suggestionId(item, interaction), interaction.label,
-                    interaction.prompt, SuggestionOptionSource097.CACHED_AI,
-                )
-            }
+    private fun originalReadFixture(id: String, now: Long): FeedItem {
+        val pilot = "Choose one repeatable task before testing a new tool. Describe the current steps, the time they take, and what a useful result would look like. Use a representative example rather than the easiest case, so a small pilot answers a real question. Keep the trial inside a temporary workspace and include only information approved for the selected provider. A person should review each result before it is used; the experiment is meant to expose fit and gaps, not to replace accountable judgment. Record the prompts, corrections, and time required so another team member can repeat the same test."
+        val comparison = "Compare the tool with the simplest workable alternative on the same example. Check installation effort, recurring costs, data handling, and whether the result can be verified. Note where errors appear and how much review is needed; a polished response alone does not show that the workflow saves time. Stop if the tool needs information you cannot share or if its behavior is too inconsistent for the task. If results are useful, repeat the pilot with a second approved example and agree on a human owner before expanding it. Keep the original measurements so a later review can tell whether the change helped."
+        return FeedItem(
+            id = id, moduleId = "technology", title = "A careful way to test a new AI tool",
+            summary = "A practical pilot can show where a tool helps and where review remains necessary.",
+            kind = "technology", aiGenerated = true, contentType = "original_read",
+            fetchedAtMillis = now, acquisition = FeedAcquisition.ORIGINAL_READ, authorship = FeedAuthorship.AI,
+            sections = listOf(
+                FeedContentSection("Start with a bounded pilot", pilot),
+                FeedContentSection("Compare the result with a baseline", comparison),
+            ),
+            citations = listOf(FeedCitation("Evidence: evaluation guide", "https://example.com/evaluation-guide")),
+            furtherReading = listOf(FeedCitation("Optional: pilot checklist", "https://example.com/pilot-checklist")),
+        )
+    }
+
+    private fun personalTodayState(now: Long): FeedState {
+        val sources = (1..5).map { index ->
+            FeedItem(
+                id = "today-source-$index", moduleId = "technology", title = "A verified source update $index for today",
+                summary = "A synthetic source-backed report with an exact publisher publication time.",
+                sourceName = "Example publisher $index", sourceUrl = "https://example.com/today-source-$index",
+                publishedAtMillis = now, fetchedAtMillis = now, kind = "technology", relevance = 100 - index,
+                temporal = FeedTemporal(TemporalProvenance.PUBLISHER, publishedAtMillis = now),
+            )
         }
-        val question = item?.let { suggestionResourcesContext.getString(R.string.suggestion097_item_verify, it.title) }
-            ?: suggestionResourcesContext.getString(R.string.suggestion097_general_no_context)
-        val id = if (item != null) "local097:item:verify" else "local097:general:fit"
-        return listOf(SuggestionOptionSnapshot097(
-            id, suggestionResourcesContext.getString(R.string.suggestion097_label_verify), question, SuggestionOptionSource097.LOCAL,
-        ))
+        val base = fixtureState().copy(
+            timezone = "UTC", items = sources + originalReadFixture("today-original", now),
+            personalDailySelection098 = null,
+        )
+        return PersonalDailySelectionLogic098.ensure(base, now)
+    }
+
+    /** Explicitly synthetic AI-provider output for Compose component tests only. */
+    private fun suggestionSheet(target: SuggestionTargetSnapshot097, language: String): SuggestionSheetSnapshot097 {
+        val state = ui.value.state
+        val item = target.itemId?.let { id -> state?.items?.singleOrNull { it.id == id } }
+        if (state != null && item != null && AiSuggestedInteractions095.isApplicable(state, item, System.currentTimeMillis(), language)) {
+            return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.READY,
+                item.suggestedInteractions.map { interaction -> SuggestionOptionSnapshot097(
+                    AiSuggestedInteractions095.suggestionId(item, interaction), interaction.prompt,
+                    item.suggestedInteractionsGeneratedAtMillis,
+                ) },
+                validUntilMillis = item.suggestedInteractionsGeneratedAtMillis + AiSuggestionCache097.CACHE_TTL_MILLIS,
+            )
+        }
+        val first = if (target.itemId == "google") "What does AI change in this story?"
+            else "What evidence would most change the decision in this synthetic preview?"
+        val questions = listOf(
+            first,
+            "Which assumption about this topic should be checked before acting?",
+            "What practical limitation or risk remains unresolved?",
+            "Which alternative is useful to compare, and on what measure?",
+            "What unanswered detail would be most useful to investigate next?",
+        )
+        return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.READY,
+            questions.mapIndexed { index, question -> SuggestionOptionSnapshot097("provider-fixture-$index", question, System.currentTimeMillis()) },
+            validUntilMillis = System.currentTimeMillis() + AiSuggestionCache097.CACHE_TTL_MILLIS)
     }
 
     private fun feedNode(tag: String): SemanticsNodeInteraction {
@@ -434,9 +616,15 @@ class MeBotEditionUiTest {
                     preview("learning-extra", "learning", "Preview: A guide to API observability", "course", 25),
                     preview("learning-extra-two", "learning", "Preview: Practice with a small project", "course", 20)),
                 lastRefreshMillis = now, connection = AiConnection(mode = "chatgpt", model = "preview-model", accountId = "preview-account"))
-            val suggestion = AiSuggestedInteraction(label = "Ask about the AI details", prompt = "What does AI change in this story?")
+            val suggestions = listOf(
+                AiSuggestedInteraction(label = "AI fixture one", prompt = "What does AI change in this story?"),
+                AiSuggestedInteraction(label = "AI fixture two", prompt = "Which claim about this synthetic story has the strongest source evidence?"),
+                AiSuggestedInteraction(label = "AI fixture three", prompt = "What practical limitation should be checked before acting on this update?"),
+                AiSuggestedInteraction(label = "AI fixture four", prompt = "Which alternative would be useful to compare with this approach?"),
+                AiSuggestedInteraction(label = "AI fixture five", prompt = "What unresolved detail could most change the next decision?"),
+            )
             val unverifiedSuggestionItem = google.copy(
-                suggestedInteractions = listOf(suggestion),
+                suggestedInteractions = suggestions,
                 suggestedInteractionsGeneratedAtMillis = now,
             )
             val module = modules.single { it.id == google.moduleId }

@@ -44,6 +44,12 @@ open class FeedEngine(
         val state: FeedState,
         val language: String,
     )
+    private data class SuggestionRequestSnapshot(
+        val secret: String,
+        val credentialGeneration: Long,
+        val state: FeedState,
+        val language: String,
+    )
 
     private val _progress=MutableStateFlow(RefreshProgress())
     val progress=_progress.asStateFlow()
@@ -69,6 +75,7 @@ open class FeedEngine(
             try {
                 vault.write(secret)
                 repository.update { state -> state.copy(connection = connection, aiPauseCode = "",
+                    suggestionSets097 = emptyList(), personalDailySelection098 = null,
                     items = state.items.map { item -> AiSuggestedInteractions095.clear(
                         if (item.aiRelevance == null) item else item.copy(aiRelevance = null)) }) }
             } catch (error: Exception) {
@@ -100,6 +107,7 @@ open class FeedEngine(
             currentCoroutineContext().ensureActive()
             withContext(NonCancellable) {
                 repository.update { state -> state.copy(connection = connection, aiPauseCode = "",
+                    suggestionSets097 = emptyList(), personalDailySelection098 = null,
                     items = state.items.map { item -> AiSuggestedInteractions095.clear(
                         if (item.aiRelevance == null) item else item.copy(aiRelevance = null)) }) }
             }
@@ -112,7 +120,7 @@ open class FeedEngine(
         val connection = repository.current().connection
         if (connection.mode == "chatgpt" && connection.accountId.isNotBlank()) chatGpt?.signOut(connection.accountId)
         else vault.clear()
-        repository.update { state -> state.copy(aiPauseCode = "", items = state.items.map { item -> AiSuggestedInteractions095.clear(
+        repository.update { state -> state.copy(aiPauseCode = "", suggestionSets097 = emptyList(), personalDailySelection098 = null, items = state.items.map { item -> AiSuggestedInteractions095.clear(
             if (item.aiRelevance == null) item else item.copy(aiRelevance = null)) }) }
         Unit
     }
@@ -121,7 +129,7 @@ open class FeedEngine(
         if (repository.current().connection.accountId == accountId) credentialGeneration.incrementAndGet()
         val revoked = chatGpt?.signOut(accountId) ?: true
         repository.update { state -> if (state.connection.accountId == accountId)
-            state.copy(aiPauseCode = "", items = state.items.map { item -> AiSuggestedInteractions095.clear(
+            state.copy(aiPauseCode = "", suggestionSets097 = emptyList(), personalDailySelection098 = null, items = state.items.map { item -> AiSuggestedInteractions095.clear(
                 if (item.aiRelevance == null) item else item.copy(aiRelevance = null)) }) else state }
         revoked
     }
@@ -135,6 +143,7 @@ open class FeedEngine(
         repository.update { state ->
             if (state.connection.mode == "chatgpt" && state.connection.accountId == accountId)
                 state.copy(connection = state.connection.copy(accountId = ""), aiPauseCode = "",
+                    suggestionSets097 = emptyList(), personalDailySelection098 = null,
                     items = state.items.map { item -> AiSuggestedInteractions095.clear(
                         if (item.aiRelevance == null) item else item.copy(aiRelevance = null)) })
             else state
@@ -147,7 +156,7 @@ open class FeedEngine(
         withContext(NonCancellable) {
             vault.clear()
             chatGpt?.clearAll()
-            repository.update { state -> state.copy(items = state.items.map { item -> AiSuggestedInteractions095.clear(
+            repository.update { state -> state.copy(suggestionSets097 = emptyList(), personalDailySelection098 = null, items = state.items.map { item -> AiSuggestedInteractions095.clear(
                 if (item.aiRelevance == null) item else item.copy(aiRelevance = null)) }) }
         }
     }
@@ -194,7 +203,8 @@ open class FeedEngine(
         if (candidates.isEmpty() || interactions.size != candidates.size) return emptyMap()
         val expected = candidates.map { it.id }.toSet()
         if (expected.size != candidates.size || interactions.map { it.itemId }.distinct().size != interactions.size ||
-            interactions.any { it.itemId !in expected || !AiSuggestedInteractions095.areValid(it.interactions) } ||
+            interactions.any { it.itemId !in expected ||
+                (it.interactions.isNotEmpty() && !AiSuggestedInteractions095.isCompleteSet(it.interactions)) } ||
             interactions.map { it.itemId }.toSet() != expected) return emptyMap()
         return interactions.associate { it.itemId to it.interactions }
     }
@@ -386,9 +396,13 @@ open class FeedEngine(
                         AiActivityRegistry.report("preparing", contextEntries = FeedLogic.scopedContext(reserved, module).size)
                         val response = provider.discover(reserved, discoveryModule, requestSecret, languageCode, candidateItems)
                         AiActivityRegistry.report("validating")
-                        response.items.forEach { FeedLogic.validateItem(it); require(it.moduleId == module.id && it.kind == module.kind) }
-                        AiActivityRegistry.report("ready", count = response.items.size)
-                        response
+                        // An optional malformed Read must not discard otherwise valid sourced items.
+                        val validItems = response.items.filter { item ->
+                            item.contentType != "original_read" || runCatching { FeedLogic.validateItem(item) }.isSuccess
+                        }
+                        validItems.forEach { FeedLogic.validateItem(it); require(it.moduleId == module.id && it.kind == module.kind) }
+                        AiActivityRegistry.report("ready", count = validItems.size)
+                        response.copy(items = validItems)
                     }
                     val items = result.items
                     val candidateFits = validatedCandidateFits(candidateItems, result.candidateFits)
@@ -396,8 +410,9 @@ open class FeedEngine(
                     repository.update { latest ->
                         if (credentialGeneration.get() != generation || !samePersonalization(latest, initial) || latest.modules != initial.modules || latest.connection != initial.connection) latest
                         else {
-                            fetchedIds += items.map { it.id }
-                            val checked = StarredStories.checked(FeedLogic.merge(latest, items, System.currentTimeMillis()), dueStars, System.currentTimeMillis())
+                            val acceptedItems = OriginalReads098.withinBudget(latest, items)
+                            fetchedIds += acceptedItems.map { it.id }
+                            val checked = StarredStories.checked(FeedLogic.merge(latest, acceptedItems, System.currentTimeMillis()), dueStars, System.currentTimeMillis())
                             val protectedNow = checked.savedIds + checked.hiddenIds + checked.starredStories.map { it.itemId }
                             val submitted = candidateItems.associateBy { it.id }
                             val enriched = checked.items.map { current ->
@@ -483,6 +498,144 @@ open class FeedEngine(
         onRequestDispatch: () -> Unit,
     ): AiAnswer = runAnswer(null, conversationId, question, onText, expectedCurrent, expectedLanguage,
         staleFailureCode, onRequestDispatch, excludeUnusedAttachments)
+
+    /**
+     * Explicit one-shot generation. This is never called while rendering/opening the sheet. The
+     * target revision is checked atomically at request reservation and again after the provider
+     * semaphore, immediately before external I/O. Incomplete output is never cached or padded.
+     */
+    open suspend fun generateSuggestionSet097(
+        target: SuggestionTargetSnapshot097,
+        expectedLanguage: String,
+        expectedCurrent: (FeedState) -> Boolean = { true },
+        onRequestDispatch: () -> Unit,
+    ): AiSuggestionSet097 {
+        if (expectedLanguage !in setOf("en", "sw")) throw FeedFailure("suggestion_changed")
+        fun supportsSuggestions(state: FeedState): Boolean {
+            val linkedConversation = if (target.kind == SuggestionTargetKind097.CONVERSATION)
+                state.conversations.singleOrNull { it.id == target.targetId } else null
+            val itemId = when (target.kind) {
+                SuggestionTargetKind097.ITEM -> target.itemId
+                SuggestionTargetKind097.CONVERSATION -> linkedConversation?.itemId
+                else -> null
+            }
+            val linkedItem = itemId?.let { id -> state.items.singleOrNull { it.id == id } }
+            val moduleId = when (target.kind) {
+                SuggestionTargetKind097.MODULE -> target.moduleId
+                SuggestionTargetKind097.CONVERSATION -> linkedConversation?.moduleId
+                else -> null
+            }
+            val linkedModule = moduleId?.let { id -> state.modules.singleOrNull { it.id == id } }
+            val itemAllowed = itemId == null || linkedItem?.let {
+                it.kind !in setOf("weather", "horoscope") && it.weather == null
+            } == true
+            val moduleAllowed = moduleId == null || linkedModule?.kind !in setOf("weather", "horoscope")
+            return itemAllowed && moduleAllowed
+        }
+        fun targetCurrent(state: FeedState): Boolean = SuggestionTargets097.current(state, target, expectedLanguage) &&
+            expectedCurrent(state) && supportsSuggestions(state)
+        val snapshot = credentialsLock.withLock {
+            val current = repository.current()
+            if (!SuggestionTargets097.current(current, target, expectedLanguage) || !expectedCurrent(current))
+                throw FeedFailure("suggestion_changed")
+            if (!supportsSuggestions(current)) throw FeedFailure("suggestion_unavailable")
+            val secret = credential(current.connection) ?: throw FeedFailure("suggestion_unavailable")
+            val requestLanguage = language()
+            if (requestLanguage != expectedLanguage) throw FeedFailure("suggestion_changed")
+            val reserved = reserveRequest { latest ->
+                if (latest.connection != current.connection || requestLanguage != expectedLanguage || !targetCurrent(latest))
+                    throw FeedFailure("suggestion_changed")
+                true
+            }
+            SuggestionRequestSnapshot(secret, credentialGeneration.get(), reserved, requestLanguage)
+        }
+        val current = snapshot.state
+        val conversation = target.targetId.takeIf { target.kind == SuggestionTargetKind097.CONVERSATION }
+            ?.let { id -> current.conversations.singleOrNull { it.id == id } ?: throw FeedFailure("suggestion_changed") }
+        val selectedItem = when {
+            target.kind == SuggestionTargetKind097.ITEM -> target.itemId?.let { id -> current.items.singleOrNull { it.id == id } }
+            else -> conversation?.itemId?.let { id -> current.items.singleOrNull { it.id == id } }
+        }
+        if (target.kind == SuggestionTargetKind097.ITEM && selectedItem == null) throw FeedFailure("suggestion_changed")
+        val selectedModule = when {
+            target.kind == SuggestionTargetKind097.MODULE -> target.moduleId?.let { id -> current.modules.singleOrNull { it.id == id && it.enabled } }
+            else -> conversation?.moduleId?.let { id -> current.modules.singleOrNull { it.id == id && it.enabled } }
+                ?: selectedItem?.moduleId?.let { id -> current.modules.singleOrNull { it.id == id && it.enabled } }
+        }
+        if (target.moduleId != null && selectedModule == null) throw FeedFailure("suggestion_changed")
+        if (selectedItem != null) {
+            val itemModule = selectedModule ?: throw FeedFailure("suggestion_changed")
+            if (itemModule.id != selectedItem.moduleId || itemModule.kind != selectedItem.kind)
+                throw FeedFailure("suggestion_changed")
+        }
+        val requestConversation = conversation?.copy(
+            turns = ConversationLogic.requestHistory(conversation),
+            attachments = conversation.attachments.filter { it.usedAtMillis > 0L },
+        )
+        val providerItem = selectedItem?.let { item ->
+            AiSuggestedInteractions095.clear(item.copy(aiRelevance = null, temporal = null))
+        }
+        val recentTopic = requestConversation?.let(ConversationLogic::requestHistory)
+            ?.lastOrNull { it.role == "user" }?.text.orEmpty().take(500)
+        val suggestionContext = when {
+            selectedModule != null -> FeedLogic.contextForKinds(current, setOf(selectedModule.kind))
+            selectedItem != null -> FeedLogic.contextForKinds(current, setOf(selectedItem.kind))
+            requestConversation != null -> FeedLogic.contextForKinds(current,
+                if (recentTopic.isNotBlank()) RecommendationPolicy.questionKinds(current, recentTopic) else emptySet())
+            else -> current.context.filter { it.confirmed && PersonalProfile085.isGlobal(it) }.take(32)
+        }
+        val providerState = current.copy(
+            // Suggestion generation is about one immutable selected target, not every cached item,
+            // chat, or unsent draft on the device. Keep only the selected target's approved data.
+            modules = current.modules.filter { it.enabled }.map { FeedModule(id = it.id, kind = it.kind) },
+            context = suggestionContext,
+            items = listOfNotNull(providerItem),
+            conversations = listOfNotNull(requestConversation),
+            suggestionSets097 = emptyList(), personalDailySelection098 = null,
+            briefs = emptyList(),
+        )
+        val scope = selectedModule?.kind ?: selectedItem?.kind ?: "general"
+        val result = try {
+            AiActivityRegistry.run(target.targetId ?: "general", scope, "suggestions") {
+                val latest = repository.current()
+                if (latest.connection != current.connection || credentialGeneration.get() != snapshot.credentialGeneration ||
+                    language() != expectedLanguage || !targetCurrent(latest)) throw FeedFailure("suggestion_changed")
+                currentCoroutineContext().ensureActive()
+                onRequestDispatch()
+                AiActivityRegistry.report("preparing", contextEntries = when {
+                    selectedModule != null -> FeedLogic.scopedContext(current, selectedModule).size
+                    else -> current.context.count { it.confirmed && PersonalProfile085.isGlobal(it) }
+                })
+                try {
+                    provider.suggest(providerState, providerItem, requestConversation, selectedModule, snapshot.secret, expectedLanguage)
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: FeedFailure) {
+                    throw FeedFailure(recordFailure(current.connection, snapshot.credentialGeneration,
+                        error.code, snapshot.secret, error.diagnostic), error.diagnostic)
+                }
+            }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: FeedFailure) { throw error }
+        if (result.size != AiSuggestionCache097.QUESTION_COUNT || !AiSuggestionCache097.areValidQuestions(result))
+            throw FeedFailure("suggestion_incomplete")
+        currentCoroutineContext().ensureActive()
+        val finalLanguage = language()
+        if (credentialGeneration.get() != snapshot.credentialGeneration || finalLanguage != expectedLanguage ||
+            !targetCurrent(repository.current())) throw FeedFailure("suggestion_changed")
+        val record = AiSuggestionSet097(
+            targetKind = target.kind.name.lowercase(java.util.Locale.ROOT), targetId = target.targetId, revision = target.revision,
+            questions = result, generatedAtMillis = System.currentTimeMillis(),
+        )
+        if (!AiSuggestionCache097.isValid(record)) throw FeedFailure("suggestion_incomplete")
+        repository.update { latest ->
+            if (credentialGeneration.get() != snapshot.credentialGeneration || latest.connection != current.connection ||
+                finalLanguage != expectedLanguage || !targetCurrent(latest)) throw FeedFailure("suggestion_changed")
+            latest.copy(suggestionSets097 = (latest.suggestionSets097.filterNot {
+                AiSuggestionCache097.key(it.targetKind, it.targetId) == AiSuggestionCache097.key(record.targetKind, record.targetId)
+            } + record).takeLast(32))
+        }
+        return record
+    }
 
     open suspend fun explain(itemId: String, onText: (String) -> Unit): AiAnswer = runAnswer(itemId, null,
         "Explain this item so I can understand it here. In about 220 words, state what happened or what this resource offers, " +

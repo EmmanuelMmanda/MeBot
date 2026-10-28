@@ -9,13 +9,14 @@ import android.os.Looper
 import android.view.PixelCopy
 import androidx.compose.ui.test.*
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import mebot.nguli.com.MainActivity
 import mebot.nguli.com.R
 import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.FeedViewModel
-import mebot.nguli.com.feed.SuggestionOptionSource097
 import mebot.nguli.com.feed.SuggestionTargets097
+import mebot.nguli.com.feed.SuggestionSheetStatus097
 import mebot.nguli.com.feed.FeedTestApplication
 import java.io.File
 import kotlinx.coroutines.runBlocking
@@ -53,6 +54,9 @@ class MeBotFeedJourneyTest {
         app.sourceItems = emptyList()
         app.sourceFailure = null
         app.answerText = "This test update relates to your approved technical interests."
+        app.answerCalls = 0
+        app.suggestionQuestions = null
+        app.suggestionCalls = 0
         waitForTag("onboarding-screen")
     }
 
@@ -331,21 +335,21 @@ class MeBotFeedJourneyTest {
     fun swahiliFullShellSuggestionSheetsKeepSendAndEditExplicit() =
         runSuggestionJourney("sw", "097-full-shell-sw")
 
-    @Test fun disconnectedTechnologySuggestionsUseTheRealLocalOptionsInEnglish() =
-        runLocalTechnologySuggestionCapture("en", "097-local-technology-en")
+    @Test fun disconnectedTechnologySuggestionsHaveNoLocalFallbackInEnglish() =
+        runUnavailableTechnologySuggestions("en")
 
     @Test
     @Config(qualifiers = "sw-rTZ-w411dp-h891dp-xhdpi")
-    fun disconnectedTechnologySuggestionsAreLocalizedAndUsefulInSwahili() =
-        runLocalTechnologySuggestionCapture("sw", "097-local-technology-sw")
+    fun disconnectedTechnologySuggestionsHaveNoLocalFallbackInSwahili() =
+        runUnavailableTechnologySuggestions("sw")
 
-    private fun runLocalTechnologySuggestionCapture(language: String, capturePrefix: String) {
+    private fun runUnavailableTechnologySuggestions(language: String) {
         if (language == "sw") runBlocking {
             app.repository.update { it.copy(settings = it.settings.copy(language = "sw")) }
         }
         start()
         val now = System.currentTimeMillis()
-        val topic = if (language == "sw") "Zana ya AI ya ndani kwa timu za utafiti" else "A local AI toolkit for research teams"
+        val topic = if (language == "sw") "Mfano wa jaribio: zana ya AI kwa timu za utafiti" else "Synthetic preview: an AI toolkit for research teams"
         val syntheticStory = FeedItem(
             id = "toolkit", moduleId = "technology", kind = "technology", title = topic,
             summary = if (language == "sw") "Taarifa ya mfano ya kupima mapendekezo ya ndani." else "Synthetic fixture for the local suggestions preview.",
@@ -365,42 +369,69 @@ class MeBotFeedJourneyTest {
         val viewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]
         waitForState { it.items.singleOrNull()?.id == syntheticStory.id }
         compose.waitUntil(15_000) { viewModel.ui.value.state?.items?.singleOrNull()?.id == syntheticStory.id }
-        assertFalse("The local sheet fixture is disconnected", viewModel.ui.value.connected)
+        assertFalse("The disconnected fixture remains local/RSS usable", viewModel.ui.value.connected)
 
         val currentState = state()
         val target = requireNotNull(SuggestionTargets097.item(currentState, syntheticStory.id, language))
-        val options = viewModel.suggestionOptions097(target, language)
-        assertEquals("The technology fallback comes from the real VM and stays bounded", 2, options.size)
-        assertTrue("Both options are honestly identified as local", options.all { it.source == SuggestionOptionSource097.LOCAL })
-        assertTrue(options[0].displayText.contains(syntheticStory.title))
-        assertTrue(options[1].displayText.contains(syntheticStory.title))
-        assertFalse(options.any { it.displayText.contains("approved interests", ignoreCase = true) })
+        val sheet = viewModel.suggestionSheet097(target, language)
+        assertEquals(SuggestionSheetStatus097.UNAVAILABLE, sheet.status)
+        assertTrue("Disconnected state never fabricates local questions", sheet.options.isEmpty())
         val requestsBefore = state().requestsToday
-        val providerCallsBefore = app.answerCalls
-
-        screenshot("$capturePrefix-feed-top")
         compose.onNodeWithTag("feed-screen").performScrollToNode(hasTestTag("feed-suggestions-toolkit-open"))
+        // The setup notice is taller than the connected state. Move the action away
+        // from the bottom-nav edge before exercising the ordinary click path.
+        compose.onNodeWithTag("feed-screen").performTouchInput {
+            swipe(start = Offset(width / 2f, height * 0.84f), end = Offset(width / 2f, height * 0.54f), durationMillis = 350)
+        }
+        compose.waitForIdle()
         compose.onNodeWithTag("feed-suggestions-toolkit-open").assertIsDisplayed().performClick()
-        compose.onNodeWithTag("feed-suggestions-toolkit-source-0").assertTextEquals(text(R.string.suggestions_source_local))
-        compose.onNodeWithTag("feed-suggestions-toolkit-source-1").assertTextEquals(text(R.string.suggestions_source_local))
-        compose.onNodeWithTag("feed-suggestions-toolkit-question-0").assertTextEquals(options[0].displayText)
-        compose.onNodeWithTag("feed-suggestions-toolkit-question-1").assertTextEquals(options[1].displayText)
-        compose.onNodeWithTag("feed-suggestions-toolkit-offline-note").assertIsDisplayed()
-        compose.onNodeWithTag("feed-suggestions-toolkit-send-0").assertIsNotEnabled()
-        compose.onNodeWithTag("feed-suggestions-toolkit-edit-0").assertIsEnabled()
-        screenshot("$capturePrefix-feed-sheet")
+        waitForTag("feed-suggestions-toolkit-sheet")
+        val liveSheet = viewModel.suggestionSheet097(
+            requireNotNull(SuggestionTargets097.item(viewModel.ui.value.state!!, syntheticStory.id, language)), language,
+        )
+        assertEquals("The open sheet reflects the current disconnected AI state", SuggestionSheetStatus097.UNAVAILABLE, liveSheet.status)
+        compose.onNodeWithTag("feed-suggestions-toolkit-unavailable-note").assertIsDisplayed()
+        compose.onNodeWithTag("feed-suggestions-toolkit-question-0").assertDoesNotExist()
+        compose.onNodeWithTag("feed-suggestions-toolkit-send-0").assertDoesNotExist()
+        compose.onNodeWithTag("feed-suggestions-toolkit-edit-0").assertDoesNotExist()
+        compose.onNodeWithTag("feed-suggestions-toolkit-connect").assertIsDisplayed()
+        assertEquals(0, app.suggestionCalls)
+        screenshot(if (language == "sw") "097-disconnected-sw-feed-sheet" else "097-disconnected-en-feed-sheet")
         compose.onNodeWithTag("feed-suggestions-toolkit-close").performClick()
-        assertEquals("Opening and cancelling local options is UI-only", requestsBefore, state().requestsToday)
-        assertEquals("Opening and cancelling local options never reaches the provider", providerCallsBefore, app.answerCalls)
+        compose.onNodeWithTag("feed-suggestions-toolkit-sheet").assertDoesNotExist()
+        assertEquals("Closing the sheet after a read-only open does not reserve work", requestsBefore, state().requestsToday)
+
+        // Also verify real pointer input, not only the Compose semantics action.
+        compose.onNodeWithTag("feed-suggestions-toolkit-open").performTouchInput { click() }
+        waitForTag("feed-suggestions-toolkit-sheet")
+        compose.onNodeWithTag("feed-suggestions-toolkit-unavailable-note").assertIsDisplayed()
+        assertEquals(0, app.suggestionCalls)
+        compose.onNodeWithTag("feed-suggestions-toolkit-close").performClick()
+        assertEquals("Opening and cancelling is read-only even while disconnected", requestsBefore, state().requestsToday)
+        assertTrue("RSS content remains available", state().items.single().id == syntheticStory.id)
     }
 
     /**
-     * Full-shell journey uses only the deterministic test provider and a clearly
-     * synthetic cached suggestion. Opening/cancelling is UI-only; explicit Send
-     * creates a story-scoped request; the pencil prepares an unsent draft.
+     * Full-shell journey exercises the actual test-provider -> FeedEngine -> cache -> UI path.
+     * Suggestions are never seeded in the repository and sheet open/cancel is read-only.
      */
     private fun runSuggestionJourney(language: String, capturePrefix: String) {
-        app.sourceItems = stories()
+        val itemQuestions = syntheticProviderQuestions(language)
+        app.sourceItems = stories().map { story ->
+            if (story.id == "toolkit") story.copy(
+                title = if (language == "sw") "Mfano wa jaribio: zana ya AI kwa mradi ujao" else "Synthetic preview: an AI toolkit for your next project",
+                summary = if (language == "sw") "Mfano wa jaribio kuhusu zana ya AI kwa timu za utafiti." else story.summary,
+                keyPoints = if (language == "sw") listOf(
+                    "**Ushahidi:** Mfano huu unaeleza zana ya majaribio; soma [mwongozo wa mfano](https://example.com/toolkit) kabla ya kuchukua hatua.",
+                    "Utangamano haujathibitishwa. Kagua https://docs.example.org/mwongozo?ref=synthetic \uE200cite\uE202turn0search0\uE201.",
+                ) else listOf(
+                    "**Evidence:** This synthetic preview describes a test toolkit; read the [example guide](https://example.com/toolkit) before acting.",
+                    "Compatibility is unverified. Review https://docs.example.org/setup?ref=synthetic \uE200cite\uE202turn0search0\uE201.",
+                ),
+            ) else story
+        }
+        app.suggestionQuestions = itemQuestions
+        app.suggestionCalls = 0
         // The rendered response timestamp must not reveal the test runner's local timezone.
         // Set an explicit synthetic profile timezone before onboarding preserves defaults.
         runBlocking { app.feedRepository.update { it.copy(timezone = "UTC") } }
@@ -416,32 +447,46 @@ class MeBotFeedJourneyTest {
         assertEquals("Screenshot profile timezone is an explicit synthetic fixture", "UTC", state().timezone)
         waitForState { it.items.size == 3 && it.lastRefreshMillis > 0 }
         connectTestProvider()
-        cacheGroundedSuggestion("toolkit", language)
 
         tab("feed")
         waitForTag("feed-screen")
         val feedViewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[mebot.nguli.com.feed.FeedViewModel::class.java]
-        compose.waitUntil(15_000) { feedViewModel.ui.value.state?.items?.find { it.id == "toolkit" }?.suggestedInteractions?.isNotEmpty() == true }
+        val itemTarget = requireNotNull(SuggestionTargets097.item(state(), "toolkit", language))
+        assertEquals(SuggestionSheetStatus097.NEEDS_GENERATION, feedViewModel.suggestionSheet097(itemTarget, language).status)
+        val requestsBeforeGeneration = state().requestsToday
+        val suggestionCallsBeforeGeneration = app.suggestionCalls
         screenshot("$capturePrefix-feed-top")
         compose.onNodeWithTag("feed-screen").performScrollToNode(hasTestTag("feed-suggestions-toolkit-open"))
         compose.onNodeWithTag("feed-suggestions-toolkit-open").assertIsDisplayed().performClick()
-        compose.onNodeWithTag("feed-suggestions-toolkit-question-0").assertTextContains(
-            if (language == "sw") "mabadiliko" else "What changes",
-            substring = true,
-        )
-        compose.onNodeWithTag("feed-suggestions-toolkit-source-0").assertTextEquals(text(R.string.suggestions_source_cached))
+        compose.onNodeWithTag("feed-suggestions-toolkit-generate").assertIsDisplayed()
+        compose.onNodeWithTag("feed-suggestions-toolkit-question-0").assertDoesNotExist()
+        assertEquals("Opening the sheet must not reserve a request", requestsBeforeGeneration, state().requestsToday)
+        assertEquals("Opening the sheet must not call AI", suggestionCallsBeforeGeneration, app.suggestionCalls)
+        compose.onNodeWithTag("feed-suggestions-toolkit-close").performClick()
+        assertEquals(requestsBeforeGeneration, state().requestsToday)
+        assertEquals(suggestionCallsBeforeGeneration, app.suggestionCalls)
+
+        compose.onNodeWithTag("feed-suggestions-toolkit-open").performClick()
+        compose.onNodeWithTag("feed-suggestions-toolkit-generate").performClick()
+        awaitPreparedSuggestionSet(feedViewModel, itemTarget, language, requestsBeforeGeneration + 1,
+            suggestionCallsBeforeGeneration + 1, "$capturePrefix-item-generation-failed")
+        val preparedItemQuestions = feedViewModel.suggestionSheet097(itemTarget, language).options.map { it.questionText }
+        assertEquals(itemQuestions, preparedItemQuestions)
+        assertEquals(5, preparedItemQuestions.distinct().size)
+        (0..4).forEach { index ->
+            compose.onNodeWithTag("feed-suggestions-toolkit-question-$index").assertTextEquals(preparedItemQuestions[index])
+        }
+        compose.onNodeWithTag("feed-suggestions-toolkit-provenance").assertTextEquals(text(R.string.suggestions_ai_generated))
         compose.onNodeWithText("Example Research", substring = true).assertExists()
         screenshot("$capturePrefix-feed-sheet")
         val requestsBeforeFeedSuggestion = state().requestsToday
         compose.onNodeWithTag("feed-suggestions-toolkit-close").performClick()
-        assertEquals("Opening and cancelling the sheet is UI-only", requestsBeforeFeedSuggestion, state().requestsToday)
+        assertEquals("Opening and cancelling the prepared set is read-only", requestsBeforeFeedSuggestion, state().requestsToday)
         val providerCallsBeforeSend = app.answerCalls
         compose.onNodeWithTag("feed-suggestions-toolkit-open").performClick()
         compose.onNodeWithTag("feed-suggestions-toolkit-send-0").performClick()
         waitForTag("workspace-question")
-        val expectedPrompt = if (language == "sw")
-            "Ni mabadiliko gani yanayoletwa na taarifa hii kwa watu wanaotumia zana?"
-        else "What changes does this update bring for people using the toolkit?"
+        val expectedPrompt = preparedItemQuestions.first()
         waitForState { current -> current.conversations.any { conversation ->
             conversation.itemId == "toolkit" && conversation.turns.any { it.role == "user" && it.text == expectedPrompt }
         } }
@@ -464,27 +509,38 @@ class MeBotFeedJourneyTest {
         assertEquals("One primary Send calls the deterministic provider exactly once", providerCallsBeforeSend + 1, app.answerCalls)
         screenshot("$capturePrefix-mebot-after-send")
 
-        // The bottom icon in MeBot targets the exact current item conversation;
-        // with the first question now present, its next step is a distinct local question.
+        // The bottom icon in MeBot is bound to this exact item conversation. Because the
+        // transcript has changed, prepare a new AI-authored set for that conversation.
         val chatTarget = mebot.nguli.com.feed.SuggestionTargets097.conversation(state(), scopedThread.id, language)!!
-        val feedViewModelOptions = feedViewModel.suggestionOptions097(chatTarget, language)
-        val nextChatOption = feedViewModelOptions.first()
-        assertTrue("The already-sent prompt must not be offered again", nextChatOption.displayText != expectedPrompt)
+        val chatQuestions = syntheticChatProviderQuestions(language)
+        app.suggestionQuestions = chatQuestions
+        val chatRequestsBeforeGeneration = state().requestsToday
+        val chatSuggestionCallsBefore = app.suggestionCalls
         compose.onNodeWithTag("workspace-suggestions-open").performClick()
-        compose.onNodeWithTag("workspace-suggestions-question-0").assertTextContains(nextChatOption.displayText.take(24), substring = true)
+        compose.onNodeWithTag("workspace-suggestions-generate").assertIsDisplayed()
+        compose.onNodeWithTag("workspace-suggestions-question-0").assertDoesNotExist()
+        assertEquals(chatRequestsBeforeGeneration, state().requestsToday)
+        assertEquals(chatSuggestionCallsBefore, app.suggestionCalls)
+        compose.onNodeWithTag("workspace-suggestions-generate").performClick()
+        awaitPreparedSuggestionSet(feedViewModel, chatTarget, language, chatRequestsBeforeGeneration + 1,
+            chatSuggestionCallsBefore + 1, "$capturePrefix-chat-generation-failed")
+        val nextChatOption = feedViewModel.suggestionSheet097(chatTarget, language).options.first()
+        assertEquals(chatQuestions, feedViewModel.suggestionSheet097(chatTarget, language).options.map { it.questionText })
+        (0..4).forEach { index -> compose.onNodeWithTag("workspace-suggestions-question-$index").assertTextEquals(chatQuestions[index]) }
+        compose.onNodeWithTag("workspace-suggestions-provenance").assertTextEquals(text(R.string.suggestions_ai_generated))
         screenshot("$capturePrefix-chat-sheet")
         val requestsBeforeChatEdit = state().requestsToday
         compose.onNodeWithTag("workspace-suggestions-edit-0").performClick()
-        awaitConversationDraft(feedViewModel, scopedThread.id, nextChatOption.displayText, "$capturePrefix-chat-draft-not-ready")
+        awaitConversationDraft(feedViewModel, scopedThread.id, nextChatOption.questionText, "$capturePrefix-chat-draft-not-ready")
         assertEquals("Pencil stays in this exact thread and never sends", scopedThread.id, feedViewModel.ui.value.activeConversationId)
-        assertEquals(requestsBeforeChatEdit, state().requestsToday)
+        assertEquals("Pencil editing never triggers another request", requestsBeforeChatEdit, state().requestsToday)
         val requestsBeforeDraftSheet = state().requestsToday
         compose.onNodeWithTag("workspace-suggestions-open").assertIsDisplayed().performClick()
         compose.onNodeWithTag("workspace-suggestions-question-0").assertIsDisplayed()
         screenshot("$capturePrefix-chat-sheet-draft")
         compose.onNodeWithTag("workspace-suggestions-close").performClick()
         assertEquals("Opening suggestions preserves the unsent composer draft", requestsBeforeDraftSheet, state().requestsToday)
-        compose.onNodeWithTag("workspace-question").assertTextEquals(nextChatOption.displayText)
+        compose.onNodeWithTag("workspace-question").assertTextEquals(nextChatOption.questionText)
         screenshot("$capturePrefix-mebot-prefilled")
 
         tab("feed")
@@ -493,6 +549,16 @@ class MeBotFeedJourneyTest {
         waitForState { it.briefs.any { brief -> brief.itemId == "toolkit" } }
         assertTrue(compose.onAllNodesWithText("Example Research", substring = true).fetchSemanticsNodes().isNotEmpty())
         compose.onNodeWithTag("detail-source").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        compose.onNodeWithTag("detail-story-notes").performScrollTo().performClick()
+        compose.onNodeWithText(if (language == "sw") "Ushahidi:" else "Evidence:", substring = true).assertExists()
+        compose.onNodeWithText("**", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("turn0search0", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("https://docs.example.org", substring = true).assertDoesNotExist()
+        compose.onAllNodesWithTag("detail-key-point-source").assertCountEquals(2)
+        // Reveal the final source action, not just the heading at the viewport edge,
+        // so the full-shell capture includes the actual sanitized key-point rows.
+        compose.onAllNodesWithTag("detail-key-point-source").onLast().performScrollTo().assertIsDisplayed()
+        screenshot("$capturePrefix-detail-notes")
         compose.onNodeWithTag("detail-screen").performScrollToNode(hasTestTag("detail-suggestions-toolkit-open"))
         compose.onNodeWithTag("detail-suggestions-toolkit-open").assertIsDisplayed().performClick()
         compose.onNodeWithTag("detail-suggestions-toolkit-question-0").assertIsDisplayed()
@@ -501,7 +567,7 @@ class MeBotFeedJourneyTest {
         compose.onNodeWithTag("detail-suggestions-toolkit-edit-0").performClick()
         waitForTag("workspace-question")
         waitForText(text(R.string.suggestions_replace_title))
-        compose.onNodeWithTag("workspace-question").assertTextContains(nextChatOption.displayText)
+        compose.onNodeWithTag("workspace-question").assertTextContains(nextChatOption.questionText)
         compose.onNodeWithTag("workspace-suggestion-keep").performClick()
         assertEquals("Choosing a detail suggestion must not send an AI request", requestsBeforeDetailSuggestion, state().requestsToday)
 
@@ -511,8 +577,44 @@ class MeBotFeedJourneyTest {
         // restores the suggestion's lower scroll position, so bring the source
         // action back into view before asserting it remains available.
         compose.onNodeWithTag("detail-source").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        compose.onNodeWithTag("detail-story-notes").performScrollTo().assertIsDisplayed()
+        val keyPointSource = compose.onAllNodesWithTag("detail-key-point-source").onFirst().performScrollTo().assertIsDisplayed()
+        keyPointSource.performClick()
+        assertEquals("https://example.com/toolkit", shadowOf(compose.activity).nextStartedActivity.dataString)
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         waitForTag("feed-screen")
+    }
+
+    private fun awaitPreparedSuggestionSet(
+        viewModel: FeedViewModel,
+        target: mebot.nguli.com.feed.SuggestionTargetSnapshot097,
+        language: String,
+        expectedRequests: Int,
+        expectedSuggestionCalls: Int,
+        failureScreenshot: String,
+    ) {
+        try {
+            compose.waitUntil(15_000) {
+                // Drain Compose/main-thread continuations between polls. Under Robolectric,
+                // IO completion can be ready while the corresponding StateFlow render has
+                // not yet been applied; polling only VM state otherwise starves that turn.
+                compose.waitForIdle()
+                val snapshot = viewModel.suggestionSheet097(target, language)
+                snapshot.status == SuggestionSheetStatus097.READY && snapshot.options.size == 5 &&
+                    state().requestsToday == expectedRequests && app.suggestionCalls == expectedSuggestionCalls
+            }
+        } catch (failure: Throwable) {
+            val latestUi = viewModel.ui.value
+            val latestSnapshot = viewModel.suggestionSheet097(target, language)
+            runCatching { screenshot(failureScreenshot) }
+            throw AssertionError(
+                "AI suggestion generation never reached a complete prepared set: status=${latestSnapshot.status} " +
+                    "failure=${latestSnapshot.failureCode} VMError=${latestUi.error} generation=${latestUi.suggestionGeneration} " +
+                    "requests=${state().requestsToday}/$expectedRequests calls=${app.suggestionCalls}/$expectedSuggestionCalls " +
+                    "durableSets=${state().suggestionSets097.size} connected=${latestUi.connected} language=${latestUi.appLanguage}",
+                failure,
+            )
+        }
     }
 
     /** Wait for a pencil edit to populate the active conversation without appending a turn. */
@@ -590,29 +692,33 @@ class MeBotFeedJourneyTest {
         waitForText(text(R.string.feed_you_title))
     }
 
-    private fun cacheGroundedSuggestion(itemId: String, language: String) {
-        val now = System.currentTimeMillis()
-        val label = if (language == "sw") "Uliza kinachobadilika" else "Ask what changes"
-        val prompt = if (language == "sw")
-            "Ni mabadiliko gani yanayoletwa na taarifa hii kwa watu wanaotumia zana?"
-        else "What changes does this update bring for people using the toolkit?"
-        runBlocking {
-            app.feedRepository.update { current ->
-                val item = current.items.single { it.id == itemId }
-                val module = current.modules.single { it.id == item.moduleId }
-                require(module.enabled)
-                val unverified = item.copy(
-                    suggestedInteractions = listOf(AiSuggestedInteraction(label = label, prompt = prompt)),
-                    suggestedInteractionsGeneratedAtMillis = now,
-                )
-                val cached = unverified.copy(
-                    suggestedInteractionsContentDigest = AiSuggestedInteractions095.contentDigest(unverified),
-                    suggestedInteractionsScopeProviderDigest = AiSuggestedInteractions095.scopeProviderDigest(current, module, language),
-                )
-                current.copy(items = current.items.map { if (it.id == itemId) cached else it })
-            }
-        }
-    }
+    private fun syntheticProviderQuestions(language: String): List<String> = if (language == "sw") listOf(
+        "Katika mfano huu wa zana ya AI, ushahidi gani unaunga mkono dai lake kuu?",
+        "Ni dhana gani kuhusu zana hii timu ya utafiti inapaswa kujaribu kwanza?",
+        "Ni gharama au hatari gani ya usalama inaweza kubadili uamuzi wa kuitumia?",
+        "Ni njia gani mbadala inayofaa kulinganisha na zana hii, na kwa kipimo gani?",
+        "Ni maelezo gani ambayo hayajathibitishwa katika mfano huu ni muhimu kuchunguza?",
+    ) else listOf(
+        "Which claim in this synthetic AI toolkit preview has the strongest supporting evidence?",
+        "What compatibility assumption should a research team test before trying this toolkit?",
+        "Which cost or security risk could change a decision to adopt this synthetic toolkit?",
+        "What alternative workflow should this preview be compared with, and on what measure?",
+        "Which unverified detail in this synthetic example would be most useful to investigate next?",
+    )
+
+    private fun syntheticChatProviderQuestions(language: String): List<String> = if (language == "sw") listOf(
+        "Katika mazungumzo haya ya mfano, ushahidi gani tukague kabla ya kuamua kutumia zana?",
+        "Ni dhana gani kuhusu ulinganifu tuliyotaja ambayo inafaa kujaribu kwanza?",
+        "Ni gharama gani ya usanidi au hatari gani bado haijajibiwa?",
+        "Ni chaguo gani mbadala lililotajwa tulinganishe, na kwa kipimo gani?",
+        "Ni maelezo gani moja yangeweza kubadili uamuzi wetu kuhusu zana hii?",
+    ) else listOf(
+        "In this synthetic toolkit discussion, what evidence should we check before deciding to use it?",
+        "Which compatibility assumption from our conversation should we test first?",
+        "What setup cost or security risk has not been answered yet?",
+        "Which alternative mentioned in the discussion should we compare, and on what measure?",
+        "What single detail could change our decision about this toolkit?",
+    )
 
     @Test fun replacingAKeyDoesNotSaveTheTypedSecretAcrossRotation() {
         start()

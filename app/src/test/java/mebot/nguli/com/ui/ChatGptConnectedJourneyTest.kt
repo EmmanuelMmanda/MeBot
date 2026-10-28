@@ -347,6 +347,19 @@ open class ChatGptJourneyApplication : MeBotApplication() {
     val askedQuestions = CopyOnWriteArrayList<String>()
     val askedContexts = CopyOnWriteArrayList<List<ContextEntry>>()
     val searched = CopyOnWriteArrayList<String>()
+    val suggestedScopes = CopyOnWriteArrayList<String>()
+    val suggestedQuestionSets = CopyOnWriteArrayList<List<String>>()
+    val suggestionProviderStates = CopyOnWriteArrayList<FeedState>()
+    val suggestedAttachments = CopyOnWriteArrayList<List<AiAttachment>>()
+    @Volatile var suggestionQuestions: List<String> = listOf(
+        "What evidence in this item most strongly supports its main claim?",
+        "Which assumption would change the conclusion if it proved false?",
+        "What practical trade-off matters most before using this approach?",
+        "How does this option compare with the closest alternative described here?",
+        "What unresolved detail would be most useful to investigate next?",
+    )
+    @Volatile var suggestionGate: CompletableDeferred<Unit>? = null
+    @Volatile var onSuggestionRequested: (() -> Unit)? = null
     @Volatile var searchItems: List<FeedItem> = emptyList()
     @Volatile var checkGate: CompletableDeferred<Unit>? = null
     @Volatile var checkFailure: String? = null
@@ -371,6 +384,21 @@ open class ChatGptJourneyApplication : MeBotApplication() {
                     askedQuestions += question
                     askedContexts += state.context
                     return AiAnswer(ANSWER, item?.citations.orEmpty())
+                }
+                override suspend fun suggest(
+                    state: FeedState,
+                    item: FeedItem?,
+                    conversation: AiConversation?,
+                    module: FeedModule?,
+                    secret: String,
+                    language: String,
+                ): List<String> {
+                    onSuggestionRequested?.invoke()
+                    suggestionGate?.await()
+                    suggestedScopes += listOfNotNull(item?.id, conversation?.id, module?.id).joinToString(":").ifBlank { "general" }
+                    suggestionProviderStates += state
+                    suggestedAttachments += conversation?.attachments.orEmpty()
+                    return suggestionQuestions.toList().also { suggestedQuestionSets += it }
                 }
                 override suspend fun search(state: FeedState, modules: List<FeedModule>, query: String, secret: String, language: String): List<FeedItem> {
                     searched += "${state.connection.mode}:$secret:$query"
