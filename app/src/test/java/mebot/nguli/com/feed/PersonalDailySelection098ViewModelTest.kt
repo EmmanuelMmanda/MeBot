@@ -3,10 +3,13 @@ package mebot.nguli.com.feed
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -20,6 +23,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -27,6 +31,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 /** The local Today recommendation projection is persisted without consulting any provider. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -97,7 +102,7 @@ class PersonalDailySelection098ViewModelTest {
 
         vm.ensurePersonalDailySelection098()
         val selected = withTimeout(10_000) {
-            app.feedRepository.state.first { it.personalDailySelection098 != null }
+            app.feedRepository.awaitFeedState { it.personalDailySelection098 != null }
         }
         val record = selected.personalDailySelection098!!
         assertTrue(record.itemIds.isNotEmpty())
@@ -125,16 +130,45 @@ class PersonalDailySelection098ViewModelTest {
         assertEquals(record, recreated.personalDailySelection098)
         vm.ensurePersonalDailySelection098()
         val afterEnsure = withTimeout(10_000) {
-            app.feedRepository.state.first { it.personalDailySelection098?.inputDigest == record.inputDigest }
+            app.feedRepository.awaitFeedState { it.personalDailySelection098?.inputDigest == record.inputDigest }
         }
         assertEquals(record, afterEnsure.personalDailySelection098)
         assertEquals(0, app.sourceReaderCalls.get())
         assertEquals(0, app.aiProviderCalls.get())
     }
 
+    @Test fun sharedFeedStateAwaitCollectsOffTheRunBlockingMainLoop(): Unit = runBlocking {
+        val before = app.feedRepository.current()
+        val testThread = Thread.currentThread()
+        val collectorThread = AtomicReference<Thread?>()
+        val baselineObserved = CompletableDeferred<Unit>()
+        val waiter = async {
+            app.feedRepository.awaitFeedState { state ->
+                collectorThread.compareAndSet(null, Thread.currentThread())
+                if (state.editionSequence == before.editionSequence) {
+                    baselineObserved.complete(Unit)
+                    false
+                } else state.editionSequence == before.editionSequence + 1
+            }
+        }
+        try {
+            val observed = withTimeout(10_000) {
+                baselineObserved.await()
+                app.feedRepository.update { it.copy(editionSequence = before.editionSequence + 1) }
+                waiter.await()
+            }
+
+            assertEquals(before.editionSequence + 1, observed.editionSequence)
+            assertNotNull("shared state observer must run independently of the test/Main event loop", collectorThread.get())
+            assertNotSame(testThread, collectorThread.get())
+        } finally {
+            waiter.cancelAndJoin()
+        }
+    }
+
     @Test fun resetInvalidatesDerivedDailySelectionWithoutRefreshingOrDeletingViaSelectionLogic() = runBlocking {
         vm.ensurePersonalDailySelection098()
-        val selected = withTimeout(10_000) { app.feedRepository.state.first { it.personalDailySelection098 != null } }
+        val selected = withTimeout(10_000) { app.feedRepository.awaitFeedState { it.personalDailySelection098 != null } }
         assertNotNull(selected.personalDailySelection098)
         assertEquals(setOf(published.id, read.id), selected.items.map { it.id }.toSet())
 
