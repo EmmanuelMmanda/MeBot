@@ -99,7 +99,7 @@ class RealtimeCall099ViewModelTest {
 
         assertEquals("microphone_permission_required", vm.ui.value.snapshot.reasonCode)
         assertFalse(peer.microphoneActive)
-        awaitClosed(peer)
+        withTimeout(TEST_TIMEOUT) { waitFor { peer.closed && backend.endCalls.get() >= 1 } }
         assertEquals("Revoked permission prevents all SDP/provider requests", 0, backend.createCalls.get())
         assertTrue(backend.endCalls.get() >= 1)
         store.clear()
@@ -118,7 +118,8 @@ class RealtimeCall099ViewModelTest {
         vm.stop("context_changed")
         assertFalse("Local microphone must stop synchronously before cleanup/network", peer.microphoneActive)
         assertEquals(1, peer.privacyStopCalls)
-        awaitClosed(peer)
+        // Local teardown precedes asynchronous broker hangup; observe both within one budget.
+        withTimeout(TEST_TIMEOUT) { waitFor { peer.closed && backend.endCalls.get() >= 1 } }
         assertEquals("No broker call may be dispatched before media setup completes", 0, backend.createCalls.get())
         assertTrue("The server receives an end tombstone for the pending request", backend.endCalls.get() >= 1)
         assertFalse(vm.ui.value.snapshot.isConnected)

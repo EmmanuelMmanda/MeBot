@@ -147,14 +147,14 @@ class MeBotShowcase099JourneyTest {
         compose.onNodeWithTag("feed-suggestions-$FSDT_ID-edit-0", useUnmergedTree = true).performScrollTo().performClick()
         waitForTag("workspace-question")
         assertEquals("Edit is a draft, not an answer request", 0, app.answerCalls)
-        val newConversationId = requireNotNull(viewModel.ui.value.activeConversationId)
         val conversationPreparation = awaitPreparedConversationSuggestion(
             viewModel = viewModel,
-            conversationId = newConversationId,
+            conversationId = null,
             expectedPrompt = questionsEn.first(),
             expectedRequests = requestsBeforeAngles + 1,
             expectedSuggestionCalls = 2,
         )
+        val newConversationId = conversationPreparation.targetId
         assertEquals("The draft opened the exact FSDT-scoped conversation target",
             FSDT_ID, conversationPreparation.itemId)
         assertEquals(SuggestionTargetKind097.CONVERSATION, conversationPreparation.kind)
@@ -361,7 +361,7 @@ class MeBotShowcase099JourneyTest {
 
     private fun awaitPreparedConversationSuggestion(
         viewModel: FeedViewModel,
-        conversationId: String,
+        conversationId: String?,
         expectedPrompt: String,
         expectedRequests: Int,
         expectedSuggestionCalls: Int,
@@ -370,18 +370,20 @@ class MeBotShowcase099JourneyTest {
             compose.waitForIdle()
             val latestUi = viewModel.ui.value
             val latestState = latestUi.state ?: return@waitUntil false
-            if (latestUi.activeConversationId != conversationId) return@waitUntil false
-            val target = SuggestionTargets097.conversation(latestState, conversationId, "en") ?: return@waitUntil false
+            val activeId = latestUi.activeConversationId ?: return@waitUntil false
+            if (conversationId != null && activeId != conversationId) return@waitUntil false
+            val target = SuggestionTargets097.conversation(latestState, activeId, "en") ?: return@waitUntil false
             val snapshot = viewModel.suggestionSheet097(target, "en")
             val editorText = runCatching {
                 compose.onNodeWithTag("workspace-question").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text
             }.getOrNull()
             snapshot.status == SuggestionSheetStatus097.READY && snapshot.options.size == 5 &&
                 latestState.requestsToday == expectedRequests && app.suggestionCalls == expectedSuggestionCalls &&
-                app.suggestionRequestTargets.lastOrNull() == (FSDT_ID to conversationId) && editorText == expectedPrompt
+                app.suggestionRequestTargets.lastOrNull() == (FSDT_ID to activeId) && editorText == expectedPrompt
         }
         val latestUi = viewModel.ui.value
         val latestState = requireNotNull(latestUi.state)
+        val conversationId = conversationId ?: requireNotNull(latestUi.activeConversationId)
         assertEquals("The active thread is the draft's linked item conversation", conversationId, latestUi.activeConversationId)
         val target = requireNotNull(SuggestionTargets097.conversation(latestState, conversationId, "en"))
         assertEquals("Conversation suggestions retain item scope", FSDT_ID, target.itemId)
