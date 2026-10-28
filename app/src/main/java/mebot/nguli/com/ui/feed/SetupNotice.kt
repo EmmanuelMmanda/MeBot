@@ -16,28 +16,42 @@ import androidx.compose.ui.unit.dp
 import mebot.nguli.com.R
 import mebot.nguli.com.core.*
 
+/** Host-only actions are supplied at the app shell, so feed/detail callers do not own global routes. */
+internal data class Setup099TipHostActions(
+    val eligibleUpdateAvailable: Boolean = false,
+    val onBackgroundSettings: () -> Unit = {},
+    val onSoftwareUpdates: () -> Unit = {},
+    /** Set only from actual voice/transcription capability state; never from a cached preference. */
+    val voiceSetupNeeded: Boolean = false,
+    val onVoiceSetup: () -> Unit = {},
+)
+
+internal val LocalSetup099TipHostActions = staticCompositionLocalOf { Setup099TipHostActions() }
+
 @Composable
 internal fun SetupNotice(state: FeedState, connected: Boolean, page: String,
     onConnect: () -> Unit, onContext: () -> Unit, onDismiss: (String) -> Unit) {
-    val notice = SetupGuidance.next(state, connected, page, LocalFeedClock.current) ?: return
-    val connection = notice == "connection"
-    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.secondaryContainer,
-        modifier = Modifier.fillMaxWidth().testTag("setup-notice-$notice")) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(if (connection) Icons.Outlined.ChatBubbleOutline else Icons.Outlined.Tune, null, Modifier.size(21.dp))
-                Text(stringResource(if (connection) R.string.notice_connect_title else R.string.notice_preferences_title),
-                    style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            }
-            Text(stringResource(if (connection) R.string.notice_connect_body else R.string.notice_preferences_body), style = MaterialTheme.typography.bodySmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton(onClick = if (connection) onConnect else onContext, contentPadding = PaddingValues(horizontal = 4.dp)) {
-                    Text(stringResource(if (connection) R.string.feed_connect else R.string.notice_preferences_action))
-                }
-                TextButton(onClick = { onDismiss(notice) }, contentPadding = PaddingValues(horizontal = 4.dp)) { Text(stringResource(R.string.notice_later)) }
-            }
+    val host = LocalSetup099TipHostActions.current
+    val tip = Setup099Logic.nextTip(
+        connected = connected,
+        contextEntries = state.context,
+        backgroundEnabled = state.backgroundEnabled,
+        eligibleUpdateAvailable = host.eligibleUpdateAvailable,
+        dismissedNotices = state.dismissedNotices,
+        onboardingComplete = state.onboardingComplete,
+        page = page,
+        nowMillis = LocalFeedClock.current,
+        voiceSetupNeeded = host.voiceSetupNeeded,
+    ) ?: return
+    Setup099TipCard(tip, onAction = { action ->
+        when (action) {
+            Setup099TipAction.CONNECT_CHATGPT -> onConnect()
+            Setup099TipAction.ADD_CONTEXT -> onContext()
+            Setup099TipAction.BACKGROUND_SETTINGS -> host.onBackgroundSettings()
+            Setup099TipAction.SOFTWARE_UPDATES -> host.onSoftwareUpdates()
+            Setup099TipAction.CONFIGURE_VOICE -> host.onVoiceSetup()
         }
-    }
+    }, onLater = onDismiss)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

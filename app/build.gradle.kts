@@ -12,8 +12,8 @@ android {
         applicationId = "mebot.nguli.com"
         minSdk = 26
         targetSdk = 36
-        versionCode = 25
-        versionName = "0.9.8"
+        versionCode = 26
+        versionName = "0.9.9"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
@@ -85,6 +85,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.google.zxing:core:3.5.3")
+    // Platform WebRTC uses only bundled, origin-restricted local assets; no bundled native WebRTC SDK.
+    implementation("androidx.webkit:webkit:1.18.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.16")

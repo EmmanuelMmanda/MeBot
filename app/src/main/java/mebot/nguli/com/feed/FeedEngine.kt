@@ -49,6 +49,7 @@ open class FeedEngine(
         val credentialGeneration: Long,
         val state: FeedState,
         val language: String,
+        val priorQuestions: List<String>,
     )
 
     private val _progress=MutableStateFlow(RefreshProgress())
@@ -511,6 +512,8 @@ open class FeedEngine(
         onRequestDispatch: () -> Unit,
     ): AiSuggestionSet097 {
         if (expectedLanguage !in setOf("en", "sw")) throw FeedFailure("suggestion_changed")
+        fun legacyQuestions(state: FeedState): List<String> = legacySuggestionQuestions097(
+            state, target, expectedLanguage, System.currentTimeMillis())
         fun supportsSuggestions(state: FeedState): Boolean {
             val linkedConversation = if (target.kind == SuggestionTargetKind097.CONVERSATION)
                 state.conversations.singleOrNull { it.id == target.targetId } else null
@@ -539,6 +542,13 @@ open class FeedEngine(
             if (!SuggestionTargets097.current(current, target, expectedLanguage) || !expectedCurrent(current))
                 throw FeedFailure("suggestion_changed")
             if (!supportsSuggestions(current)) throw FeedFailure("suggestion_unavailable")
+            val targetKind = target.kind.name.lowercase(java.util.Locale.ROOT)
+            val currentBatches = current.suggestionSets097.filter { record ->
+                AiSuggestionCache097.isFresh(record, targetKind, target.targetId, target.revision, System.currentTimeMillis())
+            }
+            if (currentBatches.size >= AiSuggestionCache097.MAX_BATCHES_PER_TARGET)
+                throw FeedFailure("suggestion_limit")
+            val priorQuestions = (currentBatches.flatMap { it.questions } + legacyQuestions(current)).distinct()
             val secret = credential(current.connection) ?: throw FeedFailure("suggestion_unavailable")
             val requestLanguage = language()
             if (requestLanguage != expectedLanguage) throw FeedFailure("suggestion_changed")
@@ -547,9 +557,13 @@ open class FeedEngine(
                     throw FeedFailure("suggestion_changed")
                 true
             }
-            SuggestionRequestSnapshot(secret, credentialGeneration.get(), reserved, requestLanguage)
+            SuggestionRequestSnapshot(secret, credentialGeneration.get(), reserved, requestLanguage, priorQuestions)
         }
         val current = snapshot.state
+        val kind = target.kind.name.lowercase(java.util.Locale.ROOT)
+        val priorQuestions = snapshot.priorQuestions
+        if (priorQuestions.size >= AiSuggestionCache097.MAX_BATCHES_PER_TARGET * AiSuggestionCache097.QUESTION_COUNT)
+            throw FeedFailure("suggestion_limit")
         val conversation = target.targetId.takeIf { target.kind == SuggestionTargetKind097.CONVERSATION }
             ?.let { id -> current.conversations.singleOrNull { it.id == id } ?: throw FeedFailure("suggestion_changed") }
         val selectedItem = when {
@@ -592,6 +606,7 @@ open class FeedEngine(
             items = listOfNotNull(providerItem),
             conversations = listOfNotNull(requestConversation),
             suggestionSets097 = emptyList(), personalDailySelection098 = null,
+            setup099 = Setup099State(), dismissedNotices = emptyMap(),
             briefs = emptyList(),
         )
         val scope = selectedModule?.kind ?: selectedItem?.kind ?: "general"
@@ -607,7 +622,8 @@ open class FeedEngine(
                     else -> current.context.count { it.confirmed && PersonalProfile085.isGlobal(it) }
                 })
                 try {
-                    provider.suggest(providerState, providerItem, requestConversation, selectedModule, snapshot.secret, expectedLanguage)
+                    provider.suggestMore(providerState, providerItem, requestConversation, selectedModule,
+                        snapshot.secret, expectedLanguage, priorQuestions.takeLast(25))
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (error: FeedFailure) {
                     throw FeedFailure(recordFailure(current.connection, snapshot.credentialGeneration,
@@ -616,7 +632,8 @@ open class FeedEngine(
             }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (error: FeedFailure) { throw error }
-        if (result.size != AiSuggestionCache097.QUESTION_COUNT || !AiSuggestionCache097.areValidQuestions(result))
+        if (result.size != AiSuggestionCache097.QUESTION_COUNT ||
+            !AiSuggestionCache097.areValidQuestions(result, priorQuestions))
             throw FeedFailure("suggestion_incomplete")
         currentCoroutineContext().ensureActive()
         val finalLanguage = language()
@@ -630,11 +647,45 @@ open class FeedEngine(
         repository.update { latest ->
             if (credentialGeneration.get() != snapshot.credentialGeneration || latest.connection != current.connection ||
                 finalLanguage != expectedLanguage || !targetCurrent(latest)) throw FeedFailure("suggestion_changed")
-            latest.copy(suggestionSets097 = (latest.suggestionSets097.filterNot {
-                AiSuggestionCache097.key(it.targetKind, it.targetId) == AiSuggestionCache097.key(record.targetKind, record.targetId)
-            } + record).takeLast(32))
+            val latestPrior = (latest.suggestionSets097.asSequence().filter {
+                AiSuggestionCache097.isFresh(it, kind, target.targetId, target.revision, System.currentTimeMillis())
+            }.flatMap { it.questions.asSequence() }.toList() + legacyQuestions(latest)).distinct()
+            if (latestPrior != priorQuestions ||
+                !AiSuggestionCache097.areValidQuestions(result, latestPrior) ||
+                latest.suggestionSets097.count { AiSuggestionCache097.isFresh(
+                    it, kind, target.targetId, target.revision, System.currentTimeMillis()) } >= AiSuggestionCache097.MAX_BATCHES_PER_TARGET)
+                throw FeedFailure("suggestion_changed")
+            val targetKey = AiSuggestionCache097.key(record.targetKind, record.targetId)
+            latest.copy(suggestionSets097 = AiSuggestionCache097.bounded(
+                latest.suggestionSets097 + record, preserveTargetKey = targetKey))
         }
         return record
+    }
+
+    /** Bridge the pre-097 item-bound cache into novelty checks until its TTL expires. */
+    private fun legacySuggestionQuestions097(
+        state: FeedState,
+        target: SuggestionTargetSnapshot097,
+        appLanguage: String,
+        now: Long,
+    ): List<String> {
+        val item = when (target.kind) {
+            SuggestionTargetKind097.ITEM -> target.itemId?.let { id -> state.items.singleOrNull { it.id == id } }
+            SuggestionTargetKind097.CONVERSATION -> {
+                val thread = target.targetId?.let { id -> state.conversations.singleOrNull { it.id == id } }
+                if (thread?.turns?.isEmpty() == true && thread.attachments.isEmpty())
+                    thread.itemId?.let { id -> state.items.singleOrNull { it.id == id } }
+                else null
+            }
+            else -> null
+        } ?: return emptyList()
+        if (!AiSuggestedInteractions095.isApplicable(state, item, now, appLanguage)) return emptyList()
+        val kind = target.kind.name.lowercase(java.util.Locale.ROOT)
+        val legacy = AiSuggestionSet097(kind, target.targetId, target.revision,
+            item.suggestedInteractions.map { it.prompt }, item.suggestedInteractionsGeneratedAtMillis)
+        return item.suggestedInteractions.map { it.prompt }.takeIf {
+            AiSuggestionCache097.isFresh(legacy, kind, target.targetId, target.revision, now)
+        }.orEmpty()
     }
 
     open suspend fun explain(itemId: String, onText: (String) -> Unit): AiAnswer = runAnswer(itemId, null,

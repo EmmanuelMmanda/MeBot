@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="opportunity_deadline_closes_099">Closes %1$s</string>
+    <string name="opportunity_deadline_today_099">Closes today · %1$s</string>
+    <string name="opportunity_deadline_passed_099">Deadline passed · confirm status (%1$s)</string>
+</resources>

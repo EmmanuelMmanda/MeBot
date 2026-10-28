@@ -1,0 +1,41 @@
+{
+  "showcase": "MeBot 0.9.9 native UI sample",
+  "fixture_only": true,
+  "app_build": "debug/test",
+  "test_provider": "FeedTestApplication deterministic in-process AiProvider; no network or paid service calls",
+  "connection": "synthetic direct-mode test credential; not a real account, subscription, or provider session",
+  "original_read": {
+    "source": "The English and Swahili bodies in original-read-en.json and original-read-sw.json are authored test fixtures, labeled in-app as AI-authored reflections; they are not actual model responses or publisher content.",
+    "basis": "reflection",
+    "evidence_claims": "None. UNESCO/Tanzania readiness assessment is optional further reading only, not represented as verifying the reflective advice.",
+    "further_reading_url": "https://tanzania.un.org/en/297619-artificial-intelligence-readiness-assessment-report",
+    "further_reading_publication_date": "2025-07-08 (from the existing verified content pack)"
+  },
+  "follow_up_questions": {
+    "sample_item": "FSDT Impact Grant Fund, Cycle 2",
+    "source": "Five distinct strings returned by the deterministic synthetic test AiProvider through the real suggestion-generation, validation, budget, and cache pipeline.",
+    "suggestedQuestions": [
+      "Which FSDT eligibility rule should a digital-solutions business check before drafting an application?",
+      "What records could help document the ownership or leadership criteria? Check the exact evidence required in FSDT’s application form.",
+      "How could a small team connect its digital solution to one of FSDT’s listed priority sectors?",
+      "Which costs and outcomes should a business clarify against the grant ceiling of up to TZS 30 million?",
+      "What evidence would show that a proposed project can deliver measurable value without exceeding the call’s scope?"
+    ],
+    "loadMoreInvoked": false,
+    "not_live_output": true
+  },
+  "dated_opportunity": {
+    "source_name": "Financial Sector Deepening Tanzania (FSDT)",
+    "source_url": "https://www.fsdt.or.tz/igf/",
+    "verified_pack": "v098/showcase-content-pack.json",
+    "checked_as_of": "2026-10-28",
+    "publisher_publication_date": null,
+    "deadline": "2026-11-05",
+    "display_policy": "Show the actual application deadline; do not substitute a fetch time for an unknown publisher publication date."
+  },
+  "capture_environment": {
+    "viewport_dp": "411x891",
+    "output_directory": "app/build/outputs/screenshots/v099-showcase/",
+    "captions_must_say": "Controlled test provider and synthetic sample data; not live AI/account output."
+  }
+}

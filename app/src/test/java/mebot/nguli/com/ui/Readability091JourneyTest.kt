@@ -55,16 +55,18 @@ class Readability091JourneyTest {
         waitForTag("feed-screen")
         compose.onNodeWithTag("filter-today").performScrollTo().performClick()
         // Exercise the real optional-notice dismissal, never fake a connected account for a capture.
-        compose.onNodeWithText(compose.activity.getString(R.string.notice_later)).performScrollTo().performClick()
-        compose.waitUntil(10_000) { runBlocking { app.feedRepository.current() }.dismissedNotices["connection"] != null }
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("setup-notice-connection").fetchSemanticsNodes().isEmpty() }
-        compose.onNodeWithTag("setup-notice-connection").assertDoesNotExist()
+        compose.onNodeWithTag("setup-tip-later-missing_ai").performScrollTo().performClick()
+        compose.waitUntil(10_000) {
+            runBlocking { app.feedRepository.current() }.dismissedNotices["missing_ai"] != null &&
+                compose.onAllNodesWithTag("setup-notice-missing_ai").fetchSemanticsNodes().isEmpty()
+        }
+        compose.onNodeWithTag("setup-notice-missing_ai").assertDoesNotExist()
         if (language == "en") {
             compose.activityRule.scenario.recreate()
             waitForTag("feed-screen")
             compose.onNodeWithTag("filter-today").assertIsSelected()
-            compose.onNodeWithTag("setup-notice-connection").assertDoesNotExist()
-            assertNotNull(runBlocking { app.feedRepository.current() }.dismissedNotices["connection"])
+            compose.onNodeWithTag("setup-notice-missing_ai").assertDoesNotExist()
+            assertNotNull(runBlocking { app.feedRepository.current() }.dismissedNotices["missing_ai"])
         }
         compose.onNodeWithTag("feed-screen").performScrollToNode(hasTestTag("weather-${forecast.id}"))
         compose.onAllNodesWithTag("today-time-${forecast.id}").assertCountEquals(1)

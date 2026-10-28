@@ -26,6 +26,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import mebot.nguli.com.R
 import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.FeedUiState
@@ -36,6 +39,8 @@ import mebot.nguli.com.feed.SuggestionSheetSnapshot097
 import mebot.nguli.com.feed.SuggestionSheetStatus097
 import mebot.nguli.com.feed.SuggestionTargetSnapshot097
 import mebot.nguli.com.feed.SuggestionTargets097
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import mebot.nguli.com.ui.*
 import java.net.URI
@@ -68,6 +73,9 @@ fun FeedDetail(
         SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.NEEDS_GENERATION, emptyList())
     },
     onGenerateSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
+    onLoadMoreSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
+    onPrepareActiveSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
+    onReleaseSuggestionPreparation: (SuggestionGenerationHandle097) -> Unit = {},
     onCancelSuggestionGeneration: (String) -> Unit = {},
 ) {
     val state = ui.state
@@ -106,6 +114,28 @@ fun FeedDetail(
             val originalAvailable = FeedLogic.safeUrl(item.sourceUrl)
             val appLanguage = if (ui.appLanguage == "sw") "sw" else "en"
             val suggestionTarget = remember(state, item.id, appLanguage) { SuggestionTargets097.item(state, item.id, appLanguage) }
+            val lifecycleOwner = LocalLifecycleOwner.current
+            val prepareActiveSuggestion by rememberUpdatedState(onPrepareActiveSuggestion)
+            val releasePreparedSuggestion by rememberUpdatedState(onReleaseSuggestionPreparation)
+            val readyForSuggestionPreparation by rememberUpdatedState(
+                ui.connected && !ui.connecting && !ui.chatGptVerifying && !ui.providerAuthBusy &&
+                    !ui.importWorking && !ui.refreshing && !ui.refreshProgress.running)
+            LaunchedEffect(lifecycleOwner, item.id, suggestionTarget, appLanguage, ui.connected, ui.connecting,
+                ui.chatGptVerifying, ui.providerAuthBusy, ui.importWorking) {
+                lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                    var preparation: SuggestionGenerationHandle097? = null
+                    try {
+                        val ready = snapshotFlow { readyForSuggestionPreparation }.first { it }
+                        if (ready && suggestionTarget != null) {
+                            preparation = prepareActiveSuggestion?.invoke(suggestionTarget, appLanguage)
+                        }
+                        awaitCancellation()
+                    } finally {
+                        preparation?.takeIf { it.preparationLeaseId != null }
+                            ?.let(releasePreparedSuggestion)
+                    }
+                }
+            }
             val related = remember(state.items, state.hiddenIds, state.modules, state.timezone, item.id, now / 60_000) {
                 FeedLogic.visible(state, now).filter { it.id != item.id && it.moduleId == item.moduleId }
                     .sortedByDescending { it.publishedAtMillis.takeIf { date -> date > 0 } ?: it.fetchedAtMillis }.take(6)
@@ -273,7 +303,8 @@ fun FeedDetail(
                         Text(stringResource(R.string.feed_why), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
                         Text(item.why, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
-                    if (item.deadline.isNotBlank()) Surface(color = MeBotPalette.current.mintSurface, shape = RoundedCornerShape(16.dp)) {
+                    if (item.deadline.isNotBlank()) Surface(color = MeBotPalette.current.mintSurface, shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.testTag("detail-opportunity-deadline")) {
                         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Icon(Icons.Outlined.EventAvailable, null, tint = MeBotPalette.current.onMint)
                             Text(stringResource(R.string.feed_deadline, item.deadline), style = MaterialTheme.typography.titleSmall, color = MeBotPalette.current.onMint)
@@ -295,6 +326,7 @@ fun FeedDetail(
                         busy = ui.asking || ui.importWorking || ui.suggestionWorking,
                         onReadSnapshot = onSuggestionSheet,
                         onGenerate = onGenerateSuggestion,
+                        onLoadMore = onLoadMoreSuggestion,
                         onCancelGeneration = onCancelSuggestionGeneration,
                         onConnect = { onConnect?.invoke() },
                         onUse = onUseSuggestion,

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="personal_interests_title_099">Topics for your feed</string>
+    <string name="personal_interests_body_099">Choose the topics you want to follow. Saving changes updates this device only; it does not start an AI request.</string>
+    <string name="personal_interests_note_body_099">Your custom interest is stored as a local note. Only the topics you select may use it when a connected AI prepares content.</string>
+    <string name="personal_interests_blank_note_099">Leaving this field empty keeps any saved note. To remove a note, open About you and edit your context notes.</string>
+    <string name="personal_interests_saved_099">Changes saved on this device.</string>
+    <string name="personal_interests_saving_099">Saving changes…</string>
+    <string name="personal_interests_save_failed_099">These changes could not be saved. Your draft is still here; try again.</string>
+    <string name="personal_interests_module_conflict_099">A saved custom module uses this built-in topic’s identifier. MeBot left it unchanged. Review Modules before choosing this topic again.</string>
+    <string name="personal_interests_done_099">Done</string>
+    <string name="personal_interests_edit_099">Choose feed topics</string>
+    <string name="personal_interests_edit_body_099">Pick topics and add an optional note for those topics.</string>
+    <string name="context_import_interests_099">Choose feed topics</string>
+    <string name="profile_replace_body_099_autosave">This replaces your current draft. The updated note is saved on this device after a short pause.</string>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="opportunity_deadline_closes_099">Hufungwa tarehe %1$s</string>
+    <string name="opportunity_deadline_today_099">Mwisho ni leo · %1$s</string>
+    <string name="opportunity_deadline_passed_099">Tarehe ya mwisho imepita · thibitisha hali (%1$s)</string>
+</resources>

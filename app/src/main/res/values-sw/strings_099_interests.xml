@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="personal_interests_title_099">Mada za ukurasa wako</string>
+    <string name="personal_interests_body_099">Chagua mada unazotaka kufuatilia. Kuhifadhi mabadiliko hubadili mipangilio ya kifaa hiki tu; hakuanzishi ombi la AI.</string>
+    <string name="personal_interests_note_body_099">Mambo unayoongeza unayopenda huhifadhiwa kwenye kifaa hiki kama dokezo. Ni mada ulizochagua tu zinazoweza kulitumia AI iliyounganishwa inapokuandalia maudhui.</string>
+    <string name="personal_interests_blank_note_099">Kuacha sehemu hii tupu huacha dokezo lililohifadhiwa. Ili kuliondoa, fungua Kuhusu na uhariri madokezo ya muktadha.</string>
+    <string name="personal_interests_saved_099">Mabadiliko yamehifadhiwa kwenye kifaa hiki.</string>
+    <string name="personal_interests_saving_099">Inahifadhi mabadiliko…</string>
+    <string name="personal_interests_save_failed_099">Imeshindwa kuhifadhi mabadiliko haya. Rasimu yako bado ipo; jaribu tena.</string>
+    <string name="personal_interests_module_conflict_099">Moduli maalum iliyohifadhiwa inatumia kitambulisho cha mada hii iliyojengewa ndani. MeBot imeiacha bila kuibadilisha. Kagua Moduli kabla ya kuchagua mada hii tena.</string>
+    <string name="personal_interests_done_099">Imekamilika</string>
+    <string name="personal_interests_edit_099">Chagua mada za ukurasa</string>
+    <string name="personal_interests_edit_body_099">Chagua mada na uongeze dokezo la hiari kwa mada hizo.</string>
+    <string name="context_import_interests_099">Chagua mada za ukurasa</string>
+    <string name="profile_replace_body_099_autosave">Hii itachukua nafasi ya rasimu yako ya sasa. Dokezo jipya litahifadhiwa kwenye kifaa hiki baada ya muda mfupi.</string>
+</resources>

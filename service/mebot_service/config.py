@@ -25,6 +25,13 @@ class Settings:
     allow_insecure_upstream: bool = False
     webhook_url: str = ""
     webhook_token: str = ""
+    # Voice is opt-in and stays unavailable until an operator explicitly selects
+    # a Realtime-capable API model. These never inherit the text model selection.
+    realtime_model: str = ""
+    realtime_voice: str = "marin"
+    realtime_daily_session_limit: int = 2
+    transcription_model: str = ""
+    transcription_daily_request_limit: int = 6
 
     def validate(self) -> "Settings":
         if len(self.service_token) < 32 or any(c.isspace() for c in self.service_token):
@@ -33,6 +40,14 @@ class Settings:
             raise ValueError("OPENAI_API_KEY is required")
         if not self.model or len(self.model) > 100:
             raise ValueError("MEBOT_MODEL is invalid")
+        for name, model in (("MEBOT_REALTIME_MODEL", self.realtime_model),
+                            ("MEBOT_TRANSCRIPTION_MODEL", self.transcription_model)):
+            if len(model) > 100 or any(ord(char) < 33 or ord(char) == 127 for char in model):
+                raise ValueError(f"{name} is invalid")
+        if self.realtime_voice not in {"alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"}:
+            raise ValueError("MEBOT_REALTIME_VOICE is invalid")
+        if not 0 <= self.realtime_daily_session_limit <= 100 or not 0 <= self.transcription_daily_request_limit <= 100:
+            raise ValueError("Voice daily limits must be between 0 and 100")
         parsed = urlsplit(self.upstream_url)
         permitted_test_url = self.allow_insecure_upstream and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
         if (parsed.scheme != "https" and not permitted_test_url) or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
@@ -61,6 +76,11 @@ class Settings:
             scheduler_enabled=_bool("MEBOT_SCHEDULER_ENABLED"),
             webhook_url=os.getenv("MEBOT_WEBHOOK_URL", ""),
             webhook_token=os.getenv("MEBOT_WEBHOOK_TOKEN", ""),
+            realtime_model=os.getenv("MEBOT_REALTIME_MODEL", "").strip(),
+            realtime_voice=os.getenv("MEBOT_REALTIME_VOICE", "marin").strip(),
+            realtime_daily_session_limit=int(os.getenv("MEBOT_REALTIME_DAILY_SESSION_LIMIT", "2")),
+            transcription_model=os.getenv("MEBOT_TRANSCRIPTION_MODEL", "").strip(),
+            transcription_daily_request_limit=int(os.getenv("MEBOT_TRANSCRIPTION_DAILY_REQUEST_LIMIT", "6")),
         ).validate()
 
     def prepare_storage(self) -> None:

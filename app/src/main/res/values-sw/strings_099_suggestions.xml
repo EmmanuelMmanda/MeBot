@@ -1,0 +1,11 @@
+<resources>
+    <string name="star_099_following_background">Unafuatilia mada hii. Ukaguzi wa chinichini umewashwa; Android inaweza kuchelewesha ukaguzi.</string>
+    <string name="star_099_following_refresh">Unafuatilia mada hii. Habari mpya hukaguliwa wakati wa kuleta habari kwenye mlisho.</string>
+    <string name="star_099_following_connect">Unafuatilia mada hii; imehifadhiwa kwenye kifaa hiki. Unganisha AI ili kutafuta masasisho.</string>
+    <string name="star_099_unfollowed">Haufuatilii tena mada hii.</string>
+    <string name="suggestions_load_more_099">Mawazo zaidi</string>
+    <string name="suggestions_loading_more_099">Inaandaa mawazo zaidi…</string>
+    <string name="suggestions_more_error_099">Haikuweza kuandaa mawazo zaidi. Chaguo zako za sasa bado zipo.</string>
+    <string name="suggestions_more_retry_099">Jaribu tena</string>
+    <string name="suggestions_limit_099">Umefikia idadi ya juu ya mawazo yaliyohifadhiwa kwa mada hii.</string>
+</resources>

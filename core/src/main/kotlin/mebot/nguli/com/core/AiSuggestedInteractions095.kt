@@ -127,16 +127,27 @@ object AiSuggestedInteractions095 {
     private fun safeText(value: String): Boolean = value.none { it.isISOControl() } && value == value.trim()
 
     /** Reject exact and obvious lexical near-duplicates, without imposing fixed user-visible categories. */
-    fun areDistinctAngles(questions: List<String>): Boolean {
+    fun areDistinctAngles(questions: List<String>, existingQuestions: List<String> = emptyList()): Boolean {
         if (questions.size != MAX_INTERACTIONS) return false
-        val words = questions.map { question ->
+        val newNormalized = questions.map(::normalizeQuestion)
+        if (newNormalized.distinct().size != newNormalized.size) return false
+        val existingWords = existingQuestions.map { question ->
             normalizeQuestion(question).split(' ').filter { it.length > 2 }.toSet()
         }
-        for (left in words.indices) for (right in left + 1 until words.size) {
-            val union = words[left] union words[right]
-            val overlap = if (union.isEmpty()) 1.0 else (words[left] intersect words[right]).size.toDouble() / union.size
-            if (overlap >= 0.72) return false
+        val newWords = newNormalized.map { question ->
+            question.split(' ').filter { it.length > 2 }.toSet()
         }
+        fun overlaps(left: Set<String>, right: Set<String>): Boolean {
+            val union = left union right
+            val overlap = if (union.isEmpty()) 1.0 else (left intersect right).size.toDouble() / union.size
+            return overlap >= 0.72
+        }
+        // Existing caches are not revalidated as a single giant batch. A stale/legacy duplicate
+        // in that history must not make every future provider batch impossible to accept.
+        for (left in newWords.indices) for (right in left + 1 until newWords.size)
+            if (overlaps(newWords[left], newWords[right])) return false
+        for (fresh in newWords) for (old in existingWords)
+            if (overlaps(fresh, old)) return false
         return true
     }
 

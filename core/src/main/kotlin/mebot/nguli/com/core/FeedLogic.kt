@@ -152,11 +152,12 @@ object FeedLogic {
 
     fun validate(s: FeedState): FeedState {
         require(s.schemaVersion == 1)
+        Setup099Logic.validate(s.setup099)
         require(s.prefetchBatches in 1..3)
         RelevanceFeedback.validate(s.relevanceSignals)
         StarredStories.validate(s)
         require(s.speechRate.isFinite() && s.speechRate in 0.6f..1.5f && s.speechVoice.length <= 200)
-        require(s.dismissedNotices.size <= 8 && s.dismissedNotices.all { (k, v) -> k in setOf("connection", "preferences") && v in 0..32_503_680_000_000L })
+        require(s.dismissedNotices.size <= 8 && s.dismissedNotices.all { (k, v) -> k in setOf("connection", "preferences", "missing_ai", "missing_context", "background_disabled", "update_available", "voice_setup") && v in 0..32_503_680_000_000L })
         require(s.name.length <= 80 && s.region.length <= 100 && s.timezone.length <= 80)
         if (s.timezone.isNotBlank()) ZoneId.of(s.timezone)
         require(s.modules.size <= ModuleCatalog.maxModules && s.modules.map { it.id }.distinct().size == s.modules.size)
@@ -183,11 +184,7 @@ object FeedLogic {
         require(s.quietStartHour in 0..23 && s.quietEndHour in 0..23 && s.requestsToday >= 0)
         // Suggestion records are disposable derived cache. Old/corrupt/incomplete records are
         // dropped without making otherwise usable feed, profile, or conversation state unreadable.
-        val cleanSuggestionSets = s.suggestionSets097.asReversed().asSequence()
-            .take(64)
-            .filter(AiSuggestionCache097::isValid)
-            .distinctBy { AiSuggestionCache097.key(it.targetKind, it.targetId) }
-            .take(32).toList().asReversed()
+        val cleanSuggestionSets = AiSuggestionCache097.bounded(s.suggestionSets097)
         val cleanDailySelection = s.personalDailySelection098?.takeIf(PersonalDailySelectionLogic098::isValidRecord)
         return if (cleanSuggestionSets == s.suggestionSets097 && cleanDailySelection == s.personalDailySelection098) s
         else s.copy(suggestionSets097 = cleanSuggestionSets, personalDailySelection098 = cleanDailySelection)

@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import mebot.nguli.com.R
 import mebot.nguli.com.core.FeedLogic
 import mebot.nguli.com.core.AiConnection
+import mebot.nguli.com.core.Setup099Logic
 import mebot.nguli.com.feed.FeedUiState
 import mebot.nguli.com.feed.auth.ChatGptAccount
 import mebot.nguli.com.feed.auth.ChatGptModel
@@ -58,6 +59,8 @@ fun ConnectionScreen(
     onOpenRouterCancel: () -> Unit = {},
     onLimitChange: ((Int) -> Unit)? = null,
     onChatGptRemoveAccount: (String) -> Unit = {},
+    firstRunSetupActive: Boolean = false,
+    onFirstChatGptConnectionConfirmed: (String) -> Unit = {},
     onDone: (Boolean) -> Unit,
 ) {
     val state = ui.state ?: return
@@ -65,6 +68,7 @@ fun ConnectionScreen(
     val active = ui.chatGpt.accounts.find { it.id == state.connection.accountId }
     val usingPlan = state.connection.mode == "chatgpt" && ui.connected
     val usingApi = state.connection.mode != "chatgpt" && ui.connected
+    val chatGptPrimaryForNewUser = Setup099Logic.prefersChatGpt(state.setup099, state.onboardingComplete)
     val readyAccount = active?.takeIf { it.connected && it.planEnabled }
         ?: ui.chatGpt.accounts.firstOrNull { it.connected && it.planEnabled }
     val returningAccount = active?.id.takeIf { state.connection.mode == "chatgpt" }
@@ -73,12 +77,12 @@ fun ConnectionScreen(
     val primaryAccount = when {
         planBusy -> null
         usingPlan -> active
-        !usingApi -> readyAccount
+        chatGptPrimaryForNewUser || state.connection.mode == "chatgpt" -> readyAccount
         else -> null
     }
     var removingAccount by rememberSaveable { mutableStateOf<String?>(null) }
     var showAccounts by rememberSaveable { mutableStateOf(false) }
-    var showApi by rememberSaveable { mutableStateOf(usingApi) }
+    var showApi by rememberSaveable(state.connection.mode) { mutableStateOf(false) }
     var replacingKey by rememberSaveable { mutableStateOf(false) }
     var connectionRequested by rememberSaveable { mutableStateOf(false) }
     var changedConnection by rememberSaveable { mutableStateOf(false) }
@@ -115,11 +119,17 @@ fun ConnectionScreen(
 
     LaunchedEffect(ui.connecting, ui.connected, state.connection, ui.error, ui.notice) {
         if (!ui.connecting && ui.connected && ui.error == null && ui.notice == "connected" && connectionRequested) {
+            val verifiedAccount = active?.takeIf { it.id == state.connection.accountId && it.connected }
+            val verifiedModel = state.connection.mode == "chatgpt" && state.connection.accountId.isNotBlank() &&
+                verifiedAccount?.models?.any { it.slug == state.connection.model } == true
             key = ""
             replacingKey = false
             connectionRequested = false
             changedConnection = true
-            if (state.connection.mode == "chatgpt") showApi = false
+            showApi = false
+            // The verified, configured model is the success boundary. No entitlement or billing claim
+            // is inferred here; persistence and one-time routing are the host's responsibility.
+            if (firstRunSetupActive && verifiedModel) onFirstChatGptConnectionConfirmed(state.connection.accountId)
         }
     }
 
@@ -151,7 +161,26 @@ fun ConnectionScreen(
                     Text(stringResource(if (changedConnection) R.string.feed_refresh_mine else R.string.feed_back_feed))
                 }
             }
-        } else if (!usingApi && readyAccount != null) {
+        } else if (usingApi) {
+            AppCard {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Icons.Outlined.CheckCircleOutline, null, tint = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.connection_existing_provider_099), style = MaterialTheme.typography.titleMedium)
+                }
+                Text("${state.connection.mode.replaceFirstChar { it.uppercase() }} · ${state.connection.model}",
+                    style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.connection_existing_provider_body_099), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Button(onClick = { onDone(changedConnection) }, enabled = !ui.connecting,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("connection-continue"), shape = RoundedCornerShape(16.dp)) {
+                    Text(stringResource(if (changedConnection) R.string.feed_refresh_mine else R.string.feed_back_feed))
+                }
+                TextButton(onClick = { showApi = true }, enabled = !ui.connecting,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("connection-manage-provider-099")) {
+                    Text(stringResource(R.string.connection_manage_provider_099))
+                }
+            }
+        } else if (readyAccount != null && (chatGptPrimaryForNewUser || state.connection.mode == "chatgpt")) {
             val ready = readyAccount
             AppCard {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -165,6 +194,18 @@ fun ConnectionScreen(
                 Button(onClick = { useAccount(ready) }, enabled = !ui.connecting,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("chatgpt-retry-account"), shape = RoundedCornerShape(16.dp)) {
                     Text(stringResource(R.string.edition_check_connection))
+                }
+            }
+        } else if (!chatGptPrimaryForNewUser && state.connection.mode != "chatgpt") {
+            AppCard {
+                Text(stringResource(R.string.connection_existing_provider_099), style = MaterialTheme.typography.titleMedium)
+                Text("${state.connection.mode.replaceFirstChar { it.uppercase() }} · ${state.connection.model}",
+                    style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.connection_existing_provider_body_099), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Button(onClick = { showApi = true }, enabled = !ui.connecting,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("connection-reconnect-provider-099"), shape = RoundedCornerShape(16.dp)) {
+                    Text(stringResource(R.string.connection_reconnect_provider_099))
                 }
             }
         } else {
@@ -257,11 +298,24 @@ fun ConnectionScreen(
         FilledTonalButton(onClick = { showApi = !showApi; if (!showApi) key = "" }, enabled = !ui.connecting,
             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("connection-api-alternative"), shape = RoundedCornerShape(20.dp)) {
             Icon(Icons.Outlined.Key, null, Modifier.size(20.dp)); Spacer(Modifier.width(10.dp))
-            Text(stringResource(if (usingApi) R.string.chatgpt_api_heading else R.string.connection_providers_092), modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.connection_providers_092), modifier = Modifier.weight(1f))
             Spacer(Modifier.width(6.dp))
             Icon(if (showApi) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
         }
         if (showApi) {
+            if (state.connection.mode != "chatgpt") AppCard(modifier = Modifier.testTag("chatgpt-alternative-primary-099")) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ChatGptMark(Modifier.size(24.dp))
+                    Text(stringResource(R.string.chatgpt_connect_title), style = MaterialTheme.typography.titleMedium)
+                }
+                Text(stringResource(R.string.chatgpt_connect_body), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                ChatGptSignInButton(enabled = !ui.connecting, onClick = {
+                    key = ""
+                    connectionRequested = true
+                    onChatGptSignIn(returningAccount)
+                }, tag = "chatgpt-sign-in-alternative-099")
+            }
             if (usingApi && !replacingKey) {
                 AppCard {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -335,7 +389,9 @@ private fun ChatGptAccountRow(account: ChatGptAccount, active: Boolean, enabled:
             ChatGptModelPicker(account.models, selected, enabled, tag = "chatgpt-model-picker-" + account.id, onChoose = onModel)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (!active && account.connected && account.planEnabled) FilledTonalButton(onClick = onUse, enabled = enabled,
-                modifier = Modifier.testTag("chatgpt-use-${account.id}")) { Text(stringResource(R.string.chatgpt_use_account)) }
+                modifier = Modifier.testTag("chatgpt-use-${account.id}")) {
+                Text(stringResource(if (account.models.isEmpty()) R.string.edition_check_connection else R.string.chatgpt_use_account))
+            }
             if (account.connected) TextButton(onClick = onSignOut, enabled = enabled, modifier = Modifier.testTag("chatgpt-sign-out-${account.id}")) {
                 Text(stringResource(R.string.chatgpt_sign_out))
             }

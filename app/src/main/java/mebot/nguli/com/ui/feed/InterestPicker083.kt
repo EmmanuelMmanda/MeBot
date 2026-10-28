@@ -27,7 +27,12 @@ import mebot.nguli.com.core.ModuleDiscovery
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun InterestPicker083(selectedKinds: List<String>, enabled: Boolean, onChange: (List<String>) -> Unit) {
+internal fun InterestPicker083(
+    selectedKinds: List<String>,
+    enabled: Boolean,
+    tagPrefix: String = "onboarding",
+    onChange: (List<String>) -> Unit,
+) {
     var query by rememberSaveable { mutableStateOf("") }
     var group by rememberSaveable { mutableStateOf(ModuleDiscovery.ALL) }
     var expanded by rememberSaveable { mutableStateOf(false) }
@@ -38,15 +43,15 @@ internal fun InterestPicker083(selectedKinds: List<String>, enabled: Boolean, on
     val visible = if (expanded || query.isNotBlank() || group != ModuleDiscovery.ALL) matches else matches.take(12)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.interests_selected, selectedKinds.size), style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("onboarding-selected-count"))
+            color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("$tagPrefix-selected-count"))
         OutlinedTextField(query, { query = it.take(120) }, enabled = enabled, singleLine = true,
             placeholder = { Text(stringResource(R.string.interests_search)) }, leadingIcon = { Icon(Icons.Outlined.Search, null) },
             trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }, enabled = enabled) { Icon(Icons.Outlined.Close, stringResource(R.string.modules_clear_search)) } },
-            shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().testTag("onboarding-interest-search"))
+            shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().testTag("$tagPrefix-interest-search"))
         HorizontalRail(listOf(ModuleDiscovery.ALL) + ModuleCatalog.groups, itemKey = { it }, selectedKey = group) { key ->
             FilterChip(selected = group == key, enabled = enabled, onClick = { group = key },
                 label = { Text(stringResource(when(key) { "growth" -> R.string.module_group_growth; "life" -> R.string.module_group_life; "signals" -> R.string.module_group_signals; else -> R.string.modules_all_categories })) },
-                modifier = Modifier.heightIn(min = 48.dp).testTag("onboarding-interest-group-$key"))
+                modifier = Modifier.heightIn(min = 48.dp).testTag("$tagPrefix-interest-group-$key"))
         }
         // Restore the original equal-width icon tiles. Keep large-text accessibility,
         // rather than shrinking the system font scale to force two cramped columns.
@@ -61,7 +66,7 @@ internal fun InterestPicker083(selectedKinds: List<String>, enabled: Boolean, on
                             shape = RoundedCornerShape(16.dp),
                             color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
                             border = if (isSelected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("onboarding-interest-${preset.kind}")
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("$tagPrefix-interest-${preset.kind}")
                                 .semantics { selected = isSelected; role = Role.Checkbox; toggleableState = if (isSelected) ToggleableState.On else ToggleableState.Off }) {
                             Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -78,7 +83,7 @@ internal fun InterestPicker083(selectedKinds: List<String>, enabled: Boolean, on
         }
         if (matches.isEmpty()) Text(stringResource(R.string.interests_empty), style = MaterialTheme.typography.bodyMedium)
         if (matches.size > 12 && query.isBlank() && group == ModuleDiscovery.ALL) TextButton(onClick = { expanded = !expanded }, enabled = enabled,
-            modifier = Modifier.fillMaxWidth().testTag("onboarding-interests-more")) {
+            modifier = Modifier.fillMaxWidth().testTag("$tagPrefix-interests-more")) {
             Text(stringResource(if (expanded) R.string.interests_less else R.string.interests_more))
         }
     }

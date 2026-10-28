@@ -34,7 +34,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 @Composable
-fun YouScreen(ui: FeedUiState, onContext: () -> Unit, onConnect: () -> Unit, onDelivery: () -> Unit, onSettings: () -> Unit, onData: () -> Unit, onSoftwareUpdates: (() -> Unit)? = null, onAppLock: () -> Unit = {}, onStarred: () -> Unit = {}) {
+fun YouScreen(ui: FeedUiState, onContext: () -> Unit, onConnect: () -> Unit, onDelivery: () -> Unit, onSettings: () -> Unit, onData: () -> Unit, onSoftwareUpdates: (() -> Unit)? = null, onAppLock: () -> Unit = {}, onStarred: () -> Unit = {}, onInterests: (() -> Unit)? = null) {
     val state = ui.state ?: return
     ScreenContainer {
         ScreenTitle(stringResource(R.string.feed_you_title))
@@ -47,7 +47,10 @@ fun YouScreen(ui: FeedUiState, onContext: () -> Unit, onConnect: () -> Unit, onD
                 }
             }
         }
-        FeedSettingsRow(Icons.Outlined.PersonOutline, stringResource(R.string.preferences_title_083), stringResource(R.string.preferences_body_083), onContext)
+        FeedSettingsRow(Icons.Outlined.PersonOutline, stringResource(R.string.preferences_title_083), stringResource(R.string.preferences_body_083), onContext,
+            testTag = "you-context")
+        onInterests?.let { FeedSettingsRow(Icons.Outlined.Tune, stringResource(R.string.personal_interests_edit_099),
+            stringResource(R.string.personal_interests_edit_body_099), it, testTag = "you-personal-interests") }
         FeedSettingsRow(Icons.Outlined.ChatBubbleOutline, stringResource(R.string.feed_connection),
             if (ui.connected && state.connection.mode == "chatgpt") stringResource(R.string.chatgpt_using_plan)
             else if (ui.connected) "${stringResource(R.string.feed_connected)} · ${state.connection.model}" else stringResource(R.string.feed_not_connected), onConnect)
@@ -65,19 +68,27 @@ fun YouScreen(ui: FeedUiState, onContext: () -> Unit, onConnect: () -> Unit, onD
 @Composable
 fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onImportContext: () -> Unit = {},
     importRefreshRequest: Int = 0, onImportRefreshConsumed: (Int) -> Unit = {},
-    revealImportedNotesRequest: Int = 0, onNotesRevealConsumed: (Int) -> Unit = {}, onDone: () -> Unit) {
+    revealImportedNotesRequest: Int = 0, onNotesRevealConsumed: (Int) -> Unit = {},
+    setup099Stage: String? = null, onStartSetupFeed: (() -> Unit)? = null,
+    onInterests: ((String?) -> Unit)? = null, interestsReturn: Int = 0,
+    onInterestsReturnConsumed: (Int) -> Unit = {}, onDone: () -> Unit) {
     val state = ui.state ?: return
     var name by rememberSaveable(state.name) { mutableStateOf(state.name) }
     var region by rememberSaveable(state.region) { mutableStateOf(state.region) }
     var timezone by rememberSaveable(state.timezone) { mutableStateOf(state.timezone) }
-    var entriesJson by rememberSaveable(state.context) {
-        mutableStateOf(FeedJson.encodeToString(PersonalProfile085.draft(state.context, state.modules.filter { it.enabled && it.kind != "weather" }.map { it.kind }.toSet())))
+    val remoteContextDraftJson = remember(state.context, state.modules) {
+        FeedJson.encodeToString(PersonalProfile085.draft(state.context,
+            state.modules.filter { it.enabled && it.kind != "weather" }.map { it.kind }.toSet()))
+    }
+    var entriesJson by rememberSaveable {
+        mutableStateOf(remoteContextDraftJson)
     }
     val entries = remember(entriesJson) { FeedJson.decodeFromString<List<ContextEntry>>(entriesJson) }
     // SaveableStateHolder can restore this page's local draft after an import while its input
     // changed off-screen. Reconcile against persisted snapshots, but don't overwrite a draft
     // while the repository state itself is unchanged.
     val persistedContext = remember(state.context) { contextSnapshotFingerprint(FeedJson.encodeToString(state.context)) }
+    var savedContextJson by rememberSaveable { mutableStateOf(remoteContextDraftJson) }
     var savedName by rememberSaveable { mutableStateOf(state.name) }
     var savedRegion by rememberSaveable { mutableStateOf(state.region) }
     var savedTimezone by rememberSaveable { mutableStateOf(state.timezone) }
@@ -87,16 +98,31 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onImportContext: () -> Uni
     var pending by rememberSaveable { mutableStateOf(false) }
     var desiredContextJson by rememberSaveable { mutableStateOf<String?>(null) }
     var scopeEntryId by rememberSaveable { mutableStateOf<String?>(null) }
+    var interestHandoffText by rememberSaveable { mutableStateOf<String?>(null) }
+    var interestHandoffPending by rememberSaveable { mutableStateOf(false) }
     val timezoneInvalid = timezone.isNotBlank() && runCatching { ZoneId.of(timezone.trim()) }.isFailure
     val canEdit = !ui.contextSaving && !ui.importWorking
     val documents = mebot.nguli.com.documents.LocalDocumentActions.current
-    LaunchedEffect(state.name, state.region, state.timezone, persistedContext, importRefreshRequest) {
+    LaunchedEffect(state.name, state.region, state.timezone, persistedContext, remoteContextDraftJson, importRefreshRequest, interestsReturn) {
         val importedSuccessfully = importRefreshRequest > 0
         if (importedSuccessfully || savedName != state.name) { name = state.name; savedName = state.name }
         if (importedSuccessfully || savedRegion != state.region) { region = state.region; savedRegion = state.region }
         if (importedSuccessfully || savedTimezone != state.timezone) { timezone = state.timezone; savedTimezone = state.timezone }
-        if (importedSuccessfully || savedContext != persistedContext) {
-            entriesJson = FeedJson.encodeToString(PersonalProfile085.draft(state.context, state.modules.filter { it.enabled && it.kind != "weather" }.map { it.kind }.toSet()))
+        if (importedSuccessfully) {
+            // A reviewed import deliberately replaces the previous local context draft.
+            entriesJson = remoteContextDraftJson
+            savedContextJson = remoteContextDraftJson
+            savedContext = persistedContext
+            interestHandoffPending = false
+            interestHandoffText = null
+        } else if (savedContext != persistedContext) {
+            val base = runCatching { FeedJson.decodeFromString<List<ContextEntry>>(savedContextJson) }.getOrDefault(emptyList())
+            val remote = runCatching { FeedJson.decodeFromString<List<ContextEntry>>(remoteContextDraftJson) }.getOrDefault(emptyList())
+            val adoptHandedOffInterest = interestHandoffPending && interestHandoffText != null &&
+                entries.firstOrNull { it.id == PERSONAL_INTEREST_NOTE_ID }?.text == interestHandoffText
+            val merged = mergeContextDraft099(base, entries, remote, interestHandoffText, adoptHandedOffInterest)
+            entriesJson = FeedJson.encodeToString(merged)
+            savedContextJson = remoteContextDraftJson
             savedContext = persistedContext
         }
         if (importedSuccessfully) {
@@ -105,6 +131,14 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onImportContext: () -> Uni
             desiredContextJson = null
             scopeEntryId = null
             onImportRefreshConsumed(importRefreshRequest)
+        }
+        if (interestsReturn > 0) {
+            // PersonalInterests099Screen returns only after its token/revision is durably saved
+            // and visible through FeedUiState. This one-shot marker lets us adopt that note while
+            // preserving unrelated unsaved profile/note edits in this screen's saved draft.
+            interestHandoffPending = false
+            interestHandoffText = null
+            onInterestsReturnConsumed(interestsReturn)
         }
     }
     LaunchedEffect(state.name, state.region, state.timezone, state.context, pending, ui.contextSaving, importRefreshRequest) {
@@ -123,12 +157,28 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onImportContext: () -> Uni
         }
     }
     LaunchedEffect(ui.error) { if (ui.error != null) pending = false }
-    ScreenContainer {
+    ScreenContainer(Modifier.testTag("context-screen")) {
         ScreenTitle(stringResource(R.string.preferences_title_083), stringResource(R.string.preferences_body_083))
         ImportFeedback(ui)
+        if (setup099Stage == Setup099Stage.START_FEED && onStartSetupFeed != null) {
+            Setup099NextFeedAction(Setup099Logic.hasConfirmedContext(state.context), onStartSetupFeed,
+                errorCode = ui.error, onDismissError = vm::clearMessage)
+        }
         FeedSettingsRow(Icons.Outlined.FileUpload, stringResource(R.string.context_import_title_092),
             stringResource(R.string.context_import_entry_092), onImportContext,
             enabled = canEdit && !pending, testTag = "context-import-entry")
+        onInterests?.let { openTopics ->
+            val localInterest = entries.firstOrNull { it.id == PERSONAL_INTEREST_NOTE_ID }
+            val baselineInterest = runCatching { FeedJson.decodeFromString<List<ContextEntry>>(savedContextJson) }
+                .getOrDefault(emptyList()).firstOrNull { it.id == PERSONAL_INTEREST_NOTE_ID }
+            val handoff = localInterest?.text ?: if (baselineInterest != null) "" else null
+            FeedSettingsRow(Icons.Outlined.Tune, stringResource(R.string.personal_interests_edit_099),
+                stringResource(R.string.personal_interests_edit_body_099), onClick = {
+                    interestHandoffText = handoff
+                    interestHandoffPending = handoff != null
+                    openTopics(handoff)
+                }, enabled = canEdit && !pending, testTag = "context-personal-interests")
+        }
         AppCard {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Outlined.LocationOn, null)
@@ -254,6 +304,34 @@ fun ContextScreen(ui: FeedUiState, vm: FeedViewModel, onImportContext: () -> Uni
 
 private fun contextSnapshotFingerprint(serialized: String): String = MessageDigest.getInstance("SHA-256")
     .digest(serialized.toByteArray(Charsets.UTF_8)).joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
+
+private const val PERSONAL_INTEREST_NOTE_ID = "onboarding-interests"
+
+/** Remote context updates replace untouched local draft entries while retaining local edits/deletions. */
+internal fun mergeContextDraft099(
+    base: List<ContextEntry>,
+    local: List<ContextEntry>,
+    remote: List<ContextEntry>,
+    handedOffInterestText: String?,
+    adoptHandedOffInterest: Boolean,
+): List<ContextEntry> {
+    val baseById = base.associateBy { it.id }
+    val localById = local.associateBy { it.id }
+    val remoteById = remote.associateBy { it.id }
+    val orderedIds = (remote.map { it.id } + local.map { it.id } + base.map { it.id }).distinct()
+    return orderedIds.mapNotNull { id ->
+        val previous = baseById[id]
+        val draft = localById[id]
+        val durable = remoteById[id]
+        val handedOff = id == PERSONAL_INTEREST_NOTE_ID && adoptHandedOffInterest &&
+            handedOffInterestText != null && draft?.text == handedOffInterestText && durable != previous
+        when {
+            handedOff -> durable
+            draft == previous -> durable
+            else -> draft
+        }
+    }
+}
 
 @Composable
 fun DeliveryScreen(ui: FeedUiState, vm: FeedViewModel, onDone: () -> Unit, onConnection: (() -> Unit)? = null) =

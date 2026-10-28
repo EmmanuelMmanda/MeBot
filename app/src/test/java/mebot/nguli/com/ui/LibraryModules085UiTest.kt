@@ -47,7 +47,7 @@ class LibraryModules085UiTest {
         val page=mutableStateOf("modules")
         compose.setContent { MeBotTheme(Settings(language=language)) {
             CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density,fontScale), LocalPublisherImageLoader provides {null},
-                LocalFeedClock provides items.first().fetchedAtMillis, LocalRelevanceContext provides RelevanceUiContext(state,onStar={},onConfigureStar={_,_,_->},onCollection={_,_->})) {
+                LocalFeedClock provides items.first().fetchedAtMillis, LocalRelevanceContext provides RelevanceUiContext(state,onStar={_,_->},onConfigureStar={_,_,_->},onCollection={_,_->})) {
                 Scaffold(bottomBar={MeBotNavigation(page.value,{page.value=it})}) { padding -> Box(Modifier.fillMaxSize().padding(padding)) {
                     if(page.value=="modules") ModulesScreen(state,AppState(),{},{_,_->},{},{_,_->})
                     else SavedFeed(state,{},{},{page.value="modules"})

@@ -56,10 +56,11 @@ class MeBotShowcase098JourneyTest {
         }
         waitForTag("feed-screen")
         compose.waitUntil(15_000) { runBlocking { app.feedRepository.current() }.items.size == 8 }
-        if (compose.onAllNodesWithText(compose.activity.getString(R.string.notice_later)).fetchSemanticsNodes().isNotEmpty()) {
-            compose.onNodeWithText(compose.activity.getString(R.string.notice_later)).performClick()
+        compose.onNodeWithTag("setup-tip-later-missing_ai").performScrollTo().performClick()
+        compose.waitUntil(10_000) {
+            runBlocking { app.feedRepository.current() }.dismissedNotices["missing_ai"] != null &&
+                compose.onAllNodesWithTag("setup-notice-missing_ai").fetchSemanticsNodes().isEmpty()
         }
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("setup-notice-connection").fetchSemanticsNodes().isEmpty() }
         assertEquals("Static showcase fixture must not make provider requests", 0, runBlocking { app.feedRepository.current() }.requestsToday)
         assertEquals(0, app.suggestionCalls)
         assertEquals(0, app.answerCalls)

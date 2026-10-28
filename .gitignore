@@ -30,6 +30,7 @@ service/__pycache__/
 *.otf
 *.woff
 *.woff2
+!docs/assets/figtree.ttf
 
 # Local Python test state
 .pytest_cache/

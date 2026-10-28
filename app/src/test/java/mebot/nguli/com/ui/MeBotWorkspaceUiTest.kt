@@ -39,6 +39,7 @@ import mebot.nguli.com.feed.SuggestionTargetSnapshot097
 import mebot.nguli.com.ui.feed.AiWorkspace
 import mebot.nguli.com.ui.feed.FeedDetail
 import java.io.File
+import kotlinx.coroutines.CompletableJob
 import kotlinx.coroutines.Job
 import org.junit.Assert.*
 import org.junit.Rule
@@ -84,7 +85,7 @@ class MeBotWorkspaceUiTest {
     private var suggestionsNeedGeneration = false
     private var generationCalls = 0
     private var holdSuggestionGeneration = false
-    private var activeSuggestionGeneration: Job? = null
+    private var activeSuggestionGeneration: CompletableJob? = null
     private val cancelledSuggestionRequestIds = mutableListOf<String>()
     private var loaded = 0
     private var cancelled = 0
@@ -96,20 +97,20 @@ class MeBotWorkspaceUiTest {
         ui.value = ui.value.copy(detailItemId = story.id, detailLoading = true, detailText = "A real provisional explanation from the controlled stream.")
         show(detail = true)
         compose.runOnIdle { assertEquals(1, loaded) }
-        detail("detail-brief-draft").assertTextEquals("A real provisional explanation from the controlled stream.")
+        assertRichResponseText("detail-brief-draft", "A real provisional explanation from the controlled stream.")
         compose.onAllNodesWithTag("detail-brief-answer").assertCountEquals(0)
         detail("detail-brief-stop").performClick()
         assertEquals(1, cancelled)
         compose.runOnIdle { ui.value = ui.value.copy(detailLoading = false, detailText = "", detailTurns = listOf(
             AiTurn(id = "brief", role = "assistant", text = "A completed, sourced explanation for this preview.", citations = listOf(FeedCitation("Preview original", story.sourceUrl))))) }
-        detail("detail-brief-answer").assertTextEquals("A completed, sourced explanation for this preview.")
+        assertRichResponseText("detail-brief-answer", "A completed, sourced explanation for this preview.")
         detail("detail-followup").performTextInput("Which prerequisite matters first?")
         detail("detail-followup-send").performClick()
         assertEquals(listOf("Which prerequisite matters first?"), questions)
         compose.runOnIdle {
             ui.value = ui.value.copy(detailLoading = true, detailTurns = ui.value.detailTurns + AiTurn("follow-question", "user", questions.single()), detailText = "The first requirement is")
         }
-        detail("detail-brief-draft").assertTextEquals("The first requirement is")
+        assertRichResponseText("detail-brief-draft", "The first requirement is")
         compose.onNodeWithTag("detail-followup-send").assertIsNotEnabled()
         compose.runOnIdle { ui.value = ui.value.copy(detailLoading = false, detailText = "", detailTurns = ui.value.detailTurns + AiTurn("follow-answer", "assistant", "A completed follow-up answer.")) }
         detail("detail-followup").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
@@ -121,7 +122,7 @@ class MeBotWorkspaceUiTest {
     @Test fun detailErrorPreservesPartialTextAndSourcesAndRelatedActionsWork() {
         ui.value = ui.value.copy(detailItemId = story.id, detailText = "Unfinished preview text.", detailError = "offline")
         show(detail = true)
-        detail("detail-brief-draft").assertTextEquals("Unfinished preview text.")
+        assertRichResponseText("detail-brief-draft", "Unfinished preview text.")
         compose.onNodeWithText(text(R.string.workspace_partial)).assertExists()
         compose.onNodeWithText(text(R.string.feed_retry)).performScrollTo().performClick()
         assertEquals(1, retry)
@@ -207,16 +208,19 @@ class MeBotWorkspaceUiTest {
         assertTrue(usedSuggestions.isEmpty() && questions.isEmpty())
     }
 
-    @Test fun openingWithoutPreparedQuestionsOnlyCallsTheExplicitGenerationCallback() {
+    @Test fun explicitOpenWithoutPreparedQuestionsStartsOneGenerationAndShowsPreparedAngles() {
         suggestionsNeedGeneration = true
+        // Hold the test transport open so the intermediate progress state is deterministic
+        // instead of racing a synchronously completed fake Job.
+        holdSuggestionGeneration = true
         show()
         compose.onNodeWithTag("workspace-suggestions-open").performClick()
-        compose.onNodeWithTag("workspace-suggestions-question-0").assertDoesNotExist()
-        compose.onNodeWithTag("workspace-suggestions-generate").assertIsDisplayed()
-        assertEquals("Opening the sheet does not start provider work", 0, generationCalls)
-        compose.onNodeWithTag("workspace-suggestions-generate").performClick()
+        compose.onNodeWithTag("workspace-suggestions-generating").assertExists()
+        assertEquals("One deliberate open starts one lazy generation", 1, generationCalls)
+        assertTrue("The test provider request is held until the progress assertion", activeSuggestionGeneration?.isActive == true)
+        compose.runOnIdle { assertTrue(activeSuggestionGeneration?.complete() == true) }
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("workspace-suggestions-question-4").fetchSemanticsNodes().isNotEmpty() }
-        assertEquals("The explicit action starts one generation request", 1, generationCalls)
+        compose.onNodeWithTag("workspace-suggestions-generate").assertDoesNotExist()
         compose.onNodeWithTag("workspace-suggestions-provenance").assertTextEquals(text(R.string.suggestions_ai_generated))
         assertTrue(usedSuggestions.isEmpty() && editedSuggestions.isEmpty() && questions.isEmpty())
     }
@@ -226,7 +230,6 @@ class MeBotWorkspaceUiTest {
         holdSuggestionGeneration = true
         show()
         compose.onNodeWithTag("workspace-suggestions-open").performClick()
-        compose.onNodeWithTag("workspace-suggestions-generate").performClick()
         compose.onNodeWithTag("workspace-suggestions-generating").assertExists()
         assertEquals(1, generationCalls)
 
@@ -245,7 +248,6 @@ class MeBotWorkspaceUiTest {
         holdSuggestionGeneration = true
         show()
         compose.onNodeWithTag("workspace-suggestions-open").performClick()
-        compose.onNodeWithTag("workspace-suggestions-generate").performClick()
         compose.onNodeWithTag("workspace-suggestions-generating").assertExists()
 
         compose.runOnIdle { ShadowDialog.getLatestDialog().onBackPressed() }
@@ -407,7 +409,7 @@ class MeBotWorkspaceUiTest {
         compose.onNodeWithTag("workspace-question").performTextInput("Explain the first step")
         compose.onNodeWithTag("workspace-send").performClick()
         compose.runOnIdle { ui.value = ui.value.copy(asking = true, answer = "The response is arriving", question = questions.single()) }
-        message("workspace-draft").assertTextEquals("The response is arriving")
+        assertRichResponseText("workspace-draft", "The response is arriving")
         compose.onNodeWithTag("workspace-cancel").performClick()
         assertEquals(1, cancelled)
         compose.runOnIdle {
@@ -543,6 +545,10 @@ class MeBotWorkspaceUiTest {
     }
 
     private fun detail(tag: String) = compose.onNodeWithTag(tag).performScrollTo()
+    private fun assertRichResponseText(tag: String, expected: String) {
+        val response = if (tag == "workspace-draft") message(tag) else detail(tag)
+        response.assert(hasAnyDescendant(hasText(expected)))
+    }
     private fun assertWorkspaceControlsStacked(stacked: Boolean) {
         val model = compose.onNodeWithTag("workspace-model").fetchSemanticsNode().boundsInRoot
         val scope = compose.onNodeWithTag("workspace-scope").fetchSemanticsNode().boundsInRoot

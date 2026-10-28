@@ -19,6 +19,7 @@ import mebot.nguli.com.feed.SuggestionTargets097
 import mebot.nguli.com.feed.SuggestionSheetStatus097
 import mebot.nguli.com.feed.FeedTestApplication
 import java.io.File
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -64,7 +65,7 @@ class MeBotFeedJourneyTest {
         app.answerCalls = 0
         app.suggestionQuestions = null
         app.suggestionCalls = 0
-        waitForTag("onboarding-screen")
+        waitForTag("setup-099-onboarding")
     }
 
     @Test fun firstVisitRefreshSaveReopenAndOfflineRetryKeepTheSameStory() {
@@ -269,18 +270,54 @@ class MeBotFeedJourneyTest {
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("connection-key").fetchSemanticsNodes().isEmpty() }
         compose.activityRule.scenario.recreate()
         compose.onNodeWithTag("connection-key").assertDoesNotExist()
+        val feedViewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[mebot.nguli.com.feed.FeedViewModel::class.java]
+        val beforeConnectionRefresh = state()
         compose.onNodeWithTag("connection-continue").performScrollTo().performClick()
         waitForText(text(R.string.feed_you_title))
+        compose.waitUntil(15_000) {
+            compose.waitForIdle()
+            val current = state()
+            val currentUi = feedViewModel.ui.value
+            current.requestsToday > beforeConnectionRefresh.requestsToday &&
+                current.lastAiRefreshMillis > beforeConnectionRefresh.lastAiRefreshMillis &&
+                !currentUi.refreshing && !currentUi.connecting
+        }
+        compose.waitForIdle()
+        val requestsBeforeHomePreparation = state().requestsToday
+        val suggestionsBeforeHomePreparation = app.suggestionCalls
+        val targetsBeforeHomePreparation = app.suggestionRequestTargets.size
         tab("feed")
         waitForTag("feed-screen")
-        waitForState { it.lastAiRefreshMillis > 0 }
+        waitForState { it.lastAiRefreshMillis > beforeConnectionRefresh.lastAiRefreshMillis }
+        val itemTarget = requireNotNull(SuggestionTargets097.item(state(), "toolkit", "en"))
+        awaitPreparedSuggestionSet(feedViewModel, itemTarget, "en", requestsBeforeHomePreparation + 1,
+            suggestionsBeforeHomePreparation + 1, "connection-recovery-home-preparation")
+        assertEquals("Home prepares only the current toolkit item",
+            listOf("toolkit" to null), app.suggestionRequestTargets.drop(targetsBeforeHomePreparation))
         val requestsBeforeQuestion = state().requestsToday
+        val answerCallsBeforeDetail = app.answerCalls
+        val suggestionsBeforeDetail = app.suggestionCalls
+        val targetsBeforeDetail = app.suggestionRequestTargets.size
         compose.onNodeWithTag("item-toolkit").performScrollTo().performClick()
         waitForState { it.briefs.any { brief -> brief.itemId == "toolkit" } }
-        compose.onNodeWithTag("detail-brief-answer").performScrollTo().assertTextEquals(app.answerText)
+        compose.onNodeWithTag("detail-brief-answer").performScrollTo()
+            .assert(hasAnyDescendant(hasText(app.answerText)))
         assertEquals(requestsBeforeQuestion + 1, state().requestsToday)
-        val feedViewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[mebot.nguli.com.feed.FeedViewModel::class.java]
+        assertEquals("Opening Detail adds exactly its one automatic explanation", answerCallsBeforeDetail + 1, app.answerCalls)
+        assertEquals("Detail adopts the prepared toolkit item instead of generating a duplicate",
+            suggestionsBeforeDetail, app.suggestionCalls)
+        assertTrue("Detail handoff does not dispatch a second item preparation",
+            app.suggestionRequestTargets.drop(targetsBeforeDetail).isEmpty())
         assertSame("Saved-state factory keeps the Activity's production Application", app, feedViewModel.getApplication())
+
+        val requestsBeforeEmptyConversation = state().requestsToday
+        val suggestionsBeforeEmptyConversation = app.suggestionCalls
+        val targetsBeforeEmptyConversation = app.suggestionRequestTargets.size
+        val stateBeforeEmptyConversation = state()
+        val hasApprovedConversationContext = stateBeforeEmptyConversation.context.any { entry ->
+            entry.confirmed && entry.text.isNotBlank() &&
+                (PersonalProfile085.isGlobal(entry) || (!entry.global && "news" in entry.scopes))
+        }
         compose.onNodeWithTag("detail-ask").performScrollTo().performClick()
         waitForTag("workspace-question")
         compose.onNodeWithTag("workspace-send").assertIsNotEnabled()
@@ -304,7 +341,21 @@ class MeBotFeedJourneyTest {
                 "opening=${latest.conversationOpening}, ready=${latest.conversationReady}, error=${latest.error}, " +
                 "renderedStory=${renderedStory}, renderedOpening=${renderedOpening}, persistedThreads=${persistedThreads}", timeout)
         }
-        val selectedThreadId = feedViewModel.ui.value.activeConversationId
+        val selectedThreadId = requireNotNull(feedViewModel.ui.value.activeConversationId)
+        val emptyConversationTarget = requireNotNull(SuggestionTargets097.conversation(state(), selectedThreadId, "en"))
+        if (hasApprovedConversationContext) {
+            awaitPreparedSuggestionSet(feedViewModel, emptyConversationTarget, "en", requestsBeforeEmptyConversation + 1,
+                suggestionsBeforeEmptyConversation + 1, "connection-recovery-empty-conversation-preparation")
+            assertEquals("An eligible new thread receives one exact linked-context preparation",
+                listOf("toolkit" to selectedThreadId),
+                app.suggestionRequestTargets.drop(targetsBeforeEmptyConversation))
+        } else {
+            compose.waitUntil(15_000) { !feedViewModel.ui.value.suggestionWorking }
+            assertEquals("An empty thread without approved context does not infer a suggestion request",
+                requestsBeforeEmptyConversation, state().requestsToday)
+            assertEquals(suggestionsBeforeEmptyConversation, app.suggestionCalls)
+            assertTrue(app.suggestionRequestTargets.drop(targetsBeforeEmptyConversation).isEmpty())
+        }
         compose.onNodeWithTag("workspace-question").performTextInput("How could I use this in a small project?")
         compose.activityRule.scenario.recreate()
         waitForTag("workspace-question")
@@ -316,6 +367,10 @@ class MeBotFeedJourneyTest {
             latest.activeConversationId == selectedThreadId && latest.conversationReady && !latest.conversationOpening
         }
         compose.onNodeWithTag("workspace-opening").assertDoesNotExist()
+        val requestsBeforeFinalSend = state().requestsToday
+        val answerCallsBeforeFinalSend = app.answerCalls
+        val suggestionsBeforeFinalSend = app.suggestionCalls
+        val targetsBeforeFinalSend = app.suggestionRequestTargets.size
         compose.onNodeWithTag("workspace-send").assertIsEnabled().performClick()
         waitForState { it.conversations.any { thread -> thread.itemId == "toolkit" && thread.turns.lastOrNull()?.role == "assistant" } }
         val conversation = state().conversations.single { it.itemId == "toolkit" }
@@ -334,14 +389,26 @@ class MeBotFeedJourneyTest {
         while (shadowOf(compose.activity).nextStartedActivity != null) { }
         compose.onNodeWithTag(sourceTag).performClick()
         assertEquals("https://example.com/toolkit", shadowOf(compose.activity).nextStartedActivity.dataString)
-        assertEquals(requestsBeforeQuestion + 2, state().requestsToday)
+        val completedConversationTarget = requireNotNull(SuggestionTargets097.conversation(state(), selectedThreadId, "en"))
+        awaitPreparedSuggestionSet(feedViewModel, completedConversationTarget, "en", requestsBeforeFinalSend + 2,
+            suggestionsBeforeFinalSend + 1, "connection-recovery-final-conversation-preparation")
+        assertEquals("One explicit final Send calls the answer provider exactly once",
+            answerCallsBeforeFinalSend + 1, app.answerCalls)
+        assertEquals("The new completed transcript gets exactly one linked conversation batch",
+            listOf("toolkit" to selectedThreadId), app.suggestionRequestTargets.drop(targetsBeforeFinalSend))
+        assertEquals("Final Send accounts for one answer and one new completed-transcript preparation",
+            requestsBeforeFinalSend + 2, state().requestsToday)
+        val requestsAfterFinalPreparation = state().requestsToday
+        val suggestionsAfterFinalPreparation = app.suggestionCalls
         screenshot("26-mebot-ask")
         compose.activityRule.scenario.recreate()
         waitForTag("workspace-question")
         compose.onNodeWithTag("workspace-messages").performScrollToNode(hasText(app.answerText))
         compose.onNodeWithText(app.answerText).assertIsDisplayed()
         assertEquals(conversation, state().conversations.single { it.id == conversation.id })
-        assertEquals(requestsBeforeQuestion + 2, state().requestsToday)
+        assertEquals("Recreation reuses the prepared batch without another reservation",
+            requestsAfterFinalPreparation, state().requestsToday)
+        assertEquals(suggestionsAfterFinalPreparation, app.suggestionCalls)
     }
 
     @Test
@@ -353,6 +420,84 @@ class MeBotFeedJourneyTest {
     @Config(qualifiers = "sw-rTZ-w411dp-h891dp-xhdpi")
     fun swahiliFullShellSuggestionSheetsKeepSendAndEditExplicit() =
         runSuggestionJourney("sw", "097-full-shell-sw")
+
+    @Test fun homeLeadPreparationHandsOffToSameItemDetailWithoutDuplicateRequest() {
+        // Exercise Compose lifecycle disposal ordering, not merely VM lease acquisition:
+        // hold the Home route's exact provider request while navigating to its same item.
+        app.sourceItems = listOf(stories().first())
+        app.suggestionQuestions = syntheticProviderQuestions("en")
+        val viewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]
+        val refreshStartedBeforeOnboarding = viewModel.ui.value.refreshProgress.startedAt
+        start()
+        waitForState { it.items.singleOrNull()?.id == "toolkit" && it.lastRefreshMillis > 0 }
+        waitForRefreshCompletion(viewModel, refreshStartedBeforeOnboarding)
+        connectTestProvider()
+
+        val gate = CompletableDeferred<Unit>()
+        val requestEntered = CompletableDeferred<String?>()
+        val requestsBeforePrefetch = state().requestsToday
+        val callsBeforePrefetch = app.suggestionCalls
+        val answersBeforeDetail = app.answerCalls
+        app.suggestionGate = gate
+        app.onSuggestionStarted = { id -> requestEntered.complete(id) }
+        try {
+            tab("feed")
+            waitForTag("feed-screen")
+            compose.waitUntil(15_000) { requestEntered.isCompleted }
+            assertEquals("Home prepares its current lead, not another card", "toolkit", runBlocking { requestEntered.await() })
+            compose.waitUntil(15_000) {
+                state().requestsToday == requestsBeforePrefetch + 1 && app.suggestionCalls == callsBeforePrefetch + 1
+            }
+
+            compose.onNodeWithTag("item-toolkit").performScrollTo().performClick()
+            waitForTag("detail-save")
+            val detailTarget = requireNotNull(SuggestionTargets097.item(state(), "toolkit", "en"))
+            // Opening an eligible item also launches its automatic detail brief. That is a
+            // separate, explicit AI answer request; only the held suggestion batch must remain
+            // coalesced across Home disposal and Detail adoption.
+            val detailProgressObserved = runCatching {
+                compose.waitUntil(15_000) {
+                    state().requestsToday == requestsBeforePrefetch + 2 &&
+                        app.suggestionCalls == callsBeforePrefetch + 1 && app.answerCalls == answersBeforeDetail + 1
+                }
+            }.isSuccess
+            if (!detailProgressObserved) {
+                val latestUi = viewModel.ui.value
+                throw AssertionError(
+                    "Detail handoff counters: requests=${state().requestsToday} (base=$requestsBeforePrefetch), " +
+                        "suggestions=${app.suggestionCalls} (base=$callsBeforePrefetch), " +
+                        "answers=${app.answerCalls} (base=$answersBeforeDetail), " +
+                        "connected=${latestUi.connected}, detailItem=${latestUi.detailItemId}, " +
+                        "detailLoading=${latestUi.detailLoading}, detailError=${latestUi.detailError}, " +
+                        "vmError=${latestUi.error}, generation=${latestUi.suggestionGeneration}, " +
+                        "activities=${mebot.nguli.com.feed.AiActivityRegistry.state.value.values.map { "${it.operation}:${it.stage}" }}",
+                )
+            }
+            assertEquals("One held suggestion request plus one automatic detail brief", requestsBeforePrefetch + 2, state().requestsToday)
+            assertEquals("Detail adopts the same provider request rather than starting another", callsBeforePrefetch + 1, app.suggestionCalls)
+            assertEquals("The second reservation is the separate detail brief", answersBeforeDetail + 1, app.answerCalls)
+
+            compose.onNodeWithTag("detail-screen").performScrollToNode(hasTestTag("detail-suggestions-toolkit-open"))
+            compose.onNodeWithTag("detail-suggestions-toolkit-open").performClick()
+            waitForTag("detail-suggestions-toolkit-sheet")
+            compose.onNodeWithTag("detail-suggestions-toolkit-generating").assertIsDisplayed()
+            assertEquals(requestsBeforePrefetch + 2, state().requestsToday)
+            assertEquals(callsBeforePrefetch + 1, app.suggestionCalls)
+
+            gate.complete(Unit)
+            awaitPreparedSuggestionSet(viewModel, detailTarget, "en", requestsBeforePrefetch + 2,
+                callsBeforePrefetch + 1, "097-home-detail-prefetch-handoff")
+            assertEquals("A single durable target batch is cached", 1,
+                state().suggestionSets097.count {
+                    it.targetKind == "item" && it.targetId == detailTarget.targetId && it.revision == detailTarget.revision
+                })
+            (0..4).forEach { index -> compose.onNodeWithTag("detail-suggestions-toolkit-question-$index").assertIsDisplayed() }
+        } finally {
+            gate.complete(Unit)
+            app.suggestionGate = null
+            app.onSuggestionStarted = null
+        }
+    }
 
     @Test fun disconnectedTechnologySuggestionsHaveNoLocalFallbackInEnglish() =
         runUnavailableTechnologySuggestions("en")
@@ -435,7 +580,7 @@ class MeBotFeedJourneyTest {
 
     /**
      * Full-shell journey exercises the actual test-provider -> FeedEngine -> cache -> UI path.
-     * Suggestions are never seeded in the repository and sheet open/cancel is read-only.
+     * Suggestions are never seeded; an explicit icon tap starts one lazy request on a miss.
      */
     private fun runSuggestionJourney(language: String, capturePrefix: String) {
         val itemQuestions = syntheticProviderQuestions(language)
@@ -470,28 +615,26 @@ class MeBotFeedJourneyTest {
         waitForState { it.items.size == 3 && it.lastRefreshMillis > 0 }
         connectTestProvider()
 
+        val requestsBeforeHomePreparation = state().requestsToday
+        val suggestionCallsBeforeHomePreparation = app.suggestionCalls
         tab("feed")
         waitForTag("feed-screen")
         val feedViewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[mebot.nguli.com.feed.FeedViewModel::class.java]
         val itemTarget = requireNotNull(SuggestionTargets097.item(state(), "toolkit", language))
-        assertEquals(SuggestionSheetStatus097.NEEDS_GENERATION, feedViewModel.suggestionSheet097(itemTarget, language).status)
-        val requestsBeforeGeneration = state().requestsToday
-        val suggestionCallsBeforeGeneration = app.suggestionCalls
+        // Readiness is route-owned: the active feed matter should have its first batch before
+        // any sheet is opened, with no inference attached to rendering or scrolling.
+        awaitPreparedSuggestionSet(feedViewModel, itemTarget, language, requestsBeforeHomePreparation + 1,
+            suggestionCallsBeforeHomePreparation + 1, "$capturePrefix-home-prefetch-failed")
+        assertEquals(SuggestionSheetStatus097.READY, feedViewModel.suggestionSheet097(itemTarget, language).status)
         screenshot("$capturePrefix-feed-top")
         compose.onNodeWithTag("feed-screen").performScrollToNode(hasTestTag("feed-suggestions-toolkit-open"))
+        val requestsBeforeOpeningPreparedSheet = state().requestsToday
+        val callsBeforeOpeningPreparedSheet = app.suggestionCalls
         compose.onNodeWithTag("feed-suggestions-toolkit-open").assertIsDisplayed().performClick()
-        compose.onNodeWithTag("feed-suggestions-toolkit-generate").assertIsDisplayed()
-        compose.onNodeWithTag("feed-suggestions-toolkit-question-0").assertDoesNotExist()
-        assertEquals("Opening the sheet must not reserve a request", requestsBeforeGeneration, state().requestsToday)
-        assertEquals("Opening the sheet must not call AI", suggestionCallsBeforeGeneration, app.suggestionCalls)
-        compose.onNodeWithTag("feed-suggestions-toolkit-close").performClick()
-        assertEquals(requestsBeforeGeneration, state().requestsToday)
-        assertEquals(suggestionCallsBeforeGeneration, app.suggestionCalls)
-
-        compose.onNodeWithTag("feed-suggestions-toolkit-open").performClick()
-        compose.onNodeWithTag("feed-suggestions-toolkit-generate").performClick()
-        awaitPreparedSuggestionSet(feedViewModel, itemTarget, language, requestsBeforeGeneration + 1,
-            suggestionCallsBeforeGeneration + 1, "$capturePrefix-item-generation-failed")
+        waitForTag("feed-suggestions-toolkit-sheet")
+        // Prepared open is instant/read-only; the sheet never inserts a Generate step.
+        assertEquals(requestsBeforeOpeningPreparedSheet, state().requestsToday)
+        assertEquals(callsBeforeOpeningPreparedSheet, app.suggestionCalls)
         val preparedItemQuestions = feedViewModel.suggestionSheet097(itemTarget, language).options.map { it.questionText }
         assertEquals(itemQuestions, preparedItemQuestions)
         assertEquals(5, preparedItemQuestions.distinct().size)
@@ -499,11 +642,27 @@ class MeBotFeedJourneyTest {
             compose.onNodeWithTag("feed-suggestions-toolkit-question-$index").assertTextEquals(preparedItemQuestions[index])
         }
         compose.onNodeWithTag("feed-suggestions-toolkit-provenance").assertTextEquals(text(R.string.suggestions_ai_generated))
-        compose.onNodeWithText("Example Research", substring = true).assertExists()
+        compose.onNodeWithTag("feed-suggestions-toolkit-generate").assertDoesNotExist()
         screenshot("$capturePrefix-feed-sheet")
+        compose.onNodeWithTag("feed-suggestions-toolkit-close").performClick()
+        val requestsBeforeCachedOpen = state().requestsToday
+        val suggestionCallsBeforeCachedOpen = app.suggestionCalls
+        compose.onNodeWithTag("feed-suggestions-toolkit-open").performClick()
+        compose.onNodeWithTag("feed-suggestions-toolkit-question-0").assertIsDisplayed()
+        compose.onNodeWithTag("feed-suggestions-toolkit-generate").assertDoesNotExist()
+        assertEquals("A cached open is instant and read-only", requestsBeforeCachedOpen, state().requestsToday)
+        assertEquals("A cached open does not call AI again", suggestionCallsBeforeCachedOpen, app.suggestionCalls)
+        compose.onNodeWithText("Example Research", substring = true).assertExists()
         val requestsBeforeFeedSuggestion = state().requestsToday
         compose.onNodeWithTag("feed-suggestions-toolkit-close").performClick()
         assertEquals("Opening and cancelling the prepared set is read-only", requestsBeforeFeedSuggestion, state().requestsToday)
+        // The item suggestions were prepared above. When the primary Send completes it
+        // creates an item-scoped thread; the active conversation then gets its own prepared
+        // batch for the finalized transcript. Keep the question fixture stable for that batch.
+        val chatQuestions = syntheticChatProviderQuestions(language)
+        app.suggestionQuestions = chatQuestions
+        val suggestionsBeforeConversationPreparation = app.suggestionCalls
+        val targetsBeforeConversationPreparation = app.suggestionRequestTargets.size
         val providerCallsBeforeSend = app.answerCalls
         compose.onNodeWithTag("feed-suggestions-toolkit-open").performClick()
         compose.onNodeWithTag("feed-suggestions-toolkit-send-0").performClick()
@@ -515,37 +674,37 @@ class MeBotFeedJourneyTest {
         waitForState { it.requestsToday >= requestsBeforeFeedSuggestion + 1 }
         val scopedThread = state().conversations.single { it.itemId == "toolkit" }
         assertEquals("A primary feed Send is explicitly item-scoped", "toolkit", scopedThread.itemId)
-        // Do not open the next sheet while the previous action is still draining. A user
-        // should not be able to mistake an active request for a sheet-opening side effect.
+        // Wait for the primary answer only; preparation of suggestions for the new completed
+        // conversation is a separate, route-owned request and is asserted below.
         compose.waitUntil(15_000) {
             val current = state()
             val currentUi = feedViewModel.ui.value
             val currentThread = current.conversations.singleOrNull { it.id == scopedThread.id }
-            current.requestsToday == requestsBeforeFeedSuggestion + 1 &&
-                app.answerCalls == providerCallsBeforeSend + 1 &&
-                !currentUi.asking && !currentUi.suggestionWorking &&
+            app.answerCalls == providerCallsBeforeSend + 1 && !currentUi.asking &&
                 currentThread?.turns?.lastOrNull { it.role == "assistant" } != null
         }
         compose.waitForIdle()
-        assertEquals("One primary Send reserves exactly one request", requestsBeforeFeedSuggestion + 1, state().requestsToday)
-        assertEquals("One primary Send calls the deterministic provider exactly once", providerCallsBeforeSend + 1, app.answerCalls)
+        assertEquals("One primary Send calls the deterministic answer provider exactly once", providerCallsBeforeSend + 1, app.answerCalls)
         screenshot("$capturePrefix-mebot-after-send")
 
-        // The bottom icon in MeBot is bound to this exact item conversation. Because the
-        // transcript has changed, prepare a new AI-authored set for that conversation.
+        // The bottom icon in MeBot is bound to this exact item conversation. The finalized
+        // conversation has its own separate AI-authored batch, prepared before opening.
         val chatTarget = mebot.nguli.com.feed.SuggestionTargets097.conversation(state(), scopedThread.id, language)!!
-        val chatQuestions = syntheticChatProviderQuestions(language)
-        app.suggestionQuestions = chatQuestions
-        val chatRequestsBeforeGeneration = state().requestsToday
-        val chatSuggestionCallsBefore = app.suggestionCalls
+        awaitPreparedSuggestionSet(feedViewModel, chatTarget, language, requestsBeforeFeedSuggestion + 2,
+            suggestionsBeforeConversationPreparation + 1, "$capturePrefix-chat-generation-failed")
+        assertEquals("The second prepared batch is scoped to the exact linked item and conversation",
+            listOf("toolkit" to scopedThread.id),
+            app.suggestionRequestTargets.drop(targetsBeforeConversationPreparation))
+        assertEquals("Send reserves one answer plus one distinct conversation preparation",
+            requestsBeforeFeedSuggestion + 2, state().requestsToday)
+
+        val requestsBeforeCachedChatOpen = state().requestsToday
+        val suggestionCallsBeforeCachedChatOpen = app.suggestionCalls
         compose.onNodeWithTag("workspace-suggestions-open").performClick()
-        compose.onNodeWithTag("workspace-suggestions-generate").assertIsDisplayed()
-        compose.onNodeWithTag("workspace-suggestions-question-0").assertDoesNotExist()
-        assertEquals(chatRequestsBeforeGeneration, state().requestsToday)
-        assertEquals(chatSuggestionCallsBefore, app.suggestionCalls)
-        compose.onNodeWithTag("workspace-suggestions-generate").performClick()
-        awaitPreparedSuggestionSet(feedViewModel, chatTarget, language, chatRequestsBeforeGeneration + 1,
-            chatSuggestionCallsBefore + 1, "$capturePrefix-chat-generation-failed")
+        waitForTag("workspace-suggestions-sheet")
+        compose.onNodeWithTag("workspace-suggestions-question-0").assertIsDisplayed()
+        assertEquals("Opening the prepared conversation set is read-only", requestsBeforeCachedChatOpen, state().requestsToday)
+        assertEquals("Opening the prepared conversation set does not call AI again", suggestionCallsBeforeCachedChatOpen, app.suggestionCalls)
         val nextChatOption = feedViewModel.suggestionSheet097(chatTarget, language).options.first()
         assertEquals(chatQuestions, feedViewModel.suggestionSheet097(chatTarget, language).options.map { it.questionText })
         (0..4).forEach { index -> compose.onNodeWithTag("workspace-suggestions-question-$index").assertTextEquals(chatQuestions[index]) }
@@ -715,9 +874,8 @@ class MeBotFeedJourneyTest {
             .assertTextEquals(text(R.string.feed_refresh_mine)).performClick()
         waitForText(text(R.string.feed_you_title))
         val feedViewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]
-        // A changed connection explicitly refreshes the feed on Continue. Wait for its
-        // provider discovery + request-budget commit to finish before the sheet's read-only
-        // budget baseline; otherwise the background refresh can reserve after that baseline.
+        // A changed provider is an explicit feed refresh. Wait for its discovery + budget
+        // commit before the suggestion prefetch baseline on the next Home route.
         compose.waitUntil(15_000) {
             val current = state()
             val currentUi = feedViewModel.ui.value
@@ -798,7 +956,7 @@ class MeBotFeedJourneyTest {
     }
 
     private fun start() {
-        compose.onNodeWithTag("onboarding-start").performScrollTo().performClick()
+        compose.onNodeWithTag("setup099-continue-public").performScrollTo().performClick()
         waitForTag("feed-screen")
         waitForState { it.onboardingComplete }
     }
@@ -841,6 +999,9 @@ class MeBotFeedJourneyTest {
     }
     private fun waitForText(value: String) {
         compose.waitUntil(15_000) { compose.onAllNodesWithText(value).fetchSemanticsNodes().isNotEmpty() }
+    }
+    private fun assertRichResponseText(tag: String, expected: String) {
+        compose.onNodeWithTag(tag).assert(hasAnyDescendant(hasText(expected)))
     }
     private fun waitForState(predicate: (FeedState) -> Boolean) {
         try { compose.waitUntil(15_000) { predicate(state()) } }

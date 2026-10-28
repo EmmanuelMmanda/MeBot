@@ -1,14 +1,10 @@
 package mebot.nguli.com.ui.feed
 
-import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
-import android.speech.RecognizerIntent
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -36,8 +32,19 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import mebot.nguli.com.R
 import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.FeedUiState
@@ -47,9 +54,13 @@ import mebot.nguli.com.feed.SuggestionSheetSnapshot097
 import mebot.nguli.com.feed.SuggestionSheetStatus097
 import mebot.nguli.com.feed.SuggestionTargetSnapshot097
 import mebot.nguli.com.feed.SuggestionTargets097
+import mebot.nguli.com.realtime.RealtimeCapability
+import mebot.nguli.com.realtime.RecordingTranscriptionCapability
 import mebot.nguli.com.ui.MeBotMark
 import mebot.nguli.com.ui.MeBotTokens
 import java.util.Locale
+import java.io.File
+import kotlin.math.roundToInt
 
 /** A durable conversation workspace. Account setup and model eligibility remain in the existing connection flow. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -75,9 +86,21 @@ fun AiWorkspace(
         SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.NEEDS_GENERATION, emptyList())
     },
     onGenerateSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
+    onPrepareSuggestions: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
+    onLoadMoreSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
     onCancelSuggestionGeneration: (String) -> Unit = {},
+    onReleaseSuggestionPreparation: (SuggestionGenerationHandle097) -> Unit = {},
+    onTranscribeVoice: WorkspaceVoiceTranscriber? = null,
+    realtimeCapability: RealtimeCapability = RealtimeCapability.Unavailable(RealtimeCapability.Reason.SERVICE_NOT_CONFIGURED),
+    recordingTranscriptionCapability: RecordingTranscriptionCapability = RecordingTranscriptionCapability.Unavailable(
+        RecordingTranscriptionCapability.Reason.SERVICE_NOT_CONFIGURED),
+    onStartRealtimeVoiceCall: (() -> Unit)? = null,
+    onOpenVoiceSetup: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val canUseLiveVoice = realtimeCapability.canOfferCall && onStartRealtimeVoiceCall != null
+    val canUseTranscription = recordingTranscriptionCapability.canTranscribe && onTranscribeVoice != null
+    val lifecycleOwner = LocalLifecycleOwner.current
     val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
     val state = ui.state
     val conversations = state?.conversations.orEmpty().sortedByDescending { it.updatedAtMillis }
@@ -85,6 +108,8 @@ fun AiWorkspace(
     // The selected id is authoritative even while DataStore has not emitted the thread yet.
     val draftKey = ui.activeConversationId ?: "new"
     var drafts by rememberSaveable { mutableStateOf(hashMapOf<String, String>()) }
+    // Private cache paths remain attached to a draft/thread, never to exported feed state.
+    var voiceClipsByDraft by rememberSaveable { mutableStateOf(hashMapOf<String, String>()) }
     var previousDraftKey by rememberSaveable { mutableStateOf(draftKey) }
     var pendingReplaceDraft by remember { mutableStateOf<SuggestedConversationDraft?>(null) }
     var focusComposerAfterEdit by rememberSaveable { mutableStateOf(false) }
@@ -101,6 +126,12 @@ fun AiWorkspace(
             draftKey != "new" && conversation?.turns.isNullOrEmpty() && drafts[draftKey].isNullOrBlank()) {
             drafts["new"]?.takeIf { it.isNotBlank() }?.let { pending ->
                 drafts = HashMap(drafts).apply { put(draftKey, pending); remove("new") }
+                voiceClipsByDraft["new"]?.let { savedClip ->
+                    voiceClipsByDraft = HashMap(voiceClipsByDraft).apply {
+                        if (get(draftKey).isNullOrBlank()) put(draftKey, savedClip)
+                        remove("new")
+                    }
+                }
             }
         }
         previousDraftKey = draftKey
@@ -133,18 +164,44 @@ fun AiWorkspace(
     var showHistory by rememberSaveable { mutableStateOf(false) }
     var showScopes by rememberSaveable { mutableStateOf(false) }
     var showModels by rememberSaveable { mutableStateOf(false) }
+    var showVoiceCapture by rememberSaveable { mutableStateOf(false) }
+    var showVoiceOptions by rememberSaveable { mutableStateOf(false) }
     var apiModel by rememberSaveable { mutableStateOf("") }
     var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
     var reviewAttachmentId by rememberSaveable { mutableStateOf<String?>(null) }
     val speech = rememberWorkspaceSpeech(state?.speechRate ?: 1f, state?.speechVoice.orEmpty())
-    val voiceAvailable = remember(context) {
-        runCatching { context.packageManager.resolveActivity(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH), 0) != null }.getOrDefault(false)
+    val storedVoiceClip = remember(voiceClipsByDraft, draftKey) { decodeWorkspaceClip(voiceClipsByDraft[draftKey]) }
+    val existingVoiceClip = remember(context, storedVoiceClip) {
+        resolveWorkspaceClip(context, storedVoiceClip?.path, storedVoiceClip?.durationMillis ?: 0L)
     }
-    val voice = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.takeIf { it.isNotBlank() }?.let { spoken ->
-                setDraft(if (draft.isBlank()) spoken else "$draft\n$spoken")
-            }
+    val voiceTranscriptApplied = storedVoiceClip?.transcriptApplied == true
+    // Run once after restored draft ownership is known; never sweep an active recorder.
+    LaunchedEffect(Unit) {
+        val retainedPaths = voiceClipsByDraft.values.mapNotNull { decodeWorkspaceClip(it)?.path }.toSet()
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            cleanupOrphanedWorkspaceVoiceAudio(context, retainedPaths, null, System.currentTimeMillis())
+        }
+    }
+    fun rememberVoiceClip(ownerKey: String, clip: WorkspaceClip) {
+        val previous = decodeWorkspaceClip(voiceClipsByDraft[ownerKey])
+        if (previous?.path != clip.file.absolutePath) {
+            previous?.let { deleteWorkspaceClipFile(context, it.path) }
+        }
+        voiceClipsByDraft = HashMap(voiceClipsByDraft).apply { put(ownerKey, encodeWorkspaceClip(clip, transcriptApplied = false)) }
+    }
+    fun discardVoiceClipFor(ownerKey: String) {
+        decodeWorkspaceClip(voiceClipsByDraft[ownerKey])?.let { saved ->
+            deleteWorkspaceClipFile(context, saved.path)
+        }
+        voiceClipsByDraft = HashMap(voiceClipsByDraft).apply { remove(ownerKey) }
+    }
+    fun discardVoiceClip() = discardVoiceClipFor(draftKey)
+    LaunchedEffect(state?.conversations?.map { it.id }, draftKey, submittedKey) {
+        val persistedIds = state?.conversations?.mapTo(mutableSetOf()) { it.id } ?: return@LaunchedEffect
+        val retained = persistedIds + "new" + draftKey + listOfNotNull(submittedKey)
+        val removed = voiceClipsByDraft.keys - retained
+        if (removed.isNotEmpty()) {
+            removed.forEach(::discardVoiceClipFor)
         }
     }
     val documents = mebot.nguli.com.documents.LocalDocumentActions.current
@@ -171,12 +228,15 @@ fun AiWorkspace(
                 submittedKey?.let { key -> if (get(key)?.trim() == submitted) remove(key) }
                 if (get(draftKey)?.trim() == submitted) remove(draftKey)
             }
+            submittedKey?.let(::discardVoiceClipFor)
+            if (submittedKey == "new") discardVoiceClipFor(draftKey)
             sentAttachmentIds = ArrayList((sentAttachmentIds + conversation?.attachments.orEmpty().map { it.id }).distinct())
             submittedText = null; submittedKey = null
         }
     }
     fun send(value: String) {
         if (!ui.connected || ui.asking || ui.importWorking || ui.suggestionWorking || ui.conversationOpening || !ui.conversationReady || value.isBlank()) return
+        speech.stop()
         previousTurnId = turns.lastOrNull { it.role == "user" }?.id
         submittedKey = draftKey; submittedText = value.trim()
         onAsk(value.trim())
@@ -203,11 +263,83 @@ fun AiWorkspace(
             else -> SuggestionTargets097.general(state, appLanguage)
         }
     }
+    val suggestionModule = state?.modules?.singleOrNull { it.id == suggestionTarget?.moduleId && it.enabled }
+    val suggestionContextKinds = remember(state?.modules, suggestionModule?.kind) {
+        suggestionModule?.let { setOf(it.kind) } ?: state?.modules.orEmpty().filter { it.enabled }.map { it.kind }.toSet()
+    }
+    val hasApprovedSuggestionContext = state?.context.orEmpty().any { entry ->
+        entry.confirmed && entry.text.isNotBlank() &&
+            (PersonalProfile085.isGlobal(entry) || (!entry.global && entry.scopes.any(suggestionContextKinds::contains)))
+    }
+    val hasCurrentSuggestionMatter = when (suggestionTarget?.kind) {
+        mebot.nguli.com.feed.SuggestionTargetKind097.ITEM -> true // Validated current item content is the context.
+        mebot.nguli.com.feed.SuggestionTargetKind097.CONVERSATION -> conversation?.turns?.isNotEmpty() == true
+        mebot.nguli.com.feed.SuggestionTargetKind097.MODULE -> suggestionModule?.query?.isNotBlank() == true
+        mebot.nguli.com.feed.SuggestionTargetKind097.GENERAL, null -> false
+    }
+    val hasSuggestionContext = hasApprovedSuggestionContext || hasCurrentSuggestionMatter
+    val voiceContextModule = state?.modules?.singleOrNull { it.id == (conversation?.moduleId ?: story?.moduleId) }
+    val hasConfirmedVoiceContext = state?.context.orEmpty().any { entry ->
+        entry.confirmed && entry.text.isNotBlank() &&
+            (PersonalProfile085.isGlobal(entry) || (!entry.global && voiceContextModule?.kind?.let(entry.scopes::contains) == true))
+    }
     val suggestionContext = when {
         story != null -> story.title
         conversation?.title?.isNotBlank() == true -> conversation.title
         module != null -> moduleName(module)
         else -> stringResource(R.string.workspace_general)
+    }
+    // This opaque digest comes from the finalized persisted target, including bounded transcript
+    // revision, account/connection and approved context. It changes after a completed turn, but
+    // not for stream-token updates because `asking` below gates preparation until completion.
+    val suggestionPreparationKey = remember(draftKey, appLanguage, suggestionTarget?.kind,
+        suggestionTarget?.targetId, suggestionTarget?.revision) {
+        listOf(draftKey, appLanguage, suggestionTarget?.kind?.name.orEmpty(),
+            suggestionTarget?.targetId.orEmpty(), suggestionTarget?.revision.orEmpty()).joinToString("|")
+    }
+    var preparedSuggestionSession by remember { mutableStateOf<String?>(null) }
+    var preparedSuggestionHandle by remember { mutableStateOf<SuggestionGenerationHandle097?>(null) }
+    val releasePreparedSuggestion by rememberUpdatedState(onReleaseSuggestionPreparation)
+    LaunchedEffect(suggestionPreparationKey, suggestionTarget, hasSuggestionContext, ui.conversationReady, ui.connected,
+        ui.asking, ui.importWorking, ui.suggestionWorking, ui.conversationOpening, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            val target = suggestionTarget ?: return@repeatOnLifecycle
+            if ((target.kind == mebot.nguli.com.feed.SuggestionTargetKind097.CONVERSATION &&
+                    target.targetId != ui.activeConversationId) ||
+                (ui.activeConversationId != null && target.kind != mebot.nguli.com.feed.SuggestionTargetKind097.CONVERSATION)) {
+                return@repeatOnLifecycle
+            }
+            if (!ui.connected || !ui.conversationReady || !hasSuggestionContext || ui.asking || ui.importWorking || ui.suggestionWorking || ui.conversationOpening) {
+                return@repeatOnLifecycle
+            }
+            if (preparedSuggestionSession == suggestionPreparationKey) return@repeatOnLifecycle
+            // Mark before invoking the coalescing VM callback so recomposition/resume cannot duplicate prefetch.
+            preparedSuggestionSession = suggestionPreparationKey
+            preparedSuggestionHandle = onPrepareSuggestions(target, appLanguage)
+            // Keep cancellation attached to this target even if the screen is stopped immediately.
+            currentCoroutineContext().ensureActive()
+        }
+    }
+    DisposableEffect(suggestionPreparationKey, ui.activeConversationId, ui.connected, ui.asking, ui.importWorking,
+        ui.conversationOpening, lifecycleOwner, preparedSuggestionHandle?.requestId) {
+        val handle = preparedSuggestionHandle
+        fun cancelForBackground() {
+            if (handle?.cancelOnDismiss == false && handle.job.isActive) {
+                handle.preparationLeaseId?.let { releasePreparedSuggestion(handle) }
+                if (preparedSuggestionSession == suggestionPreparationKey) preparedSuggestionSession = null
+            }
+        }
+        fun cancelStaleTarget() {
+            if (handle?.preparationLeaseId != null && handle.job.isActive) releasePreparedSuggestion(handle)
+        }
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) cancelForBackground()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            cancelStaleTarget()
+        }
     }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -274,6 +406,8 @@ fun AiWorkspace(
                     WorkspaceStart(
                         ui.connected, onConnect, onContext, scopeKind != null, story != null,
                         hasConfirmedAboutYou, draft.isNotBlank(),
+                        personalizationContextMissing = suggestionTarget?.kind == mebot.nguli.com.feed.SuggestionTargetKind097.GENERAL &&
+                            !hasSuggestionContext,
                     )
                 }
                 items(turns, key = { it.id }, contentType = { it.role }) { turn -> WorkspaceTurn(turn, speech) }
@@ -283,6 +417,9 @@ fun AiWorkspace(
                             if (!ui.asking) Text(stringResource(R.string.workspace_partial),
                                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             RichResponse(ui.answer.orEmpty(), Modifier.testTag("workspace-draft"), ui.answerCitations)
+                            if (!ui.asking && ui.answer.orEmpty().isNotBlank()) {
+                                WorkspaceAnswerActions("workspace-draft", ui.answer.orEmpty(), speech, allowReadAloud = true)
+                            }
                         }
 
                     }
@@ -309,6 +446,27 @@ fun AiWorkspace(
                         modifier = Modifier.size(32.dp).testTag("attachment-remove-${attachment.id}")) { Icon(Icons.Outlined.Close, stringResource(R.string.workspace_remove_attachment), Modifier.size(16.dp)) } },
                     modifier = Modifier.testTag("attachment-${attachment.id}")) }
             }
+            existingVoiceClip?.let { clip ->
+                Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("workspace-voice-clip")) {
+                    Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Mic, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(stringResource(R.string.workspace_voice_clip_local, formatCaptureDuration(clip.durationMillis)),
+                                style = MaterialTheme.typography.labelLarge)
+                            Text(stringResource(if (voiceTranscriptApplied) R.string.workspace_voice_clip_transcribed else R.string.workspace_voice_clip_not_sent),
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        TextButton(onClick = { showVoiceCapture = true }, modifier = Modifier.testTag("workspace-voice-clip-review")) {
+                            Text(stringResource(R.string.workspace_voice_review))
+                        }
+                        IconButton(onClick = ::discardVoiceClip, modifier = Modifier.size(40.dp).testTag("workspace-voice-clip-delete")) {
+                            Icon(Icons.Outlined.Close, stringResource(R.string.workspace_voice_discard), Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
 
             Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(22.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
@@ -331,15 +489,10 @@ fun AiWorkspace(
                         IconButton(onClick = { documents.importAttachment() },
                         enabled = !ui.asking && !ui.importWorking && !ui.suggestionWorking && !ui.conversationOpening && ui.conversationReady && conversation?.attachments.orEmpty().size < 3,
                             modifier = Modifier.testTag("workspace-attach")) { Icon(Icons.Outlined.AttachFile, stringResource(R.string.workspace_attach)) }
-                        if (voiceAvailable) IconButton(onClick = {
-                            speech.stop()
-                            runCatching { voice.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                                .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                                .putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale.toLanguageTag())
-                                .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)) }
-                                .onFailure { Toast.makeText(context, R.string.workspace_voice_error, Toast.LENGTH_SHORT).show() }
-                        }, enabled = !ui.asking && !ui.importWorking && !ui.suggestionWorking, modifier = Modifier.testTag("workspace-voice")) {
-                            Icon(Icons.Outlined.MicNone, stringResource(R.string.workspace_voice_input))
+                        if (canUseLiveVoice || canUseTranscription) IconButton(onClick = { speech.stop(); showVoiceOptions = true },
+                            enabled = !ui.asking && !ui.importWorking && !ui.suggestionWorking && !ui.conversationOpening,
+                            modifier = Modifier.testTag("workspace-voice")) {
+                            Icon(Icons.Outlined.MicNone, stringResource(R.string.workspace_voice_options))
                         }
                         IconButton(onClick = { showVoiceSettings = true }, modifier = Modifier.testTag("workspace-voice-options")) {
                             Icon(Icons.Outlined.VolumeUp, stringResource(R.string.rich_voice_settings))
@@ -352,6 +505,7 @@ fun AiWorkspace(
                             busy = ui.asking || ui.importWorking || ui.suggestionWorking || ui.conversationOpening || !ui.conversationReady,
                             onReadSnapshot = onSuggestionSheet,
                             onGenerate = onGenerateSuggestion,
+                            onLoadMore = onLoadMoreSuggestion,
                             onCancelGeneration = onCancelSuggestionGeneration,
                             onConnect = onConnect,
                             onUse = onUseSuggestion,
@@ -360,7 +514,7 @@ fun AiWorkspace(
                         )
                         if (speech.readingId != null) IconButton(onClick = speech.stop) { Icon(Icons.Outlined.VolumeOff, stringResource(R.string.workspace_stop_audio)) }
                         Spacer(Modifier.weight(1f))
-                        if (ui.asking) FilledTonalButton(onClick = onCancel, modifier = Modifier.heightIn(min = 44.dp).testTag("workspace-cancel")) {
+                        if (ui.asking) FilledTonalButton(onClick = { speech.stop(); onCancel() }, modifier = Modifier.heightIn(min = 44.dp).testTag("workspace-cancel")) {
                             Icon(Icons.Outlined.Stop, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.workspace_stop))
                         } else FilledIconButton(onClick = { send(draft) }, enabled = ui.connected && draft.isNotBlank() && !ui.importWorking && !ui.suggestionWorking && !ui.conversationOpening && ui.conversationReady,
                             modifier = Modifier.size(44.dp).testTag("workspace-send")) { Icon(Icons.AutoMirrored.Outlined.Send, stringResource(R.string.feed_ask_send), Modifier.size(20.dp)) }
@@ -419,12 +573,47 @@ fun AiWorkspace(
         Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.rich_voice_settings), style = MaterialTheme.typography.titleLarge)
             Text(stringResource(R.string.rich_voice_help), style = MaterialTheme.typography.bodyMedium)
-            Text(stringResource(R.string.rich_voice_speed), style = MaterialTheme.typography.labelLarge)
+            Text(stringResource(R.string.workspace_speech_privacy), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             var rate by remember { mutableFloatStateOf(state?.speechRate ?: 1f) }
-            Slider(value = rate, onValueChange = { rate = it }, valueRange = 0.6f..1.5f,
-                onValueChangeFinished = { onSpeechPreferences(rate, state?.speechVoice.orEmpty()) }, modifier = Modifier.testTag("workspace-speech-rate"))
+            val speedLabel = stringResource(R.string.rich_voice_speed)
+            val speedValue = stringResource(R.string.rich_voice_speed_value, rate)
+            val slowerLabel = stringResource(R.string.rich_voice_speed_slower)
+            val fasterLabel = stringResource(R.string.rich_voice_speed_faster)
+            Row(Modifier.fillMaxWidth().testTag("workspace-speech-rate"), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(Icons.AutoMirrored.Outlined.VolumeUp, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
+                Column(Modifier.weight(1f).semantics {
+                    contentDescription = "$speedLabel, $speedValue"
+                    stateDescription = speedValue
+                }) {
+                    Text(speedLabel, style = MaterialTheme.typography.labelLarge)
+                    Text(speedValue, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.rich_voice_speed_help), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    IconButton(onClick = {
+                        rate = ((rate + 0.1f) * 10).roundToInt() / 10f
+                        onSpeechPreferences(rate, state?.speechVoice.orEmpty())
+                    }, enabled = rate < 1.5f, modifier = Modifier.size(44.dp).testTag("workspace-speech-rate-increase")) {
+                        Icon(Icons.Outlined.Add, fasterLabel, Modifier.size(20.dp))
+                    }
+                    IconButton(onClick = {
+                        rate = ((rate - 0.1f) * 10).roundToInt() / 10f
+                        onSpeechPreferences(rate, state?.speechVoice.orEmpty())
+                    }, enabled = rate > 0.6f, modifier = Modifier.size(44.dp).testTag("workspace-speech-rate-decrease")) {
+                        Icon(Icons.Outlined.Remove, slowerLabel, Modifier.size(20.dp))
+                    }
+                }
+            }
             Text(stringResource(R.string.rich_voice_choice), style = MaterialTheme.typography.labelLarge)
-            if (!speech.available) Text(stringResource(R.string.rich_voice_unavailable), style = MaterialTheme.typography.bodySmall)
+            speech.statusMessage?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("workspace-speech-status")) }
+            TextButton(onClick = speech.retry, modifier = Modifier.testTag("workspace-speech-retry")) {
+                Text(stringResource(R.string.workspace_speech_retry))
+            }
             TextButton(onClick = { speech.stop(); onSpeechPreferences(rate, "") }) { Text(stringResource(R.string.rich_voice_default)) }
             speech.voices.forEach { (name, label) ->
                 TextButton(onClick = { speech.stop(); onSpeechPreferences(rate, name) }, modifier = Modifier.fillMaxWidth()) {
@@ -433,6 +622,46 @@ fun AiWorkspace(
             }
         }
     }
+    if (showVoiceCapture) WorkspaceVoiceCapture(
+        ownerKey = draftKey,
+        existingClip = existingVoiceClip,
+        existingClipHasTranscript = voiceTranscriptApplied,
+        onClipReady = { clip -> rememberVoiceClip(draftKey, clip) },
+        onDiscardClip = ::discardVoiceClip,
+        onTranscript = { transcript ->
+            val revised = mergeWorkspaceTranscriptIntoDraft(draft, transcript)
+            setDraft(revised)
+            decodeWorkspaceClip(voiceClipsByDraft[draftKey])?.let { saved ->
+                resolveWorkspaceClip(context, saved.path, saved.durationMillis)?.let { clip ->
+                    voiceClipsByDraft = HashMap(voiceClipsByDraft).apply { put(draftKey, encodeWorkspaceClip(clip, transcriptApplied = true)) }
+                }
+            }
+            focusComposerAfterEdit = true
+            showVoiceCapture = false
+        },
+        onClose = { showVoiceCapture = false },
+        transcriber = onTranscribeVoice,
+    )
+    LaunchedEffect(canUseLiveVoice, canUseTranscription) {
+        if (!canUseLiveVoice && !canUseTranscription) showVoiceOptions = false
+    }
+    if (showVoiceOptions && (canUseLiveVoice || canUseTranscription)) WorkspaceVoiceOptionsSheet(
+        capability = realtimeCapability,
+        onStartCall = onStartRealtimeVoiceCall,
+        selectedItemTitle = story?.title.orEmpty(),
+        currentModuleName = if (voiceContextModule != null) moduleName(voiceContextModule) else "",
+        conversationTitle = conversation?.title.orEmpty(),
+        hasRecentHistory = conversation?.turns?.isNotEmpty() == true,
+        hasConfirmedContext = hasConfirmedVoiceContext,
+        transcriptionCapability = recordingTranscriptionCapability,
+        canTranscribe = onTranscribeVoice != null && recordingTranscriptionCapability.canTranscribe,
+        onRecordForTranscription = {
+            showVoiceOptions = false
+            showVoiceCapture = true
+        },
+        onOpenVoiceSetup = onOpenVoiceSetup,
+        onDismiss = { showVoiceOptions = false },
+    )
     if (showHistory) ModalBottomSheet(onDismissRequest = { showHistory = false }) {
         mebot.nguli.com.security.ProtectedWindowRegistration()
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
@@ -473,7 +702,10 @@ fun AiWorkspace(
         } }, confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { showScopes = false }) { Text(stringResource(R.string.done)) } })
     deletingId?.let { target -> AlertDialog(onDismissRequest = { deletingId = null },
         title = { Text(stringResource(R.string.workspace_delete_title)) }, text = { Text(stringResource(R.string.workspace_delete_body)) },
-        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { onDelete(target); deletingId = null; showHistory = false }, modifier = Modifier.testTag("conversation-delete-confirm")) { Text(stringResource(R.string.workspace_delete)) } },
+        confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = {
+            discardVoiceClipFor(target)
+            onDelete(target); deletingId = null; showHistory = false
+        }, modifier = Modifier.testTag("conversation-delete-confirm")) { Text(stringResource(R.string.workspace_delete)) } },
         dismissButton = { TextButton(onClick = { deletingId = null }) { Text(stringResource(R.string.cancel)) } }) }
     conversation?.attachments?.find { it.id == reviewAttachmentId }?.let { attachment -> AlertDialog(onDismissRequest = { reviewAttachmentId = null },
         title = { Text(attachment.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
@@ -515,6 +747,7 @@ private fun WorkspaceStart(
     itemScoped: Boolean,
     hasConfirmedAboutYou: Boolean,
     draftPrefilled: Boolean,
+    personalizationContextMissing: Boolean,
 ) {
     Column(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(stringResource(when {
@@ -531,6 +764,9 @@ private fun WorkspaceStart(
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (itemScoped && hasConfirmedAboutYou) Text(stringResource(R.string.workspace_confirmed_about_you_available),
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (personalizationContextMissing) Text(stringResource(R.string.workspace_suggestions_need_context),
+            Modifier.testTag("workspace-personalization-context-needed"),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (!connected) FilledTonalButton(onClick = onConnect, modifier = Modifier.testTag("workspace-connect")) {
             Icon(Icons.Outlined.Link, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.feed_connect))
         }
@@ -542,8 +778,6 @@ private fun WorkspaceStart(
 
 @Composable
 private fun WorkspaceTurn(turn: AiTurn, speech: WorkspaceSpeech) {
-    val context = LocalContext.current
-    val clipboardLabel = stringResource(R.string.workspace_title)
     val user = turn.role == "user"
     Surface(color = if (user) MaterialTheme.colorScheme.primaryContainer else androidx.compose.ui.graphics.Color.Transparent,
         shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth().padding(start = if (user) 28.dp else 0.dp).testTag("turn-${turn.id}")) {
@@ -558,16 +792,147 @@ private fun WorkspaceTurn(turn: AiTurn, speech: WorkspaceSpeech) {
             if (!user) {
                 val represented = remember(turn.text) { RichContent.links(turn.text).map { FeedLogic.canonicalUrl(it.url) }.toSet() }
                 ConversationSources(turn.citations.filterNot { FeedLogic.canonicalUrl(it.url) in represented }, "turn-source-${turn.id}")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = {
-                        context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText(clipboardLabel, turn.text))
-                    }, modifier = Modifier.testTag("turn-copy-${turn.id}")) { Icon(Icons.Outlined.ContentCopy, stringResource(R.string.workspace_copy), Modifier.size(18.dp)) }
-                    if (speech.available) IconButton(onClick = { if (speech.readingId == turn.id) speech.stop() else speech.read(turn.id, turn.text) }, modifier = Modifier.testTag("turn-read-${turn.id}")) {
-                        Icon(if (speech.readingId == turn.id) Icons.Outlined.Stop else Icons.AutoMirrored.Outlined.VolumeUp,
-                            stringResource(if (speech.readingId == turn.id) R.string.workspace_stop_audio else R.string.workspace_read), Modifier.size(20.dp))
-                    }
-                }
+                WorkspaceAnswerActions(turn.id, turn.text, speech, allowReadAloud = true)
             }
         }
+    }
+}
+
+@Composable
+private fun WorkspaceAnswerActions(id: String, answer: String, speech: WorkspaceSpeech, allowReadAloud: Boolean) {
+    val context = LocalContext.current
+    val copyLabel = stringResource(R.string.workspace_copy)
+    val copiedLabel = stringResource(R.string.workspace_copy_done)
+    val shareLabel = stringResource(R.string.workspace_share_answer)
+    val readLabel = stringResource(if (speech.readingId == id) R.string.workspace_stop_audio else R.string.workspace_read)
+    val shareFailed = stringResource(R.string.workspace_share_failed)
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("answer-actions-$id"),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        TextButton(onClick = {
+            context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText(copyLabel, answer))
+            Toast.makeText(context, copiedLabel, Toast.LENGTH_SHORT).show()
+        }, modifier = Modifier.testTag("turn-copy-$id")) {
+            Icon(Icons.Outlined.ContentCopy, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(copyLabel)
+        }
+        TextButton(onClick = {
+            val intent = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, answer)
+            runCatching { context.startActivity(Intent.createChooser(intent, shareLabel)) }
+                .onFailure { Toast.makeText(context, shareFailed, Toast.LENGTH_SHORT).show() }
+        }, modifier = Modifier.testTag("turn-share-$id")) {
+            Icon(Icons.Outlined.Share, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(shareLabel)
+        }
+        TextButton(onClick = {
+            if (speech.readingId == id) speech.stop() else if (allowReadAloud) speech.read(id, answer)
+        }, modifier = Modifier.testTag("turn-read-$id")) {
+            Icon(if (speech.readingId == id) Icons.Outlined.Stop else Icons.AutoMirrored.Outlined.VolumeUp,
+                null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(readLabel)
+        }
+    }
+    if (speech.feedbackId == id) speech.statusMessage?.let { status ->
+        Text(stringResource(status), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }.testTag("turn-speech-status-$id"))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WorkspaceVoiceOptionsSheet(
+    capability: RealtimeCapability,
+    onStartCall: (() -> Unit)?,
+    selectedItemTitle: String,
+    currentModuleName: String,
+    conversationTitle: String,
+    hasRecentHistory: Boolean,
+    hasConfirmedContext: Boolean,
+    transcriptionCapability: RecordingTranscriptionCapability,
+    canTranscribe: Boolean,
+    onRecordForTranscription: () -> Unit,
+    onOpenVoiceSetup: (() -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    var confirmLiveCall by remember { mutableStateOf(false) }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text(stringResource(R.string.workspace_voice_options_title), style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.workspace_voice_options_intro), style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (capability.canOfferCall && onStartCall != null) {
+                Text(stringResource(R.string.workspace_voice_live_label), style = MaterialTheme.typography.titleMedium)
+                Button(onClick = { confirmLiveCall = true }, modifier = Modifier.fillMaxWidth()
+                    .testTag("workspace-voice-live-start")) {
+                    Icon(Icons.Outlined.Call, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.workspace_voice_live_start))
+                }
+            }
+            if (canTranscribe) {
+                Text(stringResource(R.string.workspace_voice_transcription_label), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.workspace_voice_transcription_available), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Button(onClick = onRecordForTranscription, modifier = Modifier.fillMaxWidth()
+                    .testTag("workspace-voice-record-transcribe")) {
+                    Icon(Icons.Outlined.Mic, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.workspace_voice_record_transcribe))
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+    if (confirmLiveCall && capability.canOfferCall && onStartCall != null) AlertDialog(
+        onDismissRequest = { confirmLiveCall = false },
+        title = { Text(stringResource(R.string.workspace_voice_live_confirm_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.workspace_voice_live_confirm_body))
+                if (selectedItemTitle.isNotBlank()) Text(stringResource(R.string.workspace_voice_live_selected_item, selectedItemTitle))
+                else if (currentModuleName.isNotBlank()) Text(stringResource(R.string.workspace_voice_live_selected_module, currentModuleName))
+                if (hasRecentHistory) Text(stringResource(R.string.workspace_voice_live_recent_history,
+                    conversationTitle.ifBlank { stringResource(R.string.workspace_title) }))
+                if (hasConfirmedContext) Text(stringResource(R.string.workspace_voice_live_approved_context))
+                if (selectedItemTitle.isBlank() && currentModuleName.isBlank() && !hasRecentHistory && !hasConfirmedContext) {
+                    Text(stringResource(R.string.workspace_voice_live_no_workspace_context))
+                }
+                Text(stringResource(R.string.workspace_voice_live_other_chats_excluded))
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                confirmLiveCall = false
+                onDismiss()
+                onStartCall()
+            }, modifier = Modifier.testTag("workspace-voice-live-confirm")) {
+                Text(stringResource(R.string.workspace_voice_live_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { confirmLiveCall = false }, modifier = Modifier.testTag("workspace-voice-live-cancel")) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
+}
+
+private fun voiceCapabilityMessage(reason: RealtimeCapability.Reason): Int = when (reason) {
+    RealtimeCapability.Reason.SERVICE_NOT_CONFIGURED -> R.string.workspace_voice_live_service_not_configured
+    RealtimeCapability.Reason.SERVICE_TOKEN_MISSING -> R.string.workspace_voice_live_service_token_missing
+    RealtimeCapability.Reason.REALTIME_NOT_ENABLED -> R.string.workspace_voice_live_not_enabled
+    RealtimeCapability.Reason.API_ACCESS_NOT_CONFIRMED -> R.string.workspace_voice_live_api_access_not_confirmed
+    RealtimeCapability.Reason.API_ACCESS_UNAVAILABLE -> R.string.workspace_voice_live_api_access_unavailable
+    RealtimeCapability.Reason.TRANSPORT_NOT_AVAILABLE -> R.string.workspace_voice_live_transport_missing
+    RealtimeCapability.Reason.DAILY_LIMIT_REACHED -> R.string.workspace_voice_live_daily_limit
+    RealtimeCapability.Reason.TEMPORARY_ERROR -> R.string.workspace_voice_live_temporary_error
+    RealtimeCapability.Reason.ACTIVE_CALL -> R.string.workspace_voice_live_active_call
+}
+
+private fun transcriptionCapabilityMessage(capability: RecordingTranscriptionCapability, hasCallback: Boolean): Int = when (capability) {
+    RecordingTranscriptionCapability.Available -> if (hasCallback) R.string.workspace_voice_transcription_available
+        else R.string.workspace_voice_transcription_transport_missing
+    is RecordingTranscriptionCapability.Unavailable -> when (capability.reason) {
+        RecordingTranscriptionCapability.Reason.SERVICE_NOT_CONFIGURED -> R.string.workspace_voice_transcription_unavailable
+        RecordingTranscriptionCapability.Reason.SERVICE_TOKEN_MISSING -> R.string.workspace_voice_transcription_service_token_missing
+        RecordingTranscriptionCapability.Reason.TRANSCRIPTION_NOT_CONFIGURED -> R.string.workspace_voice_transcription_not_configured
+        RecordingTranscriptionCapability.Reason.API_ACCESS_UNAVAILABLE -> R.string.workspace_voice_transcription_api_unavailable
+        RecordingTranscriptionCapability.Reason.DAILY_LIMIT_REACHED -> R.string.workspace_voice_transcription_daily_limit
+        RecordingTranscriptionCapability.Reason.TEMPORARY_ERROR -> R.string.workspace_voice_transcription_temporary_error
     }
 }

@@ -1,16 +1,26 @@
 package mebot.nguli.com.ui
 
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.os.Handler
+import android.os.Looper
+import android.view.PixelCopy
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.semantics.SemanticsActions
 import mebot.nguli.com.MainActivity
 import mebot.nguli.com.MeBotApplication
 import mebot.nguli.com.R
 import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.*
 import mebot.nguli.com.feed.auth.*
+import mebot.nguli.com.ui.feed.ContextSetup
 import java.util.concurrent.CopyOnWriteArrayList
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +42,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowDialog
 
 /** Actual Activity → ViewModel → Engine → repository journey; only external auth/model calls are fixtures. */
 @RunWith(RobolectricTestRunner::class)
@@ -59,11 +70,269 @@ class ChatGptConnectedJourneyTest {
         app.checkGate = null
         app.checkFailure = null
         app.providerDiscoveries.clear()
-        waitForTag("onboarding-screen")
+        waitForTag("setup-099-onboarding")
+    }
+
+    @Test fun verifiedNewUserConnectionImportsOnlyChosenContextOnceAndSurvivesRecreation() {
+        app.checkGate = CompletableDeferred()
+        val original = state()
+        assertEquals(Setup099Stage.INTRO, original.setup099.stage)
+        assertEquals(AiConnection(), original.connection)
+        compose.onNodeWithTag("setup099-connect").performScrollTo().performClick()
+        waitForTag("connection-screen")
+        compose.waitUntil(10_000) { state().setup099.stage == Setup099Stage.CONNECT_CHATGPT }
+        assertEquals(Setup099Stage.CONNECT_CHATGPT, state().setup099.stage)
+        compose.onNodeWithTag("chatgpt-sign-in").performScrollTo().performClick()
+        waitForTag("chatgpt-cancel")
+        compose.waitUntil(15_000) { shadowOf(compose.activity).peekNextStartedActivity() != null }
+        assertEquals("direct", state().connection.mode)
+
+        app.chatGptAuth.completeSignIn()
+        compose.waitUntil(15_000) { app.checked.size == 1 }
+        val viewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]
+        assertFalse("Sign-in alone is not a configured connection", viewModel.ui.value.connected)
+        assertEquals("direct", state().connection.mode)
+        assertEquals("", state().setup099.firstChatGptAccountKey)
+        assertEquals("", state().setup099.pendingImportAccountKey)
+        assertTrue(compose.onAllNodesWithTag("context-import-screen").fetchSemanticsNodes().isEmpty())
+
+        app.checkGate!!.complete(Unit)
+        waitForTag("context-import-screen")
+        compose.waitUntil(15_000) {
+            val setup = state().setup099
+            setup.firstChatGptAccountKey == UiFixtureChatGptAuth.ACCOUNT_ID &&
+                setup.pendingImportAccountKey.isEmpty() &&
+                setup.importRouteAcknowledgedAccountKey == UiFixtureChatGptAuth.ACCOUNT_ID
+        }
+        assertEquals("chatgpt", state().connection.mode)
+        assertEquals("fixture-quick", state().connection.model)
+        acknowledgeChatGptPlanNotice()
+        compose.waitUntil(10_000) { app.chatGptAuth.state.value.accounts.single().planNoticeAcknowledged }
+        compose.onNodeWithTag("context-import-chatgpt-verified").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(compose.activity.getString(R.string.setup099_connected_model, "Fixture quick model"))
+            .assertIsDisplayed()
+        compose.onNodeWithTag("context-starter-prompt").performScrollTo().performClick()
+        compose.onNodeWithTag("context-open-chatgpt").performScrollTo().assertIsDisplayed()
+        val clipboard = compose.activity.getSystemService(ClipboardManager::class.java)
+        assertEquals(ContextSetup.prompt(compose.activity), clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertFalse(ContextSetup.prompt(compose.activity).contains("Keep explanations concise"))
+
+        compose.activityRule.scenario.recreate()
+        waitForTag("context-import-screen")
+        assertTrue(compose.onAllNodesWithTag("chatgpt-plan-got-it").fetchSemanticsNodes().isEmpty())
+        assertEquals(UiFixtureChatGptAuth.ACCOUNT_ID, state().setup099.importRouteAcknowledgedAccountKey)
+        assertEquals("", state().setup099.pendingImportAccountKey)
+        compose.onNodeWithTag("context-import-chatgpt-verified").assertIsDisplayed()
+
+        val contextJson = ContextSetup.example("Keep explanations concise and useful")
+        compose.onNodeWithTag("context-paste-input").performScrollTo().performTextInput(contextJson)
+        compose.onNodeWithTag("context-paste-review").performScrollTo().performClick()
+        waitForTag("import-review")
+        assertEquals("Previewing context must not save it early", original.context, state().context)
+        compose.onNodeWithTag("import-confirm").performClick()
+        waitForTag("context-edit-preference-1")
+        compose.waitUntil(15_000) { state().setup099.stage == Setup099Stage.START_FEED }
+        assertEquals("Keep explanations concise and useful", state().context.single { it.id == "preference-1" }.text)
+        compose.onNodeWithTag("setup099-next-feed").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("setup099-next-feed-button").performScrollTo().performClick()
+        waitForTag("feed-screen")
+        compose.waitUntil(15_000) { state().onboardingComplete && state().setup099.stage == Setup099Stage.COMPLETE }
+        compose.activityRule.scenario.recreate()
+        waitForTag("feed-screen")
+        assertTrue(compose.onAllNodesWithTag("context-import-screen").fetchSemanticsNodes().isEmpty())
+        assertEquals(UiFixtureChatGptAuth.ACCOUNT_ID, state().setup099.importRouteAcknowledgedAccountKey)
+        assertEquals(AiConnection(mode = "chatgpt", model = "fixture-quick", accountId = UiFixtureChatGptAuth.ACCOUNT_ID), state().connection)
+    }
+
+    @Test fun upgradeUserExplicitlyAddsChatGptWithoutReplacingExistingProviderUntilVerified() {
+        app.checkGate = CompletableDeferred()
+        val existing = AiConnection(mode = "direct", model = "existing-model")
+        val item = FeedItem(id = "upgrade-item", moduleId = "news", title = "Keep this saved story", summary = "Existing data",
+            sourceName = "Example publisher", sourceUrl = "https://example.com/story")
+        runBlocking {
+            app.feedEngine.disconnect()
+            app.repository.update { AppState(profile = Profile(onboardingComplete = true)) }
+            app.feedRepository.update { FeedState(
+                onboardingComplete = true,
+                connection = existing,
+                items = listOf(item),
+                savedIds = setOf(item.id),
+            ) }
+        }
+        waitForTag("feed-screen")
+        assertEquals(Setup099Stage.INTRO, state().setup099.stage)
+
+        // Existing users are not routed into setup on launch; they can opt in by opening Connect.
+        compose.onNodeWithTag("nav-you").performClick()
+        compose.onNodeWithText(text(R.string.feed_connection)).performScrollTo().performClick()
+        waitForTag("connection-reconnect-provider-099")
+        compose.waitUntil(10_000) { state().setup099.stage == Setup099Stage.CONNECT_CHATGPT }
+        assertEquals(existing, state().connection)
+        assertEquals(setOf(item.id), state().savedIds)
+
+        // Keep the existing provider visibly primary while exposing ChatGPT as an explicit alternative.
+        compose.onNodeWithTag("connection-reconnect-provider-099").performClick()
+        compose.onNodeWithTag("chatgpt-alternative-primary-099").assertIsDisplayed()
+        compose.onNodeWithTag("chatgpt-sign-in-alternative-099").performScrollTo().performClick()
+        waitForTag("chatgpt-cancel")
+        compose.waitUntil(15_000) { shadowOf(compose.activity).peekNextStartedActivity() != null }
+        app.chatGptAuth.completeSignIn()
+        compose.waitUntil(15_000) { app.checked.size == 1 }
+        assertEquals("An unverified login cannot replace the current provider", existing, state().connection)
+        assertEquals(Setup099Stage.CONNECT_CHATGPT, state().setup099.stage)
+        assertEquals("", state().setup099.firstChatGptAccountKey)
+        assertEquals("", state().setup099.pendingImportAccountKey)
+
+        app.checkGate!!.complete(Unit)
+        waitForTag("context-import-screen")
+        compose.waitUntil(15_000) {
+            state().setup099.importRouteAcknowledgedAccountKey == UiFixtureChatGptAuth.ACCOUNT_ID
+        }
+        assertEquals(AiConnection(mode = "chatgpt", model = "fixture-quick", accountId = UiFixtureChatGptAuth.ACCOUNT_ID), state().connection)
+        assertEquals("Only the explicit provider choice and verified model changes the selected connection",
+            "chatgpt", state().connection.mode)
+        assertEquals(setOf(item.id), state().savedIds)
+        compose.onNodeWithTag("context-import-chatgpt-verified").assertIsDisplayed()
+        compose.activityRule.scenario.recreate()
+        waitForTag("context-import-screen")
+        assertEquals(UiFixtureChatGptAuth.ACCOUNT_ID, state().setup099.importRouteAcknowledgedAccountKey)
+        assertEquals("", state().setup099.pendingImportAccountKey)
+    }
+
+    @Test fun savedChatGptAlternativeRemainsAccessibleAndDoesNotReplaceProviderUntilVerified() {
+        app.checkGate = CompletableDeferred()
+        val accountId = "saved-alt-TEST02"
+        val existing = AiConnection(mode = "direct", model = "existing-model")
+        runBlocking {
+            app.feedEngine.disconnect()
+            app.repository.update { AppState(profile = Profile(onboardingComplete = true)) }
+            app.feedRepository.update { FeedState(onboardingComplete = true, connection = existing) }
+        }
+        app.chatGptAuth.restoreSavedAccount(accountId, includeModels = false)
+        waitForTag("feed-screen")
+
+        compose.onNodeWithTag("nav-you").performClick()
+        compose.onNodeWithText(text(R.string.feed_connection)).performScrollTo().performClick()
+        waitForTag("connection-reconnect-provider-099")
+        assertEquals(existing, state().connection)
+        assertEquals(Setup099ConnectionEntry.UNKNOWN, state().setup099.preferredConnectionEntry099)
+
+        compose.onNodeWithTag("chatgpt-accounts").performScrollTo().performClick()
+        compose.onNodeWithTag("chatgpt-use-$accountId").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("chatgpt-use-$accountId").assertTextContains(text(R.string.edition_check_connection))
+        compose.onNodeWithTag("chatgpt-use-$accountId").performClick()
+        waitForTag("chatgpt-cancel")
+        compose.waitUntil(15_000) { app.checkedConnections.any { it.mode == "chatgpt" } }
+        assertEquals("The current provider remains selected until the explicit account passes verification",
+            existing, state().connection)
+
+        app.checkGate!!.complete(Unit)
+        compose.waitUntil(15_000) {
+            state().connection.mode == "chatgpt" && state().connection.accountId == accountId
+        }
+        waitForTag("context-import-screen")
+        compose.waitUntil(10_000) {
+            state().setup099.preferredConnectionEntry099 == Setup099ConnectionEntry.CHATGPT
+        }
+    }
+
+    @Test fun guidedManualContextSaveStaysOnNotesAndShowsDurableNextFeedAction() {
+        app.checkGate = CompletableDeferred()
+        compose.onNodeWithTag("setup099-connect").performScrollTo().performClick()
+        waitForTag("connection-screen")
+        compose.onNodeWithTag("chatgpt-sign-in").performScrollTo().performClick()
+        waitForTag("chatgpt-cancel")
+        compose.waitUntil(15_000) { shadowOf(compose.activity).peekNextStartedActivity() != null }
+        app.chatGptAuth.completeSignIn()
+        compose.waitUntil(15_000) { app.checked.size == 1 }
+        app.checkGate!!.complete(Unit)
+        waitForTag("context-import-screen")
+        compose.waitUntil(15_000) { state().setup099.importRouteAcknowledgedAccountKey == UiFixtureChatGptAuth.ACCOUNT_ID }
+        acknowledgeChatGptPlanNotice()
+
+        compose.onNodeWithTag("context-manual-entry").performScrollTo()
+        centerNodeInScrollViewport("context-import-screen", "context-manual-entry")
+        compose.onNodeWithTag("context-manual-entry").assertIsDisplayed().assertIsEnabled().performTouchInput { click() }
+        try {
+            waitForTag("context-edit")
+        } catch (timeout: ComposeTimeoutException) {
+            val pixels = captureDiagnosticWindows("manual-context")
+            throw AssertionError(
+                "Manual context action did not open the notes editor. " +
+                    "Setup stage=${state().setup099.stage}; acknowledged account=" +
+                    "${state().setup099.importRouteAcknowledgedAccountKey}; pending account=" +
+                    "${state().setup099.pendingImportAccountKey}; top dialog=" + latestDialogDescription() + ".\n" +
+                    "Captured window pixels: $pixels\n" + compose.onRoot().printToString(),
+                timeout,
+            )
+        }
+        val contextEditor = compose.onNodeWithTag("context-edit").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        contextEditor.performTextReplacement("I prefer practical examples and concise explanations.")
+        assertEquals("The manual profile draft must contain the exact chosen text before Save",
+            "I prefer practical examples and concise explanations.",
+            contextEditor.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text)
+        assertTrue("Drafting manual notes must not persist before Save", state().context.none { it.text.isNotBlank() })
+        compose.onNodeWithTag("context-save").performScrollTo()
+        centerNodeInScrollViewport("context-screen", "context-save")
+        val saveButton = compose.onNodeWithTag("context-save").assertIsDisplayed().assertIsEnabled()
+        val saveBounds = saveButton.fetchSemanticsNode().boundsInRoot
+        val feedVm = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]
+        // Use an actual pointer tap after centering the visible button. The saved-instance flow has
+        // already exposed click delivery bugs for controls clipped at a scroll viewport edge.
+        saveButton.performTouchInput { click() }
+        try {
+            compose.waitUntil(5_000) {
+                compose.waitForIdle()
+                feedVm.ui.value.contextSaving || state().context.any {
+                    it.confirmed && it.text == "I prefer practical examples and concise explanations."
+                }
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            val editorText = contextEditor.fetchSemanticsNode().config[
+                androidx.compose.ui.semantics.SemanticsProperties.EditableText].text
+            val contextInvalidShown = compose.onAllNodesWithText(text(R.string.feed_context_invalid))
+                .fetchSemanticsNodes().isNotEmpty()
+            val timezoneInvalidShown = compose.onAllNodesWithText(text(R.string.profile_timezone_invalid_085))
+                .fetchSemanticsNodes().isNotEmpty()
+            throw AssertionError(
+                "Centered Save click did not start a context write: bounds=$saveBounds, draftLength=${editorText.length}, " +
+                    "contextSaving=${feedVm.ui.value.contextSaving}, contextError=${feedVm.ui.value.error}, " +
+                    "contextValidationError=$contextInvalidShown, timezoneValidationError=$timezoneInvalidShown.\n" +
+                    "PixelCopy=${captureDiagnosticWindows("manual-save")}.\n" + compose.onRoot().printToString(),
+                timeout,
+            )
+        }
+        try {
+            compose.waitUntil(15_000) {
+                compose.waitForIdle()
+                val saved = state()
+                saved.setup099.stage == Setup099Stage.START_FEED &&
+                    saved.context.any { it.confirmed && it.text == "I prefer practical examples and concise explanations." }
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            val saved = state()
+            val currentUi = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java].ui.value
+            throw AssertionError(
+                "Manual context save did not reach the durable guided next step: stage=${saved.setup099.stage}, " +
+                    "exactConfirmedContext=${saved.context.any { it.confirmed && it.text == "I prefer practical examples and concise explanations." }}, " +
+                    "entries=${saved.context.map { it.id to (it.confirmed to it.text.length) }}, " +
+                    "contextSaving=${currentUi.contextSaving}, error=${currentUi.error}.",
+                timeout,
+            )
+        }
+        // The guided path deliberately remains on the notes screen after saving, with both the
+        // durable note and an explicit next action visible.
+        compose.onNodeWithTag("context-edit").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("setup099-next-feed").performScrollTo().assertIsDisplayed()
+        assertTrue(state().context.any { it.id == PersonalProfile085.PROFILE_ID && it.global && it.confirmed })
+        compose.onNodeWithTag("setup099-next-feed-button").performScrollTo().performClick()
+        waitForTag("feed-screen")
+        compose.waitUntil(15_000) { state().onboardingComplete && state().setup099.stage == Setup099Stage.COMPLETE }
+        assertTrue(state().context.any { it.text == "I prefer practical examples and concise explanations." })
     }
 
     @Test fun browserSignInVerifiedPlanAndAskStayConnectedAcrossRotationAndCancelledAccountAddition() {
-        compose.onNodeWithTag("onboarding-start").performScrollTo().performClick()
+        compose.onNodeWithTag("setup099-continue-public").performScrollTo().performClick()
         waitForTag("feed-screen")
         compose.onNodeWithTag("nav-you").performClick()
         compose.onNodeWithText(text(R.string.feed_connection)).performScrollTo().performClick()
@@ -97,8 +366,7 @@ class ChatGptConnectedJourneyTest {
         assertEquals("fixture-quick", connection.model)
         assertEquals("chatgpt:subscription-fixture-token", app.checked.single())
         assertNull(app.feedSecrets.read())
-        compose.onNodeWithTag("chatgpt-plan-got-it").performClick()
-        compose.waitUntil(15_000) { app.chatGptAuth.state.value.accounts.single().planNoticeAcknowledged }
+        acknowledgeChatGptPlanNotice()
         compose.onNodeWithTag("chatgpt-model-picker").assertTextContains("Fixture quick model")
         compose.activityRule.scenario.recreate()
         waitForTag("chatgpt-model-picker")
@@ -129,11 +397,41 @@ class ChatGptConnectedJourneyTest {
 
         compose.onNodeWithTag("nav-feed").performClick()
         waitForTag("feed-screen")
+        // EditionQuestion switches to a Connect action when the persisted connection is not
+        // currently reflected in FeedUiState. Assert the connected copy before exercising its
+        // chat route so that a stale connection state is diagnosed separately from navigation.
+        compose.onNodeWithTag("edition-ask").assertTextContains(text(R.string.edition_ask_today))
         val requestsBeforeEmptyFeedPrompt = state().requestsToday
         val asksBeforeEmptyFeedPrompt = app.asked.toList()
         val questionsBeforeEmptyFeedPrompt = app.askedQuestions.toList()
-        compose.onNodeWithTag("edition-ask").performScrollTo().performClick()
-        waitForTag("workspace-question")
+        // Keep the card wholly inside the feed viewport, then deliver a real pointer click. The
+        // card sits immediately above the bottom nav; a semantics-only performClick can hit its
+        // clipped edge in this host and fail to exercise the Surface's pointer handler.
+        val editionAsk = compose.onNodeWithTag("edition-ask")
+        editionAsk.performScrollTo()
+        centerNodeInScrollViewport("feed-screen", "edition-ask")
+        editionAsk.assertIsDisplayed().assertHasClickAction().performTouchInput { click() }
+        try {
+            waitForTag("workspace-question")
+        } catch (timeout: ComposeTimeoutException) {
+            val pixels = captureDiagnosticWindows("edition-ask-pointer")
+            // The pointer failure is the primary result. Invoke the same production semantic
+            // action once afterward only to distinguish a broken runtime callback from pointer
+            // delivery at this edge; never treat this diagnostic action as a passing route.
+            val semanticCallbackRouted = runCatching {
+                compose.onNodeWithTag("edition-ask")
+                    .performSemanticsAction(SemanticsActions.OnClick) { onClick -> onClick() }
+                compose.waitUntil(1_500) { compose.onAllNodesWithTag("workspace-question").fetchSemanticsNodes().isNotEmpty() }
+            }.isSuccess
+            throw AssertionError(
+                "Connected EditionQuestion did not expose the AI composer. " +
+                    "Connection=${state().connection.mode}; request count=${state().requestsToday}; " +
+                    "pointer route timed out; direct semantics diagnostic routed=$semanticCallbackRouted; " +
+                    "top dialog=${latestDialogDescription()}; captured window pixels=$pixels.\n" +
+                    compose.onRoot().printToString(),
+                timeout,
+            )
+        }
         compose.onNodeWithTag("workspace-model").assertTextContains("Fixture quick model")
         assertEquals("Opening the empty-feed prompt must not reserve a request", requestsBeforeEmptyFeedPrompt, state().requestsToday)
         assertEquals("Opening the empty-feed prompt must not infer", asksBeforeEmptyFeedPrompt, app.asked.toList())
@@ -234,11 +532,24 @@ class ChatGptConnectedJourneyTest {
         assertEquals(listOf("chatgpt:subscription-fixture-token:Useful open-source tools"), app.searched)
         assertEquals(requestsBeforeSearch + 1, state().requestsToday)
         assertEquals(item, state().items.single { it.id == item.id })
+        val suggestionsBeforeDetail = app.suggestedScopes.size
         compose.onNodeWithTag("search-item-${item.id}").performClick()
         waitForTag("detail-screen")
-        compose.waitUntil(15_000) { state().briefs.any { it.itemId == item.id } }
-        compose.onNodeWithTag("detail-brief-answer").performScrollTo().assertTextEquals(ChatGptJourneyApplication.ANSWER)
-        assertEquals(requestsBeforeSearch + 2, state().requestsToday)
+        val detailSuggestionTarget = requireNotNull(SuggestionTargets097.item(state(), item.id, "en"))
+        compose.waitUntil(15_000) {
+            compose.waitForIdle()
+            state().briefs.any { it.itemId == item.id } &&
+                state().requestsToday == requestsBeforeSearch + 3 &&
+                app.suggestedScopes.size == suggestionsBeforeDetail + 1 &&
+                state().suggestionSets097.any {
+                    it.targetKind == "item" && it.targetId == item.id && it.revision == detailSuggestionTarget.revision
+                }
+        }
+        compose.onNodeWithTag("detail-brief-answer").performScrollTo()
+        compose.onNodeWithText(ChatGptJourneyApplication.ANSWER).assertIsDisplayed()
+        assertEquals("Search, automatic brief, and one prepared suggestion batch are independently budgeted",
+            requestsBeforeSearch + 3, state().requestsToday)
+        assertEquals(listOf("${item.id}:${item.kind}"), app.suggestedScopes.drop(suggestionsBeforeDetail))
         assertEquals(listOf("chatgpt:subscription-fixture-token"), app.asked)
         assertTrue(app.askedQuestions.single().startsWith("Explain this item"))
         assertEquals(listOf(approved), app.askedContexts.single())
@@ -252,9 +563,11 @@ class ChatGptConnectedJourneyTest {
         waitForTag("detail-screen")
         compose.onNodeWithTag("detail-tab-overview").performScrollTo().performClick()
         waitForTag("detail-brief-answer")
-        compose.onNodeWithTag("detail-brief-answer").performScrollTo().assertTextEquals(ChatGptJourneyApplication.ANSWER)
+        compose.onNodeWithTag("detail-brief-answer").performScrollTo()
+        compose.onNodeWithText(ChatGptJourneyApplication.ANSWER).assertIsDisplayed()
         assertEquals(1, app.asked.size)
-        assertEquals(requestsBeforeSearch + 2, state().requestsToday)
+        assertEquals(requestsBeforeSearch + 3, state().requestsToday)
+        assertEquals(suggestionsBeforeDetail + 1, app.suggestedScopes.size)
         compose.onNodeWithContentDescription(text(R.string.back)).performClick()
         waitForTag("search-query")
         compose.onNodeWithTag("search-query").assertTextContains("Useful open-source tools")
@@ -346,7 +659,7 @@ class ChatGptConnectedJourneyTest {
     }
 
     private fun openConnectionFromOnboarding() {
-        compose.onNodeWithTag("onboarding-start").performScrollTo().performClick()
+        compose.onNodeWithTag("setup099-continue-public").performScrollTo().performClick()
         waitForTag("feed-screen")
         compose.onNodeWithTag("nav-you").performClick()
         compose.onNodeWithText(text(R.string.feed_connection)).performScrollTo().performClick()
@@ -368,6 +681,100 @@ class ChatGptConnectedJourneyTest {
             throw AssertionError("Expected $count connection checks; got ${app.checkedConnections.size}. " +
                 "Current connection: ${state().connection}.\n" + compose.onRoot().printToString(), timeout)
         }
+    }
+
+    /** Wait for the actual native Compose dialog as well as its confirmation semantics before tapping. */
+    private fun acknowledgeChatGptPlanNotice() {
+        val accountId = state().connection.accountId
+        val feedVm = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]
+        val acknowledged = app.chatGptAuth.state.value.accounts
+            .firstOrNull { it.id == accountId }?.planNoticeAcknowledged == true
+        if (acknowledged) return
+        compose.waitUntil(10_000) {
+            val current = feedVm.ui.value
+            val active = current.chatGpt.accounts.firstOrNull { it.id == accountId }
+            val noticeShouldBeShown = current.connected && current.state?.connection?.mode == "chatgpt" &&
+                active?.connected == true && active.planEnabled && !active.planNoticeAcknowledged
+            !noticeShouldBeShown || compose.onAllNodesWithTag("chatgpt-plan-got-it").fetchSemanticsNodes().isNotEmpty()
+        }
+        val current = feedVm.ui.value
+        val active = current.chatGpt.accounts.firstOrNull { it.id == accountId }
+        val noticeShouldBeShown = current.connected && current.state?.connection?.mode == "chatgpt" &&
+            active?.connected == true && active.planEnabled && !active.planNoticeAcknowledged
+        if (!noticeShouldBeShown) return
+        val planDialog = checkNotNull(ShadowDialog.getLatestDialog()) { "Expected the ChatGPT plan notice window" }
+        assertTrue("The ChatGPT plan notice must be the current visible dialog", planDialog.isShowing)
+        compose.onNodeWithTag("chatgpt-plan-got-it").assertIsDisplayed().performClick()
+        try {
+            compose.waitUntil(10_000) {
+                compose.waitForIdle()
+                feedVm.ui.value.chatGpt.accounts.firstOrNull { it.id == accountId }?.planNoticeAcknowledged == true
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            val rawAcknowledged = app.chatGptAuth.state.value.accounts
+                .firstOrNull { it.id == accountId }?.planNoticeAcknowledged
+            val viewModel = feedVm.ui.value
+            val uiAcknowledged = viewModel.chatGpt.accounts.firstOrNull { it.id == accountId }?.planNoticeAcknowledged
+            throw AssertionError(
+                "ChatGPT plan acknowledgement did not reach FeedViewModel for account=$accountId; " +
+                    "authState=$rawAcknowledged, viewModelState=$uiAcknowledged, " +
+                    "currentAccount=${viewModel.state?.connection?.accountId}, connected=${viewModel.connected}.",
+                timeout,
+            )
+        }
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            !planDialog.isShowing && compose.onAllNodesWithTag("chatgpt-plan-got-it").fetchSemanticsNodes().isEmpty()
+        }
+    }
+
+    private fun latestDialogDescription(): String = ShadowDialog.getLatestDialog()?.let { dialog ->
+        "${dialog.javaClass.simpleName}(showing=${dialog.isShowing})"
+    } ?: "none"
+
+    /** Failure-only activity/dialog PixelCopy so window occlusion can be reviewed alongside semantics. */
+    private fun captureDiagnosticWindows(name: String): String = runCatching<String> {
+        compose.waitForIdle()
+        val activityWindow = compose.activity.window
+        val activityPixels = copyWindowPixels(activityWindow)
+        val dialog = ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }
+        if (dialog?.window != null) {
+            val overlay = copyWindowPixels(dialog.window!!)
+            val location = IntArray(2)
+            dialog.window!!.decorView.getLocationOnScreen(location)
+            Canvas(activityPixels).drawBitmap(overlay, location[0].toFloat(), location[1].toFloat(), Paint(Paint.ANTI_ALIAS_FLAG))
+            overlay.recycle()
+        }
+        val file = File(compose.activity.cacheDir, "setup099-$name.png")
+        file.outputStream().use { check(activityPixels.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        activityPixels.recycle()
+        file.absolutePath
+    }.getOrElse { "capture unavailable (${it.javaClass.simpleName})" }
+
+    private fun copyWindowPixels(window: android.view.Window): Bitmap {
+        val view = window.decorView
+        val bitmap = Bitmap.createBitmap(view.width.coerceAtLeast(1), view.height.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+        var status = -1
+        compose.runOnIdle { PixelCopy.request(window, bitmap, { status = it }, Handler(Looper.getMainLooper())) }
+        compose.waitUntil(2_000) { status != -1 }
+        check(status == PixelCopy.SUCCESS) { "PixelCopy returned status $status" }
+        return bitmap
+    }
+
+    /** Scrolls a real target toward the viewport center; scroll actions clamp naturally at bounds. */
+    private fun centerNodeInScrollViewport(viewportTag: String, targetTag: String) {
+        val viewportNode = compose.onNodeWithTag(viewportTag)
+        val viewport = viewportNode.fetchSemanticsNode().boundsInRoot
+        val target = compose.onNodeWithTag(targetTag).fetchSemanticsNode().boundsInRoot
+        val deltaY = ((target.top + target.bottom) - (viewport.top + viewport.bottom)) / 2f
+        if (kotlin.math.abs(deltaY) > 1f) {
+            viewportNode.performSemanticsAction(SemanticsActions.ScrollBy) { scroll -> scroll(0f, deltaY) }
+        }
+        compose.waitForIdle()
+        val moved = compose.onNodeWithTag(targetTag).fetchSemanticsNode().boundsInRoot
+        assertTrue("$targetTag should be fully inside $viewportTag after controlled scrolling: " +
+            "target=${moved.top}..${moved.bottom}, viewport=${viewport.top}..${viewport.bottom}",
+            moved.top >= viewport.top && moved.bottom <= viewport.bottom)
     }
 }
 

@@ -1,0 +1,26 @@
+{
+  "title": "A Small Kiswahili-First AI Pilot: A Practical Reflection",
+  "summary": "An AI-authored reading idea—not a publisher article. Use these steps to shape a small, reviewable experiment with a Kiswahili-first digital tool.",
+  "why": "A practical reflection for people exploring accessible, locally useful digital tools and small-business technology.",
+  "basis": "reflection",
+  "sections": [
+    {
+      "heading": "Start with one useful task",
+      "body": "Choose a repeated task that can be tested without handing over an important decision. Write down what a person does today, where time or effort is spent, and what a better result would look like. Keep the first question narrow: for example, can a tool help someone draft a clear product description in Kiswahili, while the person remains responsible for checking the final wording?"
+    },
+    {
+      "heading": "Test language and oversight together",
+      "body": "Collect a small set of examples that reflect the way intended users actually write and speak. Ask fluent reviewers to note where meaning, tone, names, or local terms are missed. Include awkward cases as well as straightforward ones. Decide in advance who reviews every output, how a correction is recorded, and when the tool should simply say it is unsure."
+    },
+    {
+      "heading": "Agree on a stop-or-continue rule",
+      "body": "Before the trial, choose a few measures: usefulness to the person doing the task, time spent correcting an answer, privacy practices, and the cost of keeping the service available. Record problems as carefully as successes. If the review burden is too high or the language results are unreliable, pause and redesign rather than expanding. A small pilot is a way to learn, not a promise that a tool will work for everyone."
+    }
+  ],
+  "furtherReading": [
+    {
+      "title": "Artificial Intelligence Readiness Assessment Report — UNESCO and the United Republic of Tanzania (2025)",
+      "url": "https://tanzania.un.org/en/297619-artificial-intelligence-readiness-assessment-report"
+    }
+  ]
+}

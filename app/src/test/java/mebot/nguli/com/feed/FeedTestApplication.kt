@@ -3,6 +3,8 @@ package mebot.nguli.com.feed
 import android.content.Context
 import mebot.nguli.com.MeBotApplication
 import mebot.nguli.com.core.*
+import kotlinx.coroutines.CompletableDeferred
+import java.util.concurrent.CopyOnWriteArrayList
 
 /** Deterministic test transports. These fixtures are never packaged in the APK. */
 class FeedTestApplication : MeBotApplication() {
@@ -13,6 +15,10 @@ class FeedTestApplication : MeBotApplication() {
     @Volatile var answerCalls = 0
     var suggestionQuestions: List<String>? = null
     @Volatile var suggestionCalls = 0
+    @Volatile var suggestionGate: CompletableDeferred<Unit>? = null
+    @Volatile var onSuggestionStarted: ((String?) -> Unit)? = null
+    /** Records exact item and conversation scopes sent to the deterministic suggestion transport. */
+    val suggestionRequestTargets = CopyOnWriteArrayList<Pair<String?, String?>>()
     override val feedSecrets by lazy { TestVault(this) }
     override val feedEngine by lazy {
         FeedEngine(feedRepository, feedSecrets, object : SourceReader {
@@ -38,6 +44,9 @@ class FeedTestApplication : MeBotApplication() {
                 language: String,
             ): List<String> {
                 suggestionCalls++
+                suggestionRequestTargets += item?.id to conversation?.id
+                onSuggestionStarted?.invoke(item?.id ?: conversation?.id)
+                suggestionGate?.await()
                 return suggestionQuestions ?: if (language == "sw") listOf(
                     "Ni ushahidi gani katika taarifa hii unaounga mkono dai lake kuu?",
                     "Ni dhana gani ikibadilika ingeathiri zaidi hitimisho kuhusu jambo hili?",

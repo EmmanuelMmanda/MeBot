@@ -18,7 +18,8 @@ import mebot.nguli.com.core.*
 data class RelevanceUiContext(
     val state: FeedState? = null,
     val onVote: ((String, Boolean?) -> Unit)? = null,
-    val onStar: ((String) -> Unit)? = null,
+    /** Called with the story id and intended follow state; MainActivity owns durable feedback. */
+    val onStar: ((String, Boolean) -> Unit)? = null,
     val onConfigureStar: ((String, Boolean, Int) -> Unit)? = null,
     val onCollection: ((String, String) -> Unit)? = null,
 )
@@ -31,7 +32,7 @@ internal fun RelevanceControls(item: FeedItem, modifier: Modifier = Modifier) {
     val state = ctx.state ?: return
     val onStar = ctx.onStar ?: return
     val starred = state.starredStories.any { it.itemId == item.id }
-    IconButton(onClick = { onStar(item.id) }, modifier = modifier.size(48.dp).testTag("star-${item.id}")
+    IconButton(onClick = { onStar(item.id, !starred) }, modifier = modifier.size(48.dp).testTag("star-${item.id}")
         .semantics { selected = starred }) {
         Icon(if (starred) Icons.Outlined.Star else Icons.Outlined.StarOutline,
             stringResource(if (starred) R.string.star_remove_label else R.string.star_add_label), Modifier.size(22.dp),

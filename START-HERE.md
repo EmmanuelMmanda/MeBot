@@ -1,49 +1,49 @@
-# Start here — MeBot 0.9.8
+# Start here
 
-**MeBot 0.9.8 is available now.** [Download the official APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.8/mebot-0.9.8.apk) or check Software Updates in your compatible production app. [Installation and verification](docs/download.html).
+[Download latest version](https://github.com/EmmanuelMmanda/MeBot/releases/latest/download/mebot-0.9.8.apk) · [Installation guide](docs/download.html).
 
-## 1. Choose interests
+## 1. Choose topics
 
-Pick your topics and optionally a city. A context file is not required.
+Select the updates you want and narrow them by interest or location.
 
-[Detailed guide](docs/guides/install.html).
+[Open the guide](docs/guides/install.html).
 
-## 2. Bring only useful context
+## 2. Set About You
 
-Review imported JSON before replacing notes. After confirmation, your saved notes appear in your context details. Cancel leaves the draft in place.
+Set interests and region under About You. Review which notes each module may use, change those choices, or leave personal context empty.
 
-[Detailed guide](docs/guides/personal-context.html#after-import).
+[Open the guide](docs/guides/personal-context.html#after-import).
 
-## 3. Read with the source nearby
+## 3. Read and check sources
 
-Keep publisher dates, deadlines and original links in view. Saved stories stay available without AI.
+Browse source-checked grants, jobs, contracts and scholarships. Publication dates and application deadlines appear separately when available. Confirm current eligibility, dates and requirements on the official listing.
 
-[Detailed guide](docs/guides/feed-and-ai.html).
+[Open the guide](docs/guides/feed-and-ai.html).
 
-## 4. Ask when you choose
+## 4. Ask a follow-up
 
-Open Suggestions when you want another angle. Explicit generation prepares five distinct questions with your connected AI. Send asks the selected question; the pencil lets you edit first. Opening or closing the sheet never sends a question. Without AI, questions are unavailable, while public reading and saved items remain usable.
+With an AI provider connected, open the story’s question sheet. Choose Send to ask a question, or Edit to change the draft first. Opening the sheet alone sends nothing.
 
-[Detailed guide](docs/guides/feed-and-ai.html#follow-up).
+[Open the guide](docs/guides/feed-and-ai.html#story-questions).
 
-## 5. Explore Original Reads
+## 5. Open an Original Read
 
-Original Reads are clearly labelled AI-authored, with Created dates rather than publisher dates. Read the complete sections, inspect evidence, and explore optional further reading separately. Today keeps your personal selection distinct from verified source-day stories; an undated source is not relabelled as published today.
+For You collects sourced stories around topics you choose. Original Read is a separate, longer AI-authored piece with its Created date—not a publisher date. Optional further reading is separate from the reflection and does not verify it by itself.
 
-[Detailed guide](docs/guides/feed-and-ai.html).
+[Open the guide](docs/guides/feed-and-ai.html).
 
-## 6. Choose your colours
+## 6. Choose language and appearance
 
-Change accent and page style in Appearance. Deep black requires dark mode; your choice is saved.
+Choose English or Kiswahili under You → Personalization → Language. In Appearance, select system, light or dark mode, an accent colour, and one of four page styles.
 
-[Detailed guide](docs/guides/appearance.html).
+[Open the guide](docs/guides/appearance.html).
 
-## 7. Keep your data and tools
+## 7. Use local tools
 
-Background timing remains under Android control. Review update identity before installation. Alarm, Focus and Daily Check-in work independently of AI; test alarms on your own phone.
+Set an alarm or start a Focus session; local tools remain available without an AI connection.
 
-[Detailed guide](docs/guides/background-and-data.html).
+[Open the guide](docs/guides/background-and-data.html).
 
-Install an eligible update over your existing production 0.9.x app. Do not uninstall or clear data. Older separately installed builds have different package or signing identities; see the installation guide before replacing them.
+Install a compatible update over your existing app. Do not uninstall or clear app data as an update step. If Android reports a signing conflict, check the installation guide before changing installations.
 
-[Fresh bilingual gallery](docs/screenshots.html) · [User guide](docs/USER-GUIDE.md).
+[App screens](docs/screenshots.html) · [User guide](docs/USER-GUIDE.md).

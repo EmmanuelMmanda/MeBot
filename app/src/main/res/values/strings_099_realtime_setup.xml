@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="realtime_setup_title">Voice service settings</string>
+    <string name="realtime_setup_intro">Configure a trusted MeBot voice service separately from your text connection. Nothing connects or starts automatically.</string>
+    <string name="realtime_setup_chatgpt_title">ChatGPT text connection</string>
+    <string name="realtime_setup_chatgpt_body">Your ChatGPT sign-in remains unchanged and is used for supported text features. It does not grant OpenAI API Realtime access or pay for API voice usage.</string>
+    <string name="realtime_setup_broker_title">Separate OpenAI API voice service</string>
+    <string name="realtime_setup_broker_body">This optional service must be set up by you or a trusted operator. API voice usage is billed separately from ChatGPT and may incur charges.</string>
+    <string name="realtime_setup_no_auto_call">Saving these details only stores the service URL and token. It does not check the service, request a session, access your microphone, or start a call.</string>
+    <string name="realtime_setup_url_label">HTTPS voice service URL</string>
+    <string name="realtime_setup_url_placeholder">https://voice.example.com</string>
+    <string name="realtime_setup_url_help">Use the public HTTPS base URL for your trusted MeBot broker. Query strings and fragments are not allowed.</string>
+    <string name="realtime_setup_token_label">MeBot service token</string>
+    <string name="realtime_setup_token_placeholder">Paste the service token from your operator</string>
+    <string name="realtime_setup_token_saved_placeholder">Saved token is hidden; leave blank to keep it</string>
+    <string name="realtime_setup_token_help">This is a service token issued by the broker, not an OpenAI developer API key.</string>
+    <string name="realtime_setup_token_replace_help">A service token is stored. Leave blank to keep it for this same URL, or enter a replacement.</string>
+    <string name="realtime_setup_token_security">The token is encrypted in private app storage and is excluded from feed backups.</string>
+    <string name="realtime_setup_save">Save voice service</string>
+    <string name="realtime_setup_save_help">Save does not make a network request. Test the service separately when you choose.</string>
+    <string name="realtime_setup_error_https">Enter a valid public HTTPS service URL without a query or fragment.</string>
+    <string name="realtime_setup_error_token">The service token must be 32–4096 characters with no whitespace.</string>
+    <string name="realtime_setup_error_token_required">Enter a service token for this URL before saving.</string>
+    <string name="realtime_setup_status_title">Service capability status</string>
+    <string name="realtime_setup_not_checked">Not checked yet. Use Test service to explicitly request a capability check.</string>
+    <string name="realtime_setup_test_help">Test checks only the broker capability endpoint. It does not create a voice session or send microphone audio.</string>
+    <string name="realtime_setup_unsaved_changes">Save your URL/token changes before checking status.</string>
+    <string name="realtime_setup_checking">Checking broker capabilities…</string>
+    <string name="realtime_setup_test">Test service</string>
+    <string name="realtime_setup_voice_status">Live Realtime voice</string>
+    <string name="realtime_setup_transcription_status">Recording transcription</string>
+    <string name="realtime_setup_voice_available">The service reports that live voice is available. This is a status result only; no call was started.</string>
+    <string name="realtime_setup_transcription_available">The service reports that recording transcription is configured. This is a status result only; no recording or audio upload has started.</string>
+    <string name="realtime_setup_remove">Remove voice service</string>
+    <string name="realtime_setup_remove_title">Remove this voice service?</string>
+    <string name="realtime_setup_remove_body">This removes only the separately stored voice service URL and token. Your ChatGPT text connection and its settings stay unchanged.</string>
+</resources>

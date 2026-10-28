@@ -54,7 +54,7 @@ class MeBotJourneyTest {
         runBlocking { application.repository.erase(); application.feedRepository.erase() }
         application.alarms.clearAll()
         ShadowAlarmManager.setCanScheduleExactAlarms(false)
-        waitForTag("onboarding-screen")
+        waitForTag("setup-099-onboarding")
     }
 
     @Test
@@ -117,7 +117,9 @@ class MeBotJourneyTest {
         compose.onNodeWithTag("feed-screen").performScrollToNode(hasText(text(R.string.feed_next_alarm)))
         compose.onNodeWithText(text(R.string.feed_next_alarm)).assertIsDisplayed()
         compose.activityRule.scenario.recreate()
-        waitForText(text(R.string.feed_greeting, "Alex"))
+        val greeting = text(R.string.feed_greeting, "Alex")
+        compose.onNodeWithTag("feed-screen").performScrollToNode(hasText(greeting))
+        waitForText(greeting)
         screenshot("04-mebot-home-with-plan")
         navigation(R.string.tools)
         waitForTag("module-alarm")
@@ -472,7 +474,7 @@ class MeBotJourneyTest {
         return compose.activity.createConfigurationContext(config).getString(resource)
     }
     private fun explore() {
-        compose.onNodeWithTag("onboarding-start").performScrollTo().performClick()
+        compose.onNodeWithTag("setup099-continue-public").performScrollTo().performClick()
         waitForTag("feed-screen")
         waitForState { it.profile.onboardingComplete }
         compose.waitUntil(15_000) {

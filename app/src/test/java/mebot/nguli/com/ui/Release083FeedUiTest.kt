@@ -31,7 +31,7 @@ class Release083FeedUiTest {
     @Test fun savedSearchCollectionsAndStarPauseHaveRealState() {
         val state = mutableStateOf(FeedState(items=listOf(story("one","Building a shop"),story("two","Learning music")),savedIds=setOf("one","two"),starredStories=listOf(StarredStory("one"))))
         compose.setContent { MeBotTheme { CompositionLocalProvider(LocalRelevanceContext provides RelevanceUiContext(
-            state=state.value, onStar={state.value=StarredStories.toggle(state.value,it,100)},
+            state=state.value, onStar={id, _ -> state.value=StarredStories.toggle(state.value,id,100)},
             onConfigureStar={id,paused,hours->state.value=StarredStories.configure(state.value,id,paused,hours)},
             onCollection={id,name->state.value=StarredStories.collection(state.value,id,name)})) {
             SavedFeed(state.value,{}, {}, {})
@@ -58,7 +58,7 @@ class Release083FeedUiTest {
     @Test fun feedStarPreviewUsesLocalFixtureWithoutProviderCalls() {
         val state = mutableStateOf(FeedState(items=listOf(story("fixture", "A new chapter for local businesses")), readingPreferences=ReadingPreferences(autoLoadMore=false)))
         compose.setContent { MeBotTheme { CompositionLocalProvider(LocalRelevanceContext provides RelevanceUiContext(
-            state=state.value,onStar={state.value=StarredStories.toggle(state.value,it,100)})) {
+            state=state.value,onStar={id, _ -> state.value=StarredStories.toggle(state.value,id,100)})) {
             FeedHome(FeedUiState(state=state.value,loading=false),{},{},{},{},{},{},{},{},{},null,{})
         } } }
         compose.onNodeWithTag("feed-screen").performScrollToNode(hasTestTag("star-fixture"))
@@ -109,7 +109,7 @@ class Release083FeedUiTest {
     @Test fun iconOnlyStarSitsBesideBookmarkWithoutManagementCopy() {
         val state = mutableStateOf(FeedState(items=listOf(story("one","A compact story"))))
         compose.setContent { MeBotTheme { CompositionLocalProvider(LocalRelevanceContext provides RelevanceUiContext(
-            state=state.value,onStar={state.value=StarredStories.toggle(state.value,it,100)})) {
+            state=state.value,onStar={id, _ -> state.value=StarredStories.toggle(state.value,id,100)})) {
             StoryRow(state.value.items.single(),false,{}, {}, null)
         } } }
         val star = compose.onNodeWithTag("star-one")

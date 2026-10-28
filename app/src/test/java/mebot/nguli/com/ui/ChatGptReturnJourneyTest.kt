@@ -42,7 +42,7 @@ class ChatGptReturnJourneyTest {
             app.repository.update { it.copy(profile = it.profile.copy(onboardingComplete = true)) }
             app.feedRepository.update { it.copy(onboardingComplete = true) }
         }
-        assertDisconnectedConnection()
+        assertDisconnectedConnection(chatGptPrimary = false)
         runBlocking {
             app.feedEngine.clearAllCredentials()
             app.repository.erase()
@@ -51,9 +51,9 @@ class ChatGptReturnJourneyTest {
             app.feedRepository.update { it.copy(onboardingComplete = true) }
         }
         app.alarms.clearAll()
-        assertDisconnectedConnection()
+        assertDisconnectedConnection(chatGptPrimary = false)
         activityRule.scenario.recreate()
-        assertDisconnectedConnection()
+        assertDisconnectedConnection(chatGptPrimary = false)
         assertEquals("untrusted-cold-code", compose.activity.intent.getStringExtra("code"))
         assertEquals("untrusted-cold-token", compose.activity.intent.getStringExtra("access_token"))
 
@@ -64,20 +64,25 @@ class ChatGptReturnJourneyTest {
             activity.onNewIntent(returnIntent()
                 .putExtra("code", "untrusted-warm-code").putExtra("access_token", "untrusted-warm-token"))
         }
-        assertDisconnectedConnection()
+        assertDisconnectedConnection(chatGptPrimary = false)
         assertEquals("untrusted-warm-code", compose.activity.intent.getStringExtra("code"))
         assertEquals("untrusted-warm-token", compose.activity.intent.getStringExtra("access_token"))
         activityRule.scenario.recreate()
-        assertDisconnectedConnection()
+        assertDisconnectedConnection(chatGptPrimary = false)
         // Robolectric's controller recreates from its original launch Intent, even after
         // direct onNewIntent delivery. Malicious extras are still present and stay ignored.
         assertEquals("untrusted-cold-code", compose.activity.intent.getStringExtra("code"))
         assertEquals("untrusted-cold-token", compose.activity.intent.getStringExtra("access_token"))
     }
 
-    private fun assertDisconnectedConnection() {
+    private fun assertDisconnectedConnection(chatGptPrimary: Boolean) {
         waitForTag("connection-screen")
-        compose.onNodeWithTag("chatgpt-sign-in").assertIsDisplayed()
+        if (chatGptPrimary) {
+            compose.onNodeWithTag("chatgpt-sign-in").assertIsDisplayed()
+        } else {
+            compose.onNodeWithTag("connection-reconnect-provider-099").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithTag("chatgpt-sign-in").assertDoesNotExist()
+        }
         compose.onNodeWithTag("connection-key").assertDoesNotExist()
         assertDisconnectedCredentials()
     }

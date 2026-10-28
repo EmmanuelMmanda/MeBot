@@ -53,7 +53,7 @@ class MeBotPolishUiTest {
         } } }
         compose.onAllNodesWithTag("ai-activity-panel").assertCountEquals(1)
         compose.onNodeWithTag("workspace-messages").performScrollToNode(hasTestTag("workspace-draft"))
-        compose.onNodeWithTag("workspace-draft").assertTextContains("A useful answer", substring = true)
+        compose.onNodeWithTag("workspace-draft").assert(hasAnyDescendant(hasText("A useful answer", substring = true)))
         compose.onAllNodesWithTag("workspace-importing").assertCountEquals(0)
         screenshot("mebot-0.8.1-streaming")
         compose.runOnIdle { ui.value = ui.value.copy(asking = false, answer = null, activities = emptyList(), state = state) }
@@ -94,7 +94,7 @@ class MeBotPolishUiTest {
         val ui = FeedUiState(state = state.copy(items = listOf(item)), loading = false, connected = true,
             detailItemId = item.id, detailTurns = thread.turns.takeLast(1))
         compose.setContent { MeBotTheme { FeedDetail(ui, item.id, {}, {}, {}) } }
-        compose.onNodeWithTag("detail-brief-answer").performScrollTo().assertTextContains("Start with a small test")
+        compose.onNodeWithTag("detail-brief-answer").performScrollTo().assert(hasAnyDescendant(hasText("Start with a small test", substring = false)))
         compose.onNodeWithTag("detail-story-notes").performScrollTo().performClick()
         compose.onNodeWithText(item.summary).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(item.nextStep).performScrollTo().assertIsDisplayed()

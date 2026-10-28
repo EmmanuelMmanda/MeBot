@@ -57,6 +57,7 @@ class MeBotChatGptUiTest {
     private var acknowledgements = 0
 
     @Test fun primarySignInCanBeCancelledWithoutExposingOrSelectingApiBilling() {
+        ui.value = ui.value.copy(state = ui.value.state!!.copy(onboardingComplete = false))
         show()
         compose.onNodeWithTag("chatgpt-sign-in").assertIsDisplayed()
         compose.onNodeWithTag("connection-key").assertDoesNotExist()
@@ -128,7 +129,7 @@ class MeBotChatGptUiTest {
 
     @Test fun savedPlanAccountWithCatalogFailureRetriesWithoutOAuthOrAnIdentityError() {
         val saved = account("saved-plan", "Example account · SAVED").copy(models = emptyList())
-        ui.value = ui.value.copy(chatGpt = ChatGptAuthState(accounts = listOf(saved),
+        ui.value = ui.value.copy(state = ui.value.state!!.copy(onboardingComplete = false), chatGpt = ChatGptAuthState(accounts = listOf(saved),
             lastDiagnostic = ChatGptDiagnostic("models", 200, "req_fixture_catalog", "other_json")), error = "chatgpt_models")
         show()
         compose.onNodeWithTag("chatgpt-retry-account").assertIsDisplayed()
@@ -153,7 +154,12 @@ class MeBotChatGptUiTest {
 
     @Test fun savedAccountHasOneModelControlAndKeepsItsDraftWhenManagementIsExpanded() {
         val saved = account("saved-model", "Example account · MODEL")
-        ui.value = ui.value.copy(chatGpt = ChatGptAuthState(accounts = listOf(saved)), error = "chatgpt_invalid_response")
+        ui.value = ui.value.copy(
+            // Start on Fast so choosing Careful in the open picker has one unambiguous menu node
+            // and genuinely changes the pending model draft.
+            state = ui.value.state!!.copy(connection = AiConnection(mode = "chatgpt", model = "fixture-fast", accountId = saved.id)),
+            chatGpt = ChatGptAuthState(accounts = listOf(saved)), error = "chatgpt_invalid_response",
+        )
         show(settings = Settings(theme = "dark"))
         compose.onNodeWithTag("chatgpt-ready-model").performClick()
         compose.onNodeWithText("Careful model").performClick()
@@ -216,6 +222,7 @@ class MeBotChatGptUiTest {
     @Test
     @Config(qualifiers = "sw-rTZ-w320dp-h800dp-xhdpi")
     fun compactSwahiliDarkConnectionKeepsItsActionsReachable() {
+        ui.value = ui.value.copy(state = ui.value.state!!.copy(onboardingComplete = false))
         show(settings = Settings(language = "sw", theme = "dark"), fontScale = 1.3f)
         compose.onNodeWithTag("chatgpt-sign-in").assertIsDisplayed()
         screenshot("32-mebot-chatgpt-small-swahili-dark")
