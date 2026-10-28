@@ -688,8 +688,29 @@ class MeBotFeedJourneyTest {
         compose.waitUntil(15_000) {
             androidx.lifecycle.ViewModelProvider(compose.activity)[mebot.nguli.com.feed.FeedViewModel::class.java].ui.value.connected
         }
-        compose.onNodeWithTag("connection-continue").performScrollTo().performClick()
+        val beforeConnectionRefresh = state()
+        compose.onNodeWithTag("connection-continue").performScrollTo()
+            .assertTextEquals(text(R.string.feed_refresh_mine)).performClick()
         waitForText(text(R.string.feed_you_title))
+        val feedViewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]
+        // A changed connection explicitly refreshes the feed on Continue. Wait for its
+        // provider discovery + request-budget commit to finish before the sheet's read-only
+        // budget baseline; otherwise the background refresh can reserve after that baseline.
+        compose.waitUntil(15_000) {
+            val current = state()
+            val currentUi = feedViewModel.ui.value
+            current.requestsToday > beforeConnectionRefresh.requestsToday &&
+                current.lastAiRefreshMillis > beforeConnectionRefresh.lastAiRefreshMillis &&
+                !currentUi.refreshing && !currentUi.connecting
+        }
+        compose.waitForIdle()
+        val afterConnectionRefresh = state()
+        assertTrue("Connection Continue must finish its explicit feed refresh",
+            afterConnectionRefresh.requestsToday > beforeConnectionRefresh.requestsToday)
+        assertTrue("The explicit refresh must complete fake-provider discovery",
+            afterConnectionRefresh.lastAiRefreshMillis > beforeConnectionRefresh.lastAiRefreshMillis)
+        assertFalse(feedViewModel.ui.value.refreshing)
+        assertEquals("Connection refresh is not suggestion generation", 0, app.suggestionCalls)
     }
 
     private fun syntheticProviderQuestions(language: String): List<String> = if (language == "sw") listOf(

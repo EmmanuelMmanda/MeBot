@@ -435,15 +435,19 @@ class SuggestionActions097ViewModelTest {
             send.join()
             // The request was conservatively reserved before entering the semaphore, but its
             // unsent user turn and action-created thread must not masquerade as a submitted chat.
+            var rollbackPhase = "waiting-for-empty-thread"
             try {
                 withTimeout(10_000) {
                     app.feedRepository.state.first { it.conversations.isEmpty() }
+                    rollbackPhase = "empty-thread-observed-waiting-for-cleanup-job"
                     rollbackJob?.join()
+                    rollbackPhase = "cleanup-job-completed"
                 }
             } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
                 val stateAtTimeout = kotlinx.coroutines.withTimeoutOrNull(1_000) { app.feedRepository.current() }
                 val current = stateAtTimeout?.conversations?.singleOrNull { it.id == rollbackThreadId }
-                throw AssertionError("rollback timeout: id=$rollbackThreadId, epoch=$rollbackEpoch, selectionGeneration=$selectionGeneration, " +
+                throw AssertionError("rollback timeout: phase=$rollbackPhase, cleanupJobCompleted=${rollbackJob?.isCompleted}, " +
+                    "cleanupJobCancelled=${rollbackJob?.isCancelled}, id=$rollbackThreadId, epoch=$rollbackEpoch, selectionGeneration=$selectionGeneration, " +
                     "originalId=${rollbackOriginal!!.id}, appendedId=${rollbackAppended!!.id}, originalTurns=${rollbackOriginal.turns.size}, " +
                     "appendedTurns=${rollbackAppended!!.turns.size}, currentId=${current?.id}, currentTurns=${current?.turns?.size}, " +
                     "currentMatchesAppended=${current == rollbackAppended}, askCancelled=${queuedAskJob.isCancelled}, " +
@@ -490,11 +494,38 @@ class SuggestionActions097ViewModelTest {
                         state.conversations.singleOrNull()?.turns?.lastOrNull()?.text == option.questionText
                 }
             }
+            val queuedAskJob = privateField("suggestionAskJob") as? kotlinx.coroutines.Job
+            val rollbackThreadId = privateField("pendingSuggestionThreadId") as? String
+            val rollbackOriginal = privateField("pendingSuggestionOriginalThread") as? AiConversation
+            val rollbackAppended = privateField("pendingSuggestionAppendedThread") as? AiConversation
+            val rollbackEpoch = privateField("suggestionRollbackEpoch")
+            val selectionGeneration = privateField("conversationSelectionGeneration")
+            assertNotNull("existing-chat send must own a queued ask job before navigation cancels it", queuedAskJob)
+            // CONVERSATION targets roll back from the captured original/appended snapshots; the
+            // created-thread ID is intentionally null because no new thread was created.
+            assertEquals(originalThread, rollbackOriginal)
+            assertNotNull("the exact appended existing-thread revision must be retained for rollback", rollbackAppended)
             val rollbackJob = vm.cancelConversationOpen()
+            assertTrue("navigation must cancel the captured queued ask job", queuedAskJob!!.isCancelled)
             send.join()
-            withTimeout(10_000) {
-                app.feedRepository.state.first { it.conversations.singleOrNull() == originalThread }
-                rollbackJob?.join()
+            var rollbackPhase = "waiting-for-original-thread"
+            try {
+                withTimeout(10_000) {
+                    app.feedRepository.state.first { it.conversations.singleOrNull() == originalThread }
+                    rollbackPhase = "original-thread-observed-waiting-for-cleanup-job"
+                    rollbackJob?.join()
+                    rollbackPhase = "cleanup-job-completed"
+                }
+            } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
+                val stateAtTimeout = kotlinx.coroutines.withTimeoutOrNull(1_000) { app.feedRepository.current() }
+                val current = stateAtTimeout?.conversations?.singleOrNull { it.id == originalThread.id }
+                throw AssertionError("existing-chat rollback timeout: phase=$rollbackPhase, cleanupJobCompleted=${rollbackJob?.isCompleted}, " +
+                    "cleanupJobCancelled=${rollbackJob?.isCancelled}, epoch=$rollbackEpoch, selectionGeneration=$selectionGeneration, " +
+                    "createdThreadId=$rollbackThreadId, " +
+                    "originalId=${rollbackOriginal?.id}, originalTurns=${rollbackOriginal?.turns?.size}, appendedTurns=${rollbackAppended?.turns?.size}, " +
+                    "currentId=${current?.id}, currentTurns=${current?.turns?.size}, currentEqualsOriginal=${current == originalThread}, " +
+                    "currentEqualsAppended=${current == rollbackAppended}, askCancelled=${queuedAskJob.isCancelled}, " +
+                    "requestsToday=${stateAtTimeout?.requestsToday ?: "unavailable"}, providerCalls=${app.askedQuestions.size}", timeout)
             }
             assertTrue(app.askedQuestions.isEmpty())
         } finally {
