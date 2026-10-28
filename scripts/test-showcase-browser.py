@@ -36,8 +36,14 @@ def required_font(page, guide=False):
       const family = selectors.filter(s => document.querySelector(s)).map(s => [s,getComputedStyle(document.querySelector(s)).fontFamily]);
       const line = selector => document.querySelector(selector) ? getComputedStyle(document.querySelector(selector)).lineHeight : null;
       const bodyLine = line('body');
-      const paragraphLine = guide ? (line('.article-section p') || line('main .lead') || line('main p'))
-        : (line('.hero-lead') || line('main .lead') || line('main section p'));
+      // Measure the same semantic body copy for line height and weight. A selector
+      // list such as '.hero-lead,.lead,main p' matches in document order, so the
+      // earlier eyebrow can win even when a lead paragraph is present.
+      const paragraph = guide
+        ? (document.querySelector('.article-section p') || document.querySelector('main .lead') || document.querySelector('main p:not(.eyebrow)'))
+        : (document.querySelector('.hero-lead') || document.querySelector('main .lead') || document.querySelector('main p:not(.eyebrow)'));
+      const paragraphStyle = paragraph ? getComputedStyle(paragraph) : null;
+      const paragraphLine = paragraphStyle?.lineHeight ?? null;
       const captionLine = line(guide?'.guide-figure figcaption':'.shot figcaption');
       return {status:face?.status ?? 'missing', family,
         regularFaces:regular.length, semiboldFaces:semibold.length,
@@ -46,7 +52,8 @@ def required_font(page, guide=False):
         h3:document.querySelector('h3') ? getComputedStyle(document.querySelector('h3')).fontWeight : null,
         button:document.querySelector('.button') ? getComputedStyle(document.querySelector('.button')).fontWeight : getComputedStyle(document.querySelector('.header-download')).fontWeight,
         headerButtonWeight:document.querySelector('.header-download') ? getComputedStyle(document.querySelector('.header-download')).fontWeight : null,
-        paragraphWeight:document.querySelector(guide?'.article-section p':'.hero-lead,.lead,main p') ? getComputedStyle(document.querySelector(guide?'.article-section p':'.hero-lead,.lead,main p')).fontWeight : null,
+        paragraphWeight:paragraphStyle?.fontWeight ?? null,
+        paragraphClasses:paragraph ? [...paragraph.classList] : [],
         captionWeight:document.querySelector(guide?'.guide-figure figcaption':'.shot figcaption') ? getComputedStyle(document.querySelector(guide?'.guide-figure figcaption':'.shot figcaption')).fontWeight : null,
         captionTitle:document.querySelector('.shot figcaption strong') ? getComputedStyle(document.querySelector('.shot figcaption strong')).fontWeight : null,
         bodyWeight:getComputedStyle(document.body).fontWeight,
@@ -62,6 +69,7 @@ def required_font(page, guide=False):
     assert metrics['headerButtonWeight'] in (None,'600'), metrics
     assert metrics['bodyWeight'] == '400', metrics
     assert metrics['paragraphWeight'] in (None,'400'), metrics
+    assert 'eyebrow' not in metrics['paragraphClasses'], metrics
     assert metrics['captionWeight'] in (None,'400'), metrics
     if metrics['captionTitle'] is not None:
         assert metrics['captionTitle'] == '600', metrics
