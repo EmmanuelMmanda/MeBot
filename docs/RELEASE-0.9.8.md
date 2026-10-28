@@ -7,3 +7,6 @@
 - Follow public GitHub releases by choosing a repository in your technology module's focus.
 - Keep reading available public information and saved content even when AI is disconnected.
 - Explore five prepared AI questions when a complete, relevant set is available, or edit a question before sending it.
+- Open a focused suggestions sheet: Send asks the selected question in its proper conversation, while the pencil lets you edit first. When AI suggestions are unavailable, the app says so instead of substituting canned questions.
+- Read cleaner Key Points, with readable wording and separate, safe source links instead of broken link markup.
+- Keep saved changes visible when reading and updating happen at the same time.

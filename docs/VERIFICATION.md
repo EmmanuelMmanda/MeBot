@@ -1,4 +1,4 @@
-> Current test candidate: see [0.7.0-beta.1](RELEASE-0.7.0-beta.1.md). Older figures below describe archived releases, not new beta verification.
+> **Historical verification record.** The figures below describe MeBot 0.6.1, not the current release. **MeBot 0.9.8 is now officially published.** See [current download and update availability](download.html), the [original 0.9.8 prepublication technical-report snapshot](VERIFICATION-0.9.8.md), and [published identity evidence](releases/v0.9.8.json). The original report’s pending-publication text is historical; the published identity evidence records the completed release. Website promotion is a separate step. The [0.7.0-beta.1 record](RELEASE-0.7.0-beta.1.md) is also historical. No old test totals establish acceptance of newer source.
 
 # Verification — MeBot 0.6.1
 
