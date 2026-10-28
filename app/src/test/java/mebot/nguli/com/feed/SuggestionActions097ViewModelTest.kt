@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import mebot.nguli.com.core.*
 import mebot.nguli.com.security.AppLockController
 import mebot.nguli.com.security.LockRecord
@@ -199,16 +200,35 @@ class SuggestionActions097ViewModelTest {
                 }
             }
         }
+        var generationHandle: SuggestionGenerationHandle097? = null
+        val trace = FeedRepositoryObservationTrace("queued-generation", app, vm, app.feedRepository)
         try {
             entered.forEach { withTimeout(5_000) { it.await() } }
             val before = app.feedRepository.current()
             val target = requireNotNull(SuggestionTargets097.module(before, module.id, "en"))
+            trace.mark("before-generate requests=${before.requestsToday}")
             val handle = requireNotNull(vm.generateSuggestions097(target, "en"))
-            withTimeout(10_000) { app.feedRepository.awaitFeedState { it.requestsToday == before.requestsToday + 1 } }
+            generationHandle = handle
+            handle.job.invokeOnCompletion { cause -> trace.mark("generation-job-completed cause=${cause?.javaClass?.simpleName ?: "success"}") }
+            trace.mark("generate-return requestJobActive=${handle.job.isActive}")
+            try {
+                withTimeout(10_000) {
+                    app.feedRepository.awaitFeedState(trace) { it.requestsToday == before.requestsToday + 1 }
+                }
+            } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
+                trace.mark("quota-wait-timeout requestJobActive=${handle.job.isActive} requestJobCompleted=${handle.job.isCompleted}")
+                val currentAtTimeout = withTimeoutOrNull(1_000) { app.feedRepository.current() }
+                trace.noteCurrent("after-timeout-current", currentAtTimeout)
+                throw AssertionError("quota reservation observer timed out; beforeRequests=${before.requestsToday}, " +
+                    "currentRequests=${currentAtTimeout?.requestsToday ?: "unavailable"}, providerCalls=${app.suggestedScopes.size}, " +
+                    "trace=\n${trace.summary()}", timeout)
+            }
             assertTrue("provider call has not crossed the semaphore boundary", app.suggestedScopes.isEmpty())
             assertEquals(SuggestionSheetStatus097.GENERATING, vm.suggestionSheet097(target, "en").status)
+            trace.mark("reservation-observed-before-dismiss")
             vm.cancelSuggestionGeneration097(handle.requestId)
             handle.job.join()
+            trace.mark("generation-cancelled-and-joined")
             releases.forEach { it.complete(Unit) }
             blockers.forEach { it.await() }
             val after = app.feedRepository.current()
@@ -218,8 +238,15 @@ class SuggestionActions097ViewModelTest {
             assertEquals(before.requestsToday + 1, after.requestsToday)
             assertEquals(SuggestionSheetStatus097.NEEDS_GENERATION, vm.suggestionSheet097(target, "en").status)
         } finally {
+            generationHandle?.takeIf { it.job.isActive }?.let {
+                vm.cancelSuggestionGeneration097(it.requestId)
+                withTimeoutOrNull(1_000) { it.job.join() }
+            }
+            trace.mark("generation-test-finally")
             releases.forEach { it.complete(Unit) }
             blockers.forEach { it.await() }
+            trace.mark("generation-test-finally-after-blockers")
+            trace.printSummary()
         }
     }
 
@@ -485,15 +512,18 @@ class SuggestionActions097ViewModelTest {
                 }
             }
         }
+        val trace = FeedRepositoryObservationTrace("existing-chat-rollback", app, vm, app.feedRepository)
         try {
             entered.forEach { withTimeout(5_000) { it.await() } }
+            trace.mark("before-send")
             val send = vm.sendSuggestion(target, option.id, "en")
             withTimeout(10_000) {
-                app.feedRepository.awaitFeedState { state ->
+                app.feedRepository.awaitFeedState(trace) { state ->
                     state.requestsToday == before.requestsToday + 1 &&
                         state.conversations.singleOrNull()?.turns?.lastOrNull()?.text == option.questionText
                 }
             }
+            trace.mark("appended-user-turn-observed")
             val queuedAskJob = privateField("suggestionAskJob") as? kotlinx.coroutines.Job
             val rollbackThreadId = privateField("pendingSuggestionThreadId") as? String
             val rollbackOriginal = privateField("pendingSuggestionOriginalThread") as? AiConversation
@@ -506,31 +536,41 @@ class SuggestionActions097ViewModelTest {
             assertEquals(originalThread, rollbackOriginal)
             assertNotNull("the exact appended existing-thread revision must be retained for rollback", rollbackAppended)
             val rollbackJob = vm.cancelConversationOpen()
+            rollbackJob?.invokeOnCompletion { cause -> trace.mark("rollback-job-completed cause=${cause?.javaClass?.simpleName ?: "success"}") }
+            trace.mark("cancel-navigation-returned cleanupJobActive=${rollbackJob?.isActive} completed=${rollbackJob?.isCompleted}")
             assertTrue("navigation must cancel the captured queued ask job", queuedAskJob!!.isCancelled)
             send.join()
+            trace.mark("send-joined cleanupJobActive=${rollbackJob?.isActive} completed=${rollbackJob?.isCompleted}")
             var rollbackPhase = "waiting-for-original-thread"
             try {
                 withTimeout(10_000) {
-                    app.feedRepository.awaitFeedState { it.conversations.singleOrNull() == originalThread }
+                    app.feedRepository.awaitFeedState(trace) { it.conversations.singleOrNull() == originalThread }
                     rollbackPhase = "original-thread-observed-waiting-for-cleanup-job"
                     rollbackJob?.join()
                     rollbackPhase = "cleanup-job-completed"
                 }
             } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
+                trace.mark("timeout-entry rollbackJobCompleted=${rollbackJob?.isCompleted} cancelled=${rollbackJob?.isCancelled} " +
+                    "requestJobCancelled=${queuedAskJob.isCancelled}")
                 val stateAtTimeout = kotlinx.coroutines.withTimeoutOrNull(1_000) { app.feedRepository.current() }
                 val current = stateAtTimeout?.conversations?.singleOrNull { it.id == originalThread.id }
+                trace.noteCurrent("after-timeout-current", stateAtTimeout)
                 throw AssertionError("existing-chat rollback timeout: phase=$rollbackPhase, cleanupJobCompleted=${rollbackJob?.isCompleted}, " +
                     "cleanupJobCancelled=${rollbackJob?.isCancelled}, epoch=$rollbackEpoch, selectionGeneration=$selectionGeneration, " +
                     "createdThreadId=$rollbackThreadId, " +
                     "originalId=${rollbackOriginal?.id}, originalTurns=${rollbackOriginal?.turns?.size}, appendedTurns=${rollbackAppended?.turns?.size}, " +
                     "currentId=${current?.id}, currentTurns=${current?.turns?.size}, currentEqualsOriginal=${current == originalThread}, " +
                     "currentEqualsAppended=${current == rollbackAppended}, askCancelled=${queuedAskJob.isCancelled}, " +
-                    "requestsToday=${stateAtTimeout?.requestsToday ?: "unavailable"}, providerCalls=${app.askedQuestions.size}", timeout)
+                    "requestsToday=${stateAtTimeout?.requestsToday ?: "unavailable"}, providerCalls=${app.askedQuestions.size}, " +
+                    "trace=\n${trace.summary()}", timeout)
             }
             assertTrue(app.askedQuestions.isEmpty())
         } finally {
+            trace.mark("existing-chat-test-finally")
             releases.forEach { it.complete(Unit) }
             blockers.forEach { it.await() }
+            trace.mark("existing-chat-test-finally-after-blockers")
+            trace.printSummary()
         }
         assertTrue(app.askedQuestions.isEmpty())
     }
