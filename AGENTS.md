@@ -16,3 +16,11 @@
 - For service changes also run its documented pytest suite. Never call a paid provider from automated tests.
 - Never commit signing keys, local SDK paths, personal exports, or generated build directories.
 - Document known device-test gaps. A passing build is not evidence of overnight alarm reliability.
+
+## Customer experience and release evidence
+- Verify typography in the rendered browser: load the approved app font asset, check `FontFaceSet`, computed fonts/weights and fallback failures across headings, body, buttons and captions. A CSS family name alone is not verification.
+- Write concrete, natural English and Kiswahili about actual capabilities and next actions. Remove slogans, vague hype and unsupported claims; compare copy against the running UI, not only the design brief.
+- Current screenshots must represent personalised AI reading, dated opportunities, context and useful actions—not news alone. Use actual app renders with meaningful, correctly attributed publication/preparation/deadline dates; never invent dates or pretend test-provider content is live.
+- Keep debug/version/capture-provenance badges out of customer image captions. Use a concise example label where material, and retain complete source, date, fixture and capture provenance in technical evidence. Preserve immutable historical release assets.
+- Reconcile test-count changes by naming the assertions retained, replaced or removed. A lower passing total is not proof that regression coverage was preserved. Diagnose failures without relaxing behavior or deadlines merely to obtain green checks.
+- Say an update is ready only after required checks pass for the exact source, matching same-key signed assets and tag are verified, and anonymous public downloads plus actual updater eligibility are checked. Keep unrun device tests, pending live-provider acceptance and website deployment separate and explicit.

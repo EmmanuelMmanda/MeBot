@@ -1,5 +1,7 @@
 package mebot.nguli.com
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
@@ -13,6 +15,8 @@ import android.content.Context
 import android.content.IntentFilter
 import android.view.WindowManager
 import androidx.core.content.ContextCompat
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -54,10 +58,16 @@ import mebot.nguli.com.alarm.AlarmActivity
 import mebot.nguli.com.core.*
 import mebot.nguli.com.ui.*
 import mebot.nguli.com.ui.feed.*
+import mebot.nguli.com.feed.RealtimeCall099ViewModel
+import mebot.nguli.com.feed.RealtimeScope099
+import mebot.nguli.com.feed.RealtimeScope099Snapshot
+import mebot.nguli.com.realtime.*
+import mebot.nguli.com.feed.Realtime099ViewModel
 import mebot.nguli.com.feed.FeedViewModel
 import mebot.nguli.com.feed.FeedUiState
 import mebot.nguli.com.feed.SuggestionGenerationHandle097
 import mebot.nguli.com.feed.SuggestionSheetSnapshot097
+import mebot.nguli.com.feed.SuggestionTargets097
 import mebot.nguli.com.feed.SuggestionTargetSnapshot097
 import mebot.nguli.com.feed.auth.ChatGptReturnLink
 import androidx.compose.ui.platform.testTag
@@ -66,6 +76,7 @@ import kotlinx.serialization.json.Json
 import java.time.ZonedDateTime
 import java.time.LocalDate
 import java.util.Locale
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.awaitCancellation
 
@@ -77,6 +88,7 @@ class MainActivity : FragmentActivity() {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                voicePrivacyStop?.invoke()
                 privacyCurtain.cover()
                 appLock.lock()
                 biometricUnlock.cancel()
@@ -90,7 +102,10 @@ class MainActivity : FragmentActivity() {
         appLock.foreground(true)
     }
 
+    private var voicePrivacyStop: (() -> Unit)? = null
+
     override fun onPause() {
+        voicePrivacyStop?.invoke()
         // Lock before leaving personal UI; FLAG_SECURE also prevents recents/screenshot capture.
         if (::privacyCurtain.isInitialized) privacyCurtain.cover()
         appLock.foreground(false)
@@ -99,6 +114,7 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
+        voicePrivacyStop?.invoke(); voicePrivacyStop = null
         if (screenReceiverRegistered) unregisterReceiver(screenReceiver)
         if (::privacyCurtain.isInitialized) privacyCurtain.close()
         if (::biometricUnlock.isInitialized) biometricUnlock.cancel()
@@ -199,7 +215,7 @@ class MainActivity : FragmentActivity() {
                     ) {
                     if (protection.locked) AppLockScreen(appLock) { biometricUnlock.authenticate(biometricTitle, biometricPinLabel) }
                     else protectedScreens.SaveableStateProvider("personal-navigation") {
-                        FeedClock(timezone = feedUi.state?.timezone.orEmpty(), noticeDismissals = feedUi.state?.dismissedNotices.orEmpty()) { MeBotApp(ui, vm, feedUi, feedVm, alarmNavigationRequest, feedNavigationRequest, feedNavigationItem, chatGptNavigationRequest, softwareNavigationRequest) }
+                        FeedClock(timezone = feedUi.state?.timezone.orEmpty(), noticeDismissals = feedUi.state?.dismissedNotices.orEmpty()) { MeBotApp(ui, vm, feedUi, feedVm, alarmNavigationRequest, feedNavigationRequest, feedNavigationItem, chatGptNavigationRequest, softwareNavigationRequest) { voicePrivacyStop = it } }
                     }
                     }
                     SideEffect { privacyCurtain.committed(coverEpoch, lockTicket, protection.locked) }
@@ -230,9 +246,17 @@ class MainActivity : FragmentActivity() {
 
 @Composable
 private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, feedVm: FeedViewModel,
-    alarmNavigationRequest: Int, feedNavigationRequest: Int, feedNavigationItem: String?, chatGptNavigationRequest: Int, softwareNavigationRequest: Int) {
+    alarmNavigationRequest: Int, feedNavigationRequest: Int, feedNavigationItem: String?, chatGptNavigationRequest: Int, softwareNavigationRequest: Int,
+    onVoicePrivacyHandler: ((() -> Unit)?) -> Unit) {
+    val voiceVm: Realtime099ViewModel = viewModel()
+    val voiceSetupUi by voiceVm.ui.collectAsStateWithLifecycle()
+    val callVm: RealtimeCall099ViewModel = viewModel()
+    val callUi by callVm.ui.collectAsStateWithLifecycle()
     var page by rememberSaveable { mutableStateOf("feed") }
     var showQuickGuide by rememberSaveable { mutableStateOf(false) }
+    var explicitlyOpenedSetup099 by rememberSaveable { mutableStateOf(false) }
+    var finishingSetup099 by remember { mutableStateOf(false) }
+    LaunchedEffect(feedUi.error) { if (feedUi.error != null) finishingSetup099 = false }
     var consumedSoftwareNavigation by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(softwareNavigationRequest) { if(softwareNavigationRequest > consumedSoftwareNavigation) { consumedSoftwareNavigation=softwareNavigationRequest; page="software-updates" } }
     var consumedAlarmNavigation by rememberSaveable { mutableIntStateOf(0) }
@@ -244,6 +268,10 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
     var aiReturn by rememberSaveable { mutableStateOf("feed") }
     var connectionReturn by rememberSaveable { mutableStateOf("you") }
     var contextReturn by rememberSaveable { mutableStateOf("you") }
+    var interestsReturn by rememberSaveable { mutableStateOf("you") }
+    var interestsInitialText by rememberSaveable { mutableStateOf<String?>(null) }
+    var interestsFinishRequest by rememberSaveable { mutableIntStateOf(0) }
+    var interestsReturnRequest by rememberSaveable { mutableIntStateOf(0) }
     var contextImportRefreshRequest by rememberSaveable { mutableIntStateOf(0) }
     var contextNotesRevealRequest by rememberSaveable { mutableIntStateOf(0) }
     var deliveryReturn by rememberSaveable { mutableStateOf("you") }
@@ -260,13 +288,185 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
     val owner = LocalLifecycleOwner.current
     val context = LocalContext.current
     val resources = LocalResources.current
+    var voiceFactory by remember { mutableStateOf<AndroidRealtimePeerConnectionFactory?>(null) }
+    var pendingVoiceScope by remember { mutableStateOf<RealtimeScope099Snapshot?>(null) }
+    var confirmVoiceRestart by remember { mutableStateOf(false) }
+    val voicePermissionGate = remember { VoicePermissionTicket099() }
+    val voicePermissionHost = remember { java.util.UUID.randomUUID().toString() }
+    var voicePermissionRequest by remember { mutableStateOf<VoicePermissionTicket099.Request?>(null) }
+    val voicePermissionLaunchSlot = remember { VoicePermissionLaunchSlot099<RealtimeScope099Snapshot>(voicePermissionGate) }
+    val latestPage by rememberUpdatedState(page)
+    val app099 = context.applicationContext as MeBotApplication
+    var itemPreparationBridge by remember { mutableStateOf<Pair<String, SuggestionGenerationHandle097>?>(null) }
+    fun releaseItemPreparationBridge() {
+        val old = itemPreparationBridge
+        itemPreparationBridge = null
+        old?.second?.let(feedVm::releaseSuggestionPreparation097)
+    }
+    DisposableEffect(owner, feedVm) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) {
+            releaseItemPreparationBridge()
+            feedVm.cancelSuggestionPreparationsOnBackground099()
+        } }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer); releaseItemPreparationBridge() }
+    }
+    LaunchedEffect(page, itemId) {
+        if (page != "item" || itemPreparationBridge?.first != itemId) releaseItemPreparationBridge()
+    }
+    fun stopVoice(reason: String) {
+        callVm.stop(reason)
+        voiceFactory?.privacyStopImmediately()
+    }
+    DisposableEffect(owner, voiceVm, callVm) {
+        val stop = { stopVoice("host_background_or_lock"); voiceVm.cancelOperations() }
+        onVoicePrivacyHandler(stop)
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_PAUSE) stop() }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer); stop(); onVoicePrivacyHandler(null) }
+    }
+    fun beginVoiceCall(snapshot: RealtimeScope099Snapshot) {
+        if (latestPage !in setOf("ai", "voice-call") || owner.lifecycle.currentState != Lifecycle.State.RESUMED ||
+            !RealtimeScope099.stillCurrent(snapshot, feedVm.ui.value, app099.appLock.state.value.locked)) {
+            pendingVoiceScope = null
+            return
+        }
+        stopVoice("new_call")
+        pendingVoiceScope = snapshot
+        voiceFactory = AndroidRealtimePeerConnectionFactory(context)
+        page = "voice-call"
+    }
+    fun currentPermissionScopeKey(): String? = pendingVoiceScope?.let { snapshot ->
+        voicePermissionRequest?.scopeKey?.takeIf {
+            RealtimeScope099.stillCurrent(snapshot, feedVm.ui.value, app099.appLock.state.value.locked)
+        }
+    }
+    val voicePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val launched = voicePermissionLaunchSlot.consumeLaunch()
+        val ticket = launched?.request
+        val snapshot = launched?.payload
+        if (ticket != null && snapshot != null) {
+            when (voicePermissionGate.onPermissionResult(ticket, granted,
+                owner.lifecycle.currentState == Lifecycle.State.RESUMED,
+                latestPage in setOf("ai", "voice-call"), !app099.appLock.state.value.locked,
+                currentPermissionScopeKey())) {
+                VoicePermissionTicket099.Result.START_NOW -> {
+                    voicePermissionRequest = null
+                    beginVoiceCall(snapshot)
+                }
+                VoicePermissionTicket099.Result.WAIT_FOR_RESUME -> Unit
+                VoicePermissionTicket099.Result.DENIED -> {
+                    voicePermissionRequest = null; pendingVoiceScope = null
+                    vm.showMessage(R.string.workspace_voice_permission_denied)
+                }
+                VoicePermissionTicket099.Result.STALE -> {
+                    voicePermissionRequest = null; pendingVoiceScope = null
+                }
+            }
+        }
+    }
+    DisposableEffect(owner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                voicePermissionGate.invalidateOnStop()
+                voicePermissionRequest = null
+                if (voiceFactory == null) pendingVoiceScope = null
+            } else if (event == Lifecycle.Event.ON_RESUME) {
+                val snapshot = pendingVoiceScope
+                val ticket = voicePermissionGate.consumeOnResume(latestPage in setOf("ai", "voice-call"),
+                    !app099.appLock.state.value.locked, currentPermissionScopeKey())
+                if (ticket != null && snapshot != null) {
+                    voicePermissionRequest = null
+                    beginVoiceCall(snapshot)
+                }
+            }
+        }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer); voicePermissionGate.invalidateOnStop() }
+    }
+    LaunchedEffect(page, feedUi) {
+        voicePermissionGate.invalidateIfScopeChanged(page in setOf("ai", "voice-call"),
+            !app099.appLock.state.value.locked, currentPermissionScopeKey())
+        if (!voicePermissionGate.hasPendingRequest()) voicePermissionRequest = null
+    }
+    LaunchedEffect(app099) {
+        app099.appLock.state.collect { if (it.locked) {
+            voicePermissionGate.invalidateOnLock()
+            voicePermissionRequest = null
+            if (voiceFactory == null) pendingVoiceScope = null
+        } }
+    }
+    fun requestVoiceCall() {
+        if (voicePermissionLaunchSlot.hasOutstandingLaunch() || voicePermissionGate.hasPendingRequest()) return
+        if (voiceSetupUi.capability?.voice?.canOfferCall != true) { page = "voice-setup"; return }
+        val snapshot = RealtimeScope099.project(feedVm.ui.value) ?: return
+        if (app099.appLock.state.value.locked || owner.lifecycle.currentState != Lifecycle.State.RESUMED) return
+        pendingVoiceScope = snapshot
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+            beginVoiceCall(snapshot)
+        else {
+            val launch = voicePermissionLaunchSlot.issue(java.util.UUID.randomUUID().toString(), voicePermissionHost, snapshot) ?: return
+            voicePermissionRequest = launch.request
+            voicePermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+    LaunchedEffect(page, voiceFactory) {
+        val factory = voiceFactory
+        val snapshot = pendingVoiceScope
+        if (page == "voice-call" && factory != null && snapshot != null) {
+            callVm.start(snapshot, factory) {
+                voiceVm.ui.value.capability?.voice?.canOfferCall == true &&
+                latestPage == "voice-call" && owner.lifecycle.currentState == Lifecycle.State.RESUMED &&
+                    RealtimeScope099.stillCurrent(snapshot, feedVm.ui.value, app099.appLock.state.value.locked)
+            }
+        } else if (callVm.boundScope != null) stopVoice("navigation")
+    }
+    LaunchedEffect(feedUi, callUi.snapshot.phase, voiceSetupUi.capability) {
+        callVm.boundScope?.let { snapshot ->
+            if (voiceSetupUi.capability?.voice?.canOfferCall != true ||
+                !RealtimeScope099.stillCurrent(snapshot, feedVm.ui.value, app099.appLock.state.value.locked)) stopVoice("context_or_capability_changed")
+        }
+    }
+    if (confirmVoiceRestart) AlertDialog(
+        onDismissRequest = { confirmVoiceRestart = false },
+        title = { Text(stringResource(R.string.workspace_voice_live_confirm_title)) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.workspace_voice_live_confirm_body))
+            RealtimeScope099.project(feedUi)?.context?.selectedItem?.let {
+                Text(stringResource(R.string.workspace_voice_live_selected_item, it.title))
+            }
+        } },
+        confirmButton = { TextButton(onClick = { confirmVoiceRestart = false; requestVoiceCall() }) { Text(stringResource(R.string.workspace_voice_live_confirm)) } },
+        dismissButton = { TextButton(onClick = { confirmVoiceRestart = false }) { Text(stringResource(android.R.string.cancel)) } },
+    )
+    val voiceScope = RealtimeScope099.project(feedUi)
+    val voiceTranscriptionBilling = stringResource(R.string.workspace_voice_transcribe_service_billing)
+    val voiceTranscriber = voiceScope?.let { snapshot ->
+        voiceVm.transcriber("OpenAI · " + runCatching { java.net.URI(voiceSetupUi.savedServiceUrl).host }.getOrNull().orEmpty(),
+            voiceTranscriptionBilling) {
+            latestPage == "ai" && owner.lifecycle.currentState == Lifecycle.State.RESUMED &&
+                RealtimeScope099.stillCurrent(snapshot, feedVm.ui.value, app099.appLock.state.value.locked)
+        }
+    }
+
+    val softwareUpdate099 by (context.applicationContext as MeBotApplication).softwareUpdates.state.collectAsStateWithLifecycle()
     val readSuggestionSheet: (SuggestionTargetSnapshot097, String) -> SuggestionSheetSnapshot097 = feedVm::suggestionSheet097
     val generateSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = generate@{ target, language ->
         if ((context.applicationContext as MeBotApplication).appLock.state.value.locked) return@generate null
         feedVm.generateSuggestions097(target, language)
     }
+    val loadMoreSuggestions099: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = more@{ target, language ->
+        if ((context.applicationContext as MeBotApplication).appLock.state.value.locked) return@more null
+        feedVm.loadMoreSuggestions097(target, language)
+    }
+    val prepareSuggestions099: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = prepare@{ target, language ->
+        val current = feedUi.state
+        if ((context.applicationContext as MeBotApplication).appLock.state.value.locked ||
+            current?.onboardingComplete != true || current.setup099.stage !in setOf(Setup099Stage.INTRO, Setup099Stage.COMPLETE)) return@prepare null
+        feedVm.prepareSuggestions097(target, language)
+    }
     val cancelSuggestionGeneration: (String) -> Unit = feedVm::cancelSuggestionGeneration097
-    // Only a distinct, explicit sheet action can send. Opening the sheet is UI-only.
+    // Only an explicit Send action sends chat. Opening may prepare AI angles on a cache miss.
     val useSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit = use@{ target, optionId, language ->
         if ((context.applicationContext as MeBotApplication).appLock.state.value.locked) return@use
         if (page != "ai") aiReturn = if (page == "item") "item" else "feed"
@@ -280,6 +480,20 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
         page = "ai"
     }
     val snackbars = remember { SnackbarHostState() }
+    val feedbackScope = rememberCoroutineScope()
+    val latestConnected by rememberUpdatedState(feedUi.connected)
+    val onStar099: (String, Boolean) -> Unit = { id, desired ->
+        feedVm.setStarred099(id, desired) { committed ->
+            val following = committed.starredStories.any { it.itemId == id }
+            val feedback = when {
+                !following -> R.string.star_099_unfollowed
+                !latestConnected -> R.string.star_099_following_connect
+                committed.backgroundEnabled -> R.string.star_099_following_background
+                else -> R.string.star_099_following_refresh
+            }
+            feedbackScope.launch { snackbars.showSnackbar(resources.getString(feedback)) }
+        }
+    }
     val documents = LocalDocumentActions.current
     val message by vm.message.collectAsStateWithLifecycle()
     LaunchedEffect(message, resources) {
@@ -322,7 +536,29 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
         }
     }
     val onboarded = feed?.onboardingComplete == true
+    val setupActive099 = feed != null && (!onboarded || explicitlyOpenedSetup099 ||
+        feed.setup099.stage !in setOf(Setup099Stage.INTRO, Setup099Stage.COMPLETE))
+    val setupHasContext099 = feed?.context?.let(Setup099Logic::hasConfirmedContext) == true
+    val setupChatGptConnected099 = feedUi.connected && feed?.connection?.mode == "chatgpt"
+    LaunchedEffect(setupActive099, feed?.setup099?.pendingImportAccountKey, feed?.connection, feedUi.connected) {
+        val pending = feed?.setup099?.pendingImportAccountKey.orEmpty()
+        if (setupActive099 && feed?.setup099?.stage == Setup099Stage.IMPORT_CONTEXT && pending.isNotEmpty() && setupChatGptConnected099 &&
+            feed?.connection?.accountId == pending) {
+            contextReturn = "feed"
+            feedVm.clearImportSummary()
+            page = "context-import"
+            feedVm.acknowledgeSetup099ImportRoute(pending)
+        }
+    }
     // The completed tour leads straight to the feed. The quick guide stays available in Help.
+    LaunchedEffect(setupActive099, feed?.setup099?.stage, page) {
+        if (onboarded && setupActive099 && page == "feed" && feed?.setup099?.pendingImportAccountKey.isNullOrEmpty()) {
+            when (feed?.setup099?.stage) {
+                Setup099Stage.CONNECT_CHATGPT -> { connectionReturn = "feed"; page = "connect" }
+                Setup099Stage.IMPORT_CONTEXT, Setup099Stage.START_FEED -> { contextReturn = "feed"; page = "context" }
+            }
+        }
+    }
     LaunchedEffect(page, onboarded, owner) {
         if (page == "feed" && onboarded) owner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             feedVm.refreshIfStale()
@@ -332,7 +568,13 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
     val basePages = setOf("feed", "modules", "ai", "saved", "you")
     fun openItem(id: String) {
         if (page != "item") detailReturn = when (page) { "saved", "search", "module-edit" -> page; else -> "feed" }
-        itemId = id; feedVm.clearAnswer(); feedVm.markViewed(id); page = "item"
+        // Acquire before Home disposes its lease: the same item's prepared request survives
+        // route-effect ordering without a timer, duplicate request, or extra quota reservation.
+        val target = feedVm.ui.value.state?.let { SuggestionTargets097.item(it, id, feedVm.ui.value.appLanguage) }
+        val bridge = target?.let(feedVm::retainActiveSuggestionPreparationForNavigation097)
+        releaseItemPreparationBridge()
+        itemPreparationBridge = bridge?.let { id to it }
+        itemId = id; feedVm.clearAnswerForNavigation(); feedVm.markViewed(id); page = "item"
     }
     fun openModule(id: String?) {
         val selected = feed?.modules?.find { it.id == id } ?: FeedModule()
@@ -344,21 +586,42 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
     LaunchedEffect(page, itemId) { if (page != "item") feedVm.cancelDetail() }
     LaunchedEffect(page) {
         if (page == "ai") feedVm.resumeConversationOpenIfNeeded()
-        else feedVm.cancelConversationOpen()
+        else feedVm.cancelConversationOpenForNavigation()
     }
-    fun openConnection() { connectionReturn = page; feedVm.clearMessage(); screenStates.removeState("connect"); page = "connect" }
+    fun openConnection() {
+        if (onboarded && !feedUi.connected && !setupHasContext099 && feed?.setup099?.stage != Setup099Stage.COMPLETE) {
+            explicitlyOpenedSetup099 = true
+            feedVm.setSetup099Stage(Setup099Stage.CONNECT_CHATGPT)
+        }
+        connectionReturn = page; feedVm.clearMessage(); screenStates.removeState("connect"); page = "connect"
+    }
     fun openModuleCatalog(filter: String) {
         if (moduleCatalogFilter != filter) screenStates.removeState("modules")
         moduleCatalogFilter = filter
         page = "modules"
     }
+    fun openPersonalInterests(initialText: String? = null) {
+        if (page == "personal-interests") return
+        interestsReturn = page.takeIf { it in setOf("you", "context", "context-import") } ?: "you"
+        interestsInitialText = initialText
+        interestsFinishRequest = 0
+        screenStates.removeState("personal-interests")
+        feedVm.clearMessage()
+        page = "personal-interests"
+    }
     fun back() {
+        if (page == "personal-interests") { interestsFinishRequest++; return }
+        if (page == "voice-call") { stopVoice("navigation"); voiceFactory = null; pendingVoiceScope = null }
         if (page == "context-import") {
             if (feedUi.importWorking || feedUi.contextSaving) return
             if (feedUi.importPreview != null) { feedVm.cancelImport(); return }
             feedVm.cancelImport()
         }
         if (page == "connect") { feedVm.cancelChatGptSignIn(); feedVm.cancelOpenRouterSignIn() }
+        if (onboarded && page in setOf("connect", "context") && setupActive099) {
+            explicitlyOpenedSetup099 = false
+            feedVm.setSetup099Stage(Setup099Stage.INTRO)
+        }
         page = when (page) {
             "checkpoint" -> checkpointReturn
             "alarm-edit" -> "alarms"
@@ -366,6 +629,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
             "item" -> detailReturn
             "ai" -> if (aiReturn == "item" && feedUi.state?.items?.any { it.id == itemId } == true) "item" else "feed"
             "ask" -> if (itemId != null) "item" else "feed"
+            "voice-setup", "voice-call" -> "ai"
             "connect" -> if (onboarded) connectionReturn else "feed"
             "context-import" -> "context"
             "context" -> contextReturn
@@ -384,9 +648,16 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
         suggestedTitle = title; suggestedMinutes = minutes; page = "focus"
     }
     fun finishSetup() {
+        if (finishingSetup099) return
         if (state?.profile?.onboardingComplete != true) vm.finishOnboarding { }
-        if (!onboarded) feedVm.finishOnboarding()
-        page = "feed"
+        if (setupActive099) {
+            finishingSetup099 = true
+            feedVm.finishSetup099 {
+                finishingSetup099 = false
+                explicitlyOpenedSetup099 = false
+                page = "feed"
+            }
+        } else page = "feed"
     }
     BackHandler(page != "feed") { back() }
     LaunchedEffect(alarmNavigationRequest, onboarded) {
@@ -413,13 +684,24 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
         if ((page == "history" && "history" !in enabled) ||
             (page.startsWith("alarm") && "alarms" !in enabled) || (page == "focus" && "focus" !in enabled)) page = "modules"
     }
-    CompositionLocalProvider(LocalRelevanceContext provides RelevanceUiContext(feedUi.state, feedVm::rateRelevance, feedVm::toggleStar, feedVm::configureStar, feedVm::setSavedCollection)) {
+    CompositionLocalProvider(
+        LocalSetup099TipHostActions provides Setup099TipHostActions(
+            eligibleUpdateAvailable = softwareUpdate099.release?.let { it.applicationId == context.packageName && it.versionCode > BuildConfig.VERSION_CODE } == true,
+            onBackgroundSettings = { deliveryReturn = page; screenStates.removeState("delivery"); page = "delivery" },
+            onSoftwareUpdates = { page = "software-updates" },
+            voiceSetupNeeded = voiceSetupUi.capability?.voice?.canOfferCall != true,
+            onVoiceSetup = { page = "voice-setup" }),
+        LocalRelevanceContext provides RelevanceUiContext(feedUi.state, feedVm::rateRelevance, onStar099, feedVm::configureStar, feedVm::setSavedCollection)) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
           Column(Modifier.statusBarsPadding()) {
             ProcessingStatus(feedUi, page, itemId, Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
-            if ((onboarded && ((page !in basePages && page != "tour") || activeAlarm != null)) || (!onboarded && page == "connect")) {
+            if (setupActive099 && page in setOf("connect", "context", "context-import", "personal-interests")) {
+                Setup099Progress(feed?.setup099?.stage ?: Setup099Stage.INTRO,
+                    setupChatGptConnected099, setupHasContext099, Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+            }
+            if ((onboarded && ((page !in basePages && page != "tour") || activeAlarm != null)) || (!onboarded && page in setOf("connect", "personal-interests"))) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(52.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (page !in basePages) IconButton(onClick = ::back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back)) }
                     Spacer(Modifier.weight(1f))
@@ -442,9 +724,16 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
             when {
                 ui.failed || (!feedUi.loading && feed == null) -> ScreenContainer { ScreenTitle(stringResource(R.string.data_error_title), stringResource(R.string.data_error_body)) }
                 state == null || feed == null -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                !onboarded && page != "connect" -> FeedOnboarding(feed, state.settings.language,
-                    { language -> vm.saveSettings { it.copy(language = language) } }, ::finishSetup, ::openConnection,
-                    onPreferences = { kinds, region, interests, done -> feedVm.configureOnboarding(kinds, region, interests, done) })
+                !onboarded && page !in setOf("connect", "context", "context-import", "personal-interests") -> Setup099Onboarding(
+                    feed.setup099, setupChatGptConnected099, setupHasContext099, state.settings.language,
+                    onLanguage = { language -> vm.saveSettings { it.copy(language = language) } },
+                    onConnectChatGpt = { feedVm.setSetup099Stage(Setup099Stage.CONNECT_CHATGPT); openConnection() },
+                    onImportContext = {
+                        feedVm.setSetup099Stage(Setup099Stage.IMPORT_CONTEXT)
+                        contextReturn = "feed"; feedVm.clearImportSummary(); page = "context-import"
+                    }, onSkipContext = { feedVm.skipSetup099Context() },
+                    onContinuePublic = ::finishSetup, onStartFeed = ::finishSetup,
+                    errorCode = feedUi.error, onDismissError = feedVm::clearMessage)
                 else -> screenStates.SaveableStateProvider(if (page == "daily") "daily:$visitDate" else page) {
                     when (page) {
                         "feed" -> {
@@ -460,9 +749,12 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                                 onContext = { contextReturn = "feed"; page = "context" }, onDismissNotice = feedVm::dismissSetupNotice,
                                 onLoadMore = feedVm::loadMore,
                                 onEnsureDailySelection = feedVm::ensurePersonalDailySelection098,
+                                onPrepareActiveSuggestion = prepareSuggestions099,
+                            onReleaseSuggestionPreparation = feedVm::releaseSuggestionPreparation097,
                                 onUseSuggestion = useSuggestion, onEditSuggestion = editSuggestion,
                                 onSuggestionSheet = readSuggestionSheet,
                                 onGenerateSuggestion = generateSuggestion,
+                                onLoadMoreSuggestion = loadMoreSuggestions099,
                                 onCancelSuggestionGeneration = cancelSuggestionGeneration)
                         }
                         "modules" -> ModulesScreen(feed, state,
@@ -479,7 +771,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                         "saved" -> SavedFeed(feed, ::openItem, feedVm::toggleSaved, { page = "feed" })
                         "you" -> YouScreen(feedUi,
                             { contextReturn = "you"; feedVm.clearMessage(); page = "context" }, ::openConnection,
-                            { deliveryReturn = "you"; feedVm.clearMessage(); screenStates.removeState("delivery"); page = "delivery" }, { page = "settings" }, { page = "data" }, onSoftwareUpdates={page="software-updates"}, onAppLock={page="app-lock"}, onStarred={page="starred-settings"})
+                            { deliveryReturn = "you"; feedVm.clearMessage(); screenStates.removeState("delivery"); page = "delivery" }, { page = "settings" }, { page = "data" }, onSoftwareUpdates={page="software-updates"}, onAppLock={page="app-lock"}, onStarred={page="starred-settings"}, onInterests={openPersonalInterests()})
                         "software-updates" -> SoftwareUpdatesScreen((LocalContext.current.applicationContext as MeBotApplication).softwareUpdates)
                         "connect" -> ConnectionScreen(feedUi, feedVm::connect, feedVm::disconnect,
                             feedVm::beginChatGptSignIn, feedVm::cancelChatGptSignIn, feedVm::selectChatGptAccount,
@@ -487,11 +779,36 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                             onProviderConnect=feedVm::connectProvider, onProviderModels=feedVm::loadProviderModels,
                             onOpenRouterStart=feedVm::beginOpenRouterSignIn, onOpenRouterFinish=feedVm::finishOpenRouterSignIn,
                             onOpenRouterCancel=feedVm::cancelOpenRouterSignIn, onLimitChange=feedVm::saveRequestLimit,
-                            onChatGptRemoveAccount=feedVm::removeChatGptAccount) { refresh ->
-                            if (onboarded && refresh) feedVm.refresh()
-                            if (onboarded) page = connectionReturn else finishSetup()
+                            onChatGptRemoveAccount=feedVm::removeChatGptAccount,
+                            firstRunSetupActive = setupActive099,
+                            onFirstChatGptConnectionConfirmed = { accountKey ->
+                                feedVm.recordSetup099ChatGptConfirmed(accountKey, setupEligible = setupActive099)
+                            }) { refresh ->
+                            if (onboarded && !setupActive099 && refresh) feedVm.refresh()
+                            if (onboarded && !setupActive099) page = connectionReturn
+                            else if (feedUi.connected) {
+                                // Alternative providers retain the same explicit context step.
+                                feedVm.setSetup099Stage(if (setupHasContext099) Setup099Stage.START_FEED else Setup099Stage.IMPORT_CONTEXT)
+                                contextReturn = "feed"
+                                feedVm.clearImportSummary()
+                                page = if (setupHasContext099) "context" else "context-import"
+                            } else page = "feed"
                         }
+                        "personal-interests" -> PersonalInterests099Screen(
+                            ui = feedUi, vm = feedVm, initialText = interestsInitialText,
+                            finishRequest = interestsFinishRequest, onDone = {
+                                if (interestsReturn == "context") interestsReturnRequest++
+                                page = interestsReturn.takeIf { it in setOf("you", "context", "context-import") } ?: "context"
+                            },
+                        )
                         "context" -> ContextScreen(feedUi, feedVm,
+                            onInterests = { text -> openPersonalInterests(text) },
+                            interestsReturn = interestsReturnRequest,
+                            onInterestsReturnConsumed = { request ->
+                                if (interestsReturnRequest == request) interestsReturnRequest = 0
+                            },
+                            setup099Stage = if (setupActive099) feed.setup099.stage else null,
+                            onStartSetupFeed = if (setupActive099) ::finishSetup else null,
                             onImportContext = { feedVm.clearMessage(); feedVm.clearImportSummary(); page = "context-import" },
                             importRefreshRequest = contextImportRefreshRequest,
                             onImportRefreshConsumed = { request ->
@@ -501,8 +818,13 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                             onNotesRevealConsumed = { request ->
                                 if (contextNotesRevealRequest == request) contextNotesRevealRequest = 0
                             },
-                        ) { page = contextReturn }
-                        "context-import" -> ContextImportScreen(feedUi, feedVm, onImported = {
+                        ) {
+                            if (setupActive099) { feedVm.advanceSetup099ToStart(); page = "context" }
+                            else page = contextReturn
+                        }
+                        "context-import" -> ContextImportScreen(feedUi, feedVm,
+                            onInterests = { openPersonalInterests() },
+                            onManualContext = { contextReturn = "feed"; page = "context" }, onImported = {
                             contextImportRefreshRequest++
                             if (feedUi.state?.context?.any { it.id != PersonalProfile085.PROFILE_ID && it.text.isNotBlank() } == true) {
                                 contextNotesRevealRequest++
@@ -513,7 +835,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                         "data" -> FeedDataScreen(feedUi, feedVm) { page = "settings" }
                         "app-lock" -> AppLockSettingsScreen((context.applicationContext as MeBotApplication).appLock, onBack = { page = "settings" }, showBack = false)
                         "starred-settings" -> StarredSettingsScreen(feedUi, feedVm, onBackground = { deliveryReturn = "starred-settings"; screenStates.removeState("delivery"); page = "delivery" }, onConnection = ::openConnection)
-                        "settings" -> SettingsScreen(state, vm, onErase = { documents.invalidatePending(); feedVm.reset(); vm.erase(); page = "feed" }, onHelp = { page = "faq" }, onAppLock = { page = "app-lock" })
+                        "settings" -> SettingsScreen(state, vm, onErase = { documents.invalidatePending(); stopVoice("erase_local_data"); screenStates.removeState("ai"); voiceVm.clearForReset(onCleared = { feedVm.reset(); vm.erase(); page = "feed" }, onFailure = { vm.showMessage(R.string.feed_error_storage) }) }, onHelp = { page = "faq" }, onAppLock = { page = "app-lock" })
                         "faq" -> FaqScreen(
                             onContext = { contextReturn = "faq"; feedVm.clearMessage(); page = "context" },
                             onConnect = ::openConnection,
@@ -532,6 +854,9 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                             onUseSuggestion = useSuggestion, onEditSuggestion = editSuggestion,
                             onSuggestionSheet = readSuggestionSheet,
                             onGenerateSuggestion = generateSuggestion,
+                            onLoadMoreSuggestion = loadMoreSuggestions099,
+                            onPrepareActiveSuggestion = prepareSuggestions099,
+                            onReleaseSuggestionPreparation = feedVm::releaseSuggestionPreparation097,
                             onCancelSuggestionGeneration = cancelSuggestionGeneration)
                         "ai" -> AiWorkspace(feedUi, feedVm::newConversation, feedVm::selectConversation, feedVm::deleteConversation,
                             feedVm::sendConversation, feedVm::clearAnswer, ::openConnection,
@@ -541,7 +866,29 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                             onUseSuggestion = useSuggestion, onEditSuggestion = editSuggestion,
                             onSuggestionSheet = readSuggestionSheet,
                             onGenerateSuggestion = generateSuggestion,
+                            onLoadMoreSuggestion = loadMoreSuggestions099,
+                            onPrepareSuggestions = prepareSuggestions099,
+                            onOpenVoiceSetup = { page = "voice-setup" },
+                            onTranscribeVoice = voiceTranscriber,
+                            recordingTranscriptionCapability = voiceSetupUi.capability?.transcription ?: RecordingTranscriptionCapability.Unavailable(RecordingTranscriptionCapability.Reason.SERVICE_NOT_CONFIGURED),
+                            realtimeCapability = voiceSetupUi.capability?.voice ?: RealtimeCapability.Unavailable(RealtimeCapability.Reason.SERVICE_NOT_CONFIGURED),
+                            onStartRealtimeVoiceCall = if (voiceSetupUi.capability?.voice?.canOfferCall == true) ({ requestVoiceCall() }) else null,
+                            onReleaseSuggestionPreparation = feedVm::releaseSuggestionPreparation097,
                             onCancelSuggestionGeneration = cancelSuggestionGeneration)
+                        "voice-call" -> VoiceCallRouteGate099(
+                            capabilityAvailable = voiceSetupUi.capability?.voice?.canOfferCall == true,
+                            transportPresent = voiceFactory != null,
+                            onUnavailable = { stopVoice("voice_route_unavailable"); page = "voice-setup" }) {
+                          Box(Modifier.fillMaxSize()) {
+                            voiceFactory?.let { RealtimeWebRtcSurface(it) }
+                            RealtimeCall099Screen(callUi, onStart = { confirmVoiceRestart = true },
+                                onCancelOrEnd = { stopVoice("user_ended"); voiceFactory = null },
+                                onRetry = { confirmVoiceRestart = true }, onToggleMicrophone = callVm::setMuted, onBack = ::back)
+                          }
+                        }
+                        "voice-setup" -> RealtimeSetup099Screen(voiceSetupUi,
+                            onSave = voiceVm::save, onTest = voiceVm::checkCapability,
+                            onRemove = voiceVm::remove, onBack = ::back)
                         "search" -> SearchScreen(feedUi, feedVm::search, ::openItem, feedVm::toggleSaved, ::openConnection, feedVm::cancelSearch)
                         "ask" -> AskScreen(feedUi, itemId, { question -> feedVm.ask(itemId, question) }, ::openConnection)
                         "daily" -> {

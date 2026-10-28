@@ -1,5 +1,7 @@
 package mebot.nguli.com.ui
 
+import androidx.lifecycle.ViewModelProvider
+import mebot.nguli.com.feed.FeedViewModel
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -56,10 +58,11 @@ class MeBotShowcase098JourneyTest {
         }
         waitForTag("feed-screen")
         compose.waitUntil(15_000) { runBlocking { app.feedRepository.current() }.items.size == 8 }
-        if (compose.onAllNodesWithText(compose.activity.getString(R.string.notice_later)).fetchSemanticsNodes().isNotEmpty()) {
-            compose.onNodeWithText(compose.activity.getString(R.string.notice_later)).performClick()
+        compose.onNodeWithTag("setup-tip-later-missing_ai").performScrollTo().performClick()
+        compose.waitUntil(10_000) {
+            runBlocking { app.feedRepository.current() }.dismissedNotices["missing_ai"] != null &&
+                compose.onAllNodesWithTag("setup-notice-missing_ai").fetchSemanticsNodes().isEmpty()
         }
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("setup-notice-connection").fetchSemanticsNodes().isEmpty() }
         assertEquals("Static showcase fixture must not make provider requests", 0, runBlocking { app.feedRepository.current() }.requestsToday)
         assertEquals(0, app.suggestionCalls)
         assertEquals(0, app.answerCalls)
@@ -68,7 +71,14 @@ class MeBotShowcase098JourneyTest {
 
         setAppearance(language = "sw", theme = "light", accent = "sage", skin = "paper", capturedAt = now)
         compose.onNodeWithTag("filter-today").performScrollTo().performClick()
-        compose.waitUntil(15_000) { runBlocking { app.feedRepository.current() }.personalDailySelection098?.itemIds?.isNotEmpty() == true }
+        val viewModel = ViewModelProvider(compose.activity)[FeedViewModel::class.java]
+        // Localising item text invalidates selection revisions. Wait for the same emitted
+        // projection used by the UI, not merely non-empty IDs from the previous language.
+        compose.waitUntil(15_000) {
+            val renderedState = viewModel.ui.value.state ?: return@waitUntil false
+            PersonalDailySelectionLogic098.resolve(renderedState, now).isNotEmpty()
+        }
+        compose.onNodeWithTag("filter-today").assertIsSelected()
         scrollFeedTo("today-personal-selection-heading")
         compose.onNodeWithTag("today-personal-selection-heading").assertIsDisplayed()
         // None of the pack's public stories is dated 28 October. Do not relabel a fetch as news from today.

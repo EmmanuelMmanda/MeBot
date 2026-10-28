@@ -46,6 +46,8 @@ internal object ContextSetup {
         example(context.getString(R.string.setup_context_example)), ModuleCatalog.kinds.sorted().joinToString(", "))
 }
 
+private const val CHATGPT_HOME_URL_099 = "https://chatgpt.com/"
+
 @Composable
 internal fun ContextImportActions(enabled: Boolean, onImport: () -> Unit, onPaste: () -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -88,6 +90,10 @@ internal fun ContextPromptActions(enabled: Boolean = true, guided: Boolean = fal
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
             TextButton(onClick = { viewPrompt = true }, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp).testTag("context-view-prompt")) {
                 Text(stringResource(R.string.setup_view_prompt))
+            }
+            TextButton(onClick = { openSource(context, CHATGPT_HOME_URL_099) }, enabled = enabled,
+                modifier = Modifier.heightIn(min = 48.dp).testTag("context-open-chatgpt")) {
+                Text(stringResource(R.string.setup099_open_chatgpt))
             }
         }
         if (copied) Text(stringResource(R.string.starter_paste_hint), style = MaterialTheme.typography.bodySmall,
@@ -151,7 +157,13 @@ internal fun ContextPasteDialog(text: String, onTextChanged: (String) -> Unit, w
 
 /** Full-page import guide; parsing, review and confirmation still use the existing repository pipeline. */
 @Composable
-fun ContextImportScreen(ui: mebot.nguli.com.feed.FeedUiState, vm: mebot.nguli.com.feed.FeedViewModel, onImported: () -> Unit) {
+fun ContextImportScreen(
+    ui: mebot.nguli.com.feed.FeedUiState,
+    vm: mebot.nguli.com.feed.FeedViewModel,
+    onManualContext: (() -> Unit)? = null,
+    onInterests: (() -> Unit)? = null,
+    onImported: () -> Unit,
+) {
     val documents = mebot.nguli.com.documents.LocalDocumentActions.current
     var text by rememberSaveable { mutableStateOf("") }
     var tooLarge by rememberSaveable { mutableStateOf(false) }
@@ -167,6 +179,13 @@ fun ContextImportScreen(ui: mebot.nguli.com.feed.FeedUiState, vm: mebot.nguli.co
     val enabled = !ui.importWorking && !ui.contextSaving
     mebot.nguli.com.ui.ScreenContainer(Modifier.testTag("context-import-screen")) {
         mebot.nguli.com.ui.ScreenTitle(stringResource(R.string.context_import_title_092))
+        verifiedConfiguredChatGptModel(ui)?.let { model ->
+            AppCard(modifier = Modifier.testTag("context-import-chatgpt-verified")) {
+                Text(stringResource(R.string.setup099_connected_model, model), style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.setup099_connected_model_body), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         ImportFeedback(ui)
         ContextPromptActions(enabled, guided = true)
         AppCard {
@@ -182,6 +201,25 @@ fun ContextImportScreen(ui: mebot.nguli.com.feed.FeedUiState, vm: mebot.nguli.co
             }, label = { Text(stringResource(R.string.setup_paste_json)) }, enabled = enabled, isError = tooLarge,
                 minLines = 4, maxLines = 8, modifier = Modifier.fillMaxWidth().testTag("context-paste-input"), shape = RoundedCornerShape(16.dp))
             if (tooLarge) Text(stringResource(R.string.setup_paste_too_large), color = MaterialTheme.colorScheme.error)
+            onManualContext?.let { manual ->
+                HorizontalDivider()
+                Text(stringResource(R.string.setup099_manual_context_body), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedButton(onClick = manual, enabled = enabled,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("context-manual-entry"),
+                    shape = RoundedCornerShape(16.dp)) {
+                    Icon(Icons.Outlined.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.setup099_manual_context))
+                }
+            }
+            onInterests?.let { choose ->
+                OutlinedButton(onClick = choose, enabled = enabled,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("context-import-interests"),
+                    shape = RoundedCornerShape(16.dp)) {
+                    Icon(Icons.Outlined.Tune, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.context_import_interests_099))
+                }
+            }
         }
         if (ui.importPreview == null) ui.error?.let { FeedStatus(it) }
         Text(stringResource(R.string.context_review_step_092), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -191,4 +229,11 @@ fun ContextImportScreen(ui: mebot.nguli.com.feed.FeedUiState, vm: mebot.nguli.co
         }
     }
     FeedImportReview(ui, vm::confirmImport, vm::cancelImport)
+}
+
+private fun verifiedConfiguredChatGptModel(ui: mebot.nguli.com.feed.FeedUiState): String? {
+    val state = ui.state ?: return null
+    if (!ui.connected || state.connection.mode != "chatgpt" || state.connection.accountId.isBlank() || state.connection.model.isBlank()) return null
+    val account = ui.chatGpt.accounts.firstOrNull { it.id == state.connection.accountId && it.connected } ?: return null
+    return account.models.firstOrNull { it.slug == state.connection.model }?.displayName?.takeIf { it.isNotBlank() }
 }

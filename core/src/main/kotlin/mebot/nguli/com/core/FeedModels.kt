@@ -55,6 +55,8 @@ data class FeedState(
     val interestsConfigured: Boolean = false,
     val quickGuideSeen: Boolean = false,
     val dismissedNotices: Map<String, Long> = emptyMap(),
+    /** Device-local guided setup progress; never provider request context. */
+    val setup099: Setup099State = Setup099State(),
     val backgroundEnabled: Boolean = false,
     val backgroundWifiOnly: Boolean = true,
     val backgroundBatteryNotLow: Boolean = true,

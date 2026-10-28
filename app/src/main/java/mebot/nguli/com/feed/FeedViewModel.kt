@@ -12,6 +12,7 @@ import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.auth.ChatGptAuthException
 import mebot.nguli.com.feed.auth.ChatGptAuthState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,6 +23,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -33,8 +36,34 @@ import java.util.concurrent.atomic.AtomicLong
 
 data class SuggestedConversationDraft(val id: String, val conversationId: String, val text: String)
 
+/** Durable result for an optional-interests autosave; only SAVED authorizes navigation/merge. */
+data class PersonalInterestsSaveResult099(
+    val status: Status,
+    val state: FeedState? = null,
+    val errorCode: String? = null,
+) {
+    enum class Status { SAVED, SUPERSEDED, FAILED }
+}
+
+private data class PersonalInterestsPayload099(val kinds: Set<String>, val customText: String)
+
+private class PersonalInterestsSubmission099(
+    val sessionToken: Long,
+    val revision: Long,
+    val payload: PersonalInterestsPayload099,
+    val completion: CompletableDeferred<PersonalInterestsSaveResult099> = CompletableDeferred(),
+) {
+    @Volatile var completedResult: PersonalInterestsSaveResult099? = null
+}
+
 /** Handle returned synchronously for the one explicit, budgeted generation request. */
-data class SuggestionGenerationHandle097(val requestId: String, val job: Job)
+data class SuggestionGenerationHandle097(
+    val requestId: String,
+    val job: Job,
+    val cancelOnDismiss: Boolean = true,
+    /** Per-route lease for shared hidden preparation; explicit sheet requests have no lease. */
+    val preparationLeaseId: String? = null,
+)
 
 private data class SuggestionSelectionSnapshot097(
     val conversationId: String?,
@@ -133,6 +162,11 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     private var suggestionGenerationJob: Job? = null
     private var suggestionGenerationRequestId: String? = null
     private var suggestionGenerationTarget: SuggestionTargetSnapshot097? = null
+    private var suggestionGenerationAppending = false
+    private var suggestionGenerationPrefetch = false
+    private var suggestionGenerationPrefetchAttemptKey: String? = null
+    private val suggestionPrefetchLeases097 = linkedSetOf<String>()
+    private val suggestionPrefetchAttempts097 = linkedSetOf<String>()
     private var suggestionAskJob: Job? = null
     private var suggestionDispatchStarted = false
     private var pendingSuggestionThreadId: String? = null
@@ -161,6 +195,15 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     private var connectGeneration = 0L
     private var lastAutomaticAttemptMillis = 0L
     private var lastLoadMoreAttemptMillis = 0L
+    /** Serializes interest autosave commits without canceling an already-started DataStore write. */
+    private val personalInterestsWriteMutex099 = Mutex()
+    private val personalInterestsEditLock099 = Any()
+    private var personalInterestsSessionSequence099 = 0L
+    private var activePersonalInterestsSession099 = 0L
+    private var activePersonalInterestsRevision099 = -1L
+    private var activePersonalInterestsSubmission099: PersonalInterestsSubmission099? = null
+    /** Deterministic ordering seam; production leaves this as a no-op. */
+    internal var beforePersonalInterestsCommit099: suspend (Long, Long) -> Unit = { _, _ -> }
 
     internal companion object {
         const val KEY_SELECTION_MODE = "feed.conversation.selection.mode"
@@ -173,6 +216,11 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     }
 
     init {
+        viewModelScope.launch {
+            app.appLock.state.collect { protection ->
+                if (protection.locked) cancelActiveSuggestionGeneration097()
+            }
+        }
         viewModelScope.launch { engine.progress.collect { p -> _ui.update { it.copy(refreshProgress=p) } } }
         viewModelScope.launch { AiActivityRegistry.state.collect { tasks -> _ui.update { it.copy(activities = tasks.values.toList()) } } }
         viewModelScope.launch {
@@ -231,13 +279,223 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         else -> fallback
     }
 
+    /** Starts a fresh, opaque editor generation. Opening the screen itself never writes state. */
+    fun beginPersonalInterestsEdit099(): Long = synchronized(personalInterestsEditLock099) {
+        check(personalInterestsSessionSequence099 < Long.MAX_VALUE) { "Personal interests editor generation exhausted" }
+        val token = ++personalInterestsSessionSequence099
+        activePersonalInterestsSession099 = token
+        activePersonalInterestsRevision099 = -1L
+        activePersonalInterestsSubmission099 = null
+        token
+    }
+
+    /** One-shot convenience for callers without a retained editor; UI autosaves should pass a token. */
+    fun savePersonalInterests099(kinds: Set<String>, customText: String): Job {
+        val token = beginPersonalInterestsEdit099()
+        return savePersonalInterests099(kinds, customText, token, 0L)
+    }
+
+    /**
+     * Persist the newest deliberate interest edit. Revisions are ordered only within the opaque
+     * editor session, so a delayed disposal from an older screen cannot overwrite a reopened one.
+     * The returned Job waits for this caller's result; canceling it does not cancel a DataStore
+     * commit already owned by the ViewModel.
+     */
+    fun savePersonalInterests099(
+        kinds: Set<String>,
+        customText: String,
+        sessionToken: Long,
+        revision: Long,
+        onComplete: (PersonalInterestsSaveResult099) -> Unit = {},
+    ): Job {
+        val normalizedKinds = kinds.toSet()
+        val normalizedText = customText.trim()
+        val allowedKinds = ModuleCatalog.presets.map { it.kind }.toSet()
+        if (revision < 0L || !normalizedKinds.all { it in allowedKinds } || !PersonalProfile085.valid(customText)) {
+            val failed = PersonalInterestsSaveResult099(
+                PersonalInterestsSaveResult099.Status.FAILED,
+                errorCode = "invalid_input",
+            )
+            return deliverPersonalInterestsResult099(CompletableDeferred(failed), onComplete)
+        }
+
+        val payload = PersonalInterestsPayload099(normalizedKinds, normalizedText)
+        var immediate: PersonalInterestsSaveResult099? = null
+        var submission: PersonalInterestsSubmission099? = null
+        var startWorker: Job? = null
+        synchronized(personalInterestsEditLock099) {
+            if (sessionToken == 0L || sessionToken != activePersonalInterestsSession099) {
+                immediate = PersonalInterestsSaveResult099(PersonalInterestsSaveResult099.Status.SUPERSEDED)
+            } else if (revision < activePersonalInterestsRevision099) {
+                immediate = PersonalInterestsSaveResult099(PersonalInterestsSaveResult099.Status.SUPERSEDED)
+            } else {
+                val current = activePersonalInterestsSubmission099
+                if (revision == activePersonalInterestsRevision099 && current != null && current.payload != payload) {
+                    immediate = PersonalInterestsSaveResult099(PersonalInterestsSaveResult099.Status.SUPERSEDED)
+                } else if (revision == activePersonalInterestsRevision099 && current?.payload == payload &&
+                    current.completedResult?.status != PersonalInterestsSaveResult099.Status.FAILED
+                ) {
+                    // Debounce and explicit Done for the same tuple share the same durable result.
+                    submission = current
+                } else {
+                    val accepted = PersonalInterestsSubmission099(
+                        sessionToken = sessionToken,
+                        revision = revision,
+                        payload = payload,
+                    )
+                    activePersonalInterestsRevision099 = revision
+                    activePersonalInterestsSubmission099 = accepted
+                    activePersonalInterestsSession099 = sessionToken
+                    startWorker = viewModelScope.launch(start = CoroutineStart.LAZY) {
+                        runPersonalInterestsSave099(accepted)
+                    }
+                    submission = accepted
+                }
+            }
+        }
+
+        immediate?.let { return deliverPersonalInterestsResult099(CompletableDeferred(it), onComplete) }
+        val accepted = requireNotNull(submission)
+        startWorker?.start()
+        return deliverPersonalInterestsResult099(accepted.completion, onComplete)
+    }
+
+    private fun deliverPersonalInterestsResult099(
+        result: CompletableDeferred<PersonalInterestsSaveResult099>,
+        onComplete: (PersonalInterestsSaveResult099) -> Unit,
+    ): Job = viewModelScope.launch {
+        val completed = result.await()
+        runCatching { onComplete(completed) }
+    }
+
+    private fun isCurrentPersonalInterestsSubmission099(submission: PersonalInterestsSubmission099): Boolean =
+        synchronized(personalInterestsEditLock099) {
+            submission.sessionToken == activePersonalInterestsSession099 &&
+                activePersonalInterestsSubmission099 === submission &&
+                activePersonalInterestsRevision099 == submission.revision
+        }
+
+    private suspend fun runPersonalInterestsSave099(submission: PersonalInterestsSubmission099) {
+        try {
+            val result = personalInterestsWriteMutex099.withLock {
+                if (!isCurrentPersonalInterestsSubmission099(submission)) {
+                    PersonalInterestsSaveResult099(PersonalInterestsSaveResult099.Status.SUPERSEDED)
+                } else {
+                    beforePersonalInterestsCommit099(submission.sessionToken, submission.revision)
+                    if (!isCurrentPersonalInterestsSubmission099(submission)) {
+                        PersonalInterestsSaveResult099(PersonalInterestsSaveResult099.Status.SUPERSEDED)
+                    } else {
+                        val before = repository.current()
+                        val projected = applyPersonalInterests099(before, submission.payload)
+                        val contextOrModulesChanged = projected.context != before.context || projected.modules != before.modules
+                        if (contextOrModulesChanged) {
+                            cancelRefresh()
+                            cancelAiWork()
+                            lastAutomaticAttemptMillis = 0L
+                        }
+                        val committed = repository.update { current ->
+                            synchronized(personalInterestsEditLock099) {
+                                if (submission.sessionToken != activePersonalInterestsSession099 ||
+                                    activePersonalInterestsSubmission099 !== submission ||
+                                    activePersonalInterestsRevision099 != submission.revision
+                                ) current else applyPersonalInterests099(current, submission.payload)
+                            }
+                        }
+                        if (isCurrentPersonalInterestsSubmission099(submission))
+                            PersonalInterestsSaveResult099(PersonalInterestsSaveResult099.Status.SAVED, committed)
+                        else PersonalInterestsSaveResult099(PersonalInterestsSaveResult099.Status.SUPERSEDED)
+                    }
+                }
+            }
+            finishPersonalInterestsSave099(submission, result)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            val result = PersonalInterestsSaveResult099(
+                PersonalInterestsSaveResult099.Status.FAILED,
+                errorCode = failureCode(error, "storage_error"),
+            )
+            // The route owns this edit's recoverable error state. Do not leave a stale global
+            // FeedUiState error behind after its next retry succeeds or overwrite another error.
+            finishPersonalInterestsSave099(submission, result)
+        }
+    }
+
+    private fun finishPersonalInterestsSave099(
+        submission: PersonalInterestsSubmission099,
+        result: PersonalInterestsSaveResult099,
+    ) {
+        synchronized(personalInterestsEditLock099) {
+            val currentResult = if (
+                result.status != PersonalInterestsSaveResult099.Status.SUPERSEDED &&
+                (submission.sessionToken != activePersonalInterestsSession099 ||
+                    activePersonalInterestsSubmission099 !== submission ||
+                    activePersonalInterestsRevision099 != submission.revision)
+            ) PersonalInterestsSaveResult099(PersonalInterestsSaveResult099.Status.SUPERSEDED) else result
+            submission.completedResult = currentResult
+            submission.completion.complete(currentResult)
+        }
+    }
+
+    private fun applyPersonalInterests099(
+        current: FeedState,
+        payload: PersonalInterestsPayload099,
+    ): FeedState {
+        val presetsById = ModuleCatalog.defaults.associateBy { it.id }
+        val selected = payload.kinds
+        val updatedModules = current.modules.map { module ->
+            val preset = presetsById[module.id]?.takeIf { it.kind == module.kind }
+            if (preset != null) module.copy(enabled = preset.id in selected) else module
+        }
+        val existingPresetIds = updatedModules.mapNotNull { module ->
+            presetsById[module.id]?.takeIf { it.kind == module.kind }?.id
+        }.toSet()
+        val missingSelected = selected - existingPresetIds
+        val conflictingIds = updatedModules.asSequence().filter { module ->
+            val expectedKind = presetsById[module.id]?.kind
+            expectedKind != null && expectedKind != module.kind
+        }.map { it.id }.toSet()
+        if (missingSelected.any { it in conflictingIds }) throw FeedFailure("module_identity_conflict")
+        require(updatedModules.size + missingSelected.size <= ModuleCatalog.maxModules) { "Module capacity reached" }
+        val modules = updatedModules + ModuleCatalog.defaults.filter { it.id in missingSelected }.map { it.copy(enabled = true) }
+
+        // Empty edits preserve an existing note: the older helper treats blank as explicit removal.
+        val context = if (payload.customText.isBlank()) current.context else {
+            val scopes = selected - "weather"
+            val old = current.context.firstOrNull { it.id == "onboarding-interests" }
+            if (old?.text == payload.customText && old.scopes == scopes && old.confirmed) current.context
+            else PersonalProfile085.onboarding(current.context, payload.customText, scopes)
+        }
+        val setup = Setup099Logic.contextConfirmed(current.setup099, context)
+        val personalizationChanged = modules != current.modules || context != current.context
+        val configured = current.copy(
+            modules = modules,
+            context = context,
+            setup099 = setup,
+            interestsConfigured = true,
+        )
+        if (!personalizationChanged) return configured
+        return configured.copy(
+            items = current.items.map { item ->
+                AiSuggestedInteractions095.clear(item.copy(why = "", relevance = 0, aiRelevance = null))
+            },
+            briefs = emptyList(),
+            suggestionSets097 = emptyList(),
+            personalDailySelection098 = null,
+            lastRefreshMillis = 0L,
+            lastAiRefreshMillis = 0L,
+        )
+    }
+
     fun clearMessage() { _ui.update { it.copy(error = null, notice = null) } }
     fun clearImportSummary() { _ui.update { it.copy(importSummary = null) } }
     fun clearNotice() { _ui.update { it.copy(notice = null) } }
     fun clearAnswer() = clearAnswerInternal(suppressSuggestionRollback = false)
-    private fun clearAnswerInternal(suppressSuggestionRollback: Boolean) {
+    /** Route transitions may hand off the currently visible non-chat preparation to another route owner. */
+    fun clearAnswerForNavigation() = clearAnswerInternal(suppressSuggestionRollback = false, preserveRoutePrefetch = true)
+    private fun clearAnswerInternal(suppressSuggestionRollback: Boolean, preserveRoutePrefetch: Boolean = false) {
         suggestionGeneration.incrementAndGet()
-        cancelActiveSuggestionGeneration097()
+        cancelActiveSuggestionGeneration097(preserveRoutePrefetch)
         cancelSuggestionAction(pendingOnly = false,
             restorePreviousSelection = !suppressSuggestionRollback,
             rollbackOnCancel = !suppressSuggestionRollback)
@@ -356,8 +614,16 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     fun cancelConversationOpen(): Job? =
         cancelConversationOpenInternal(restoreSuggestionSelection = true, rollbackSuggestion = true)
 
-    private fun cancelConversationOpenInternal(restoreSuggestionSelection: Boolean, rollbackSuggestion: Boolean): Job? {
-        cancelActiveSuggestionGeneration097()
+    /** Navigation-only variant; chat-target preparation is stale when leaving, but Home may hand its lease to Detail. */
+    fun cancelConversationOpenForNavigation(): Job? =
+        cancelConversationOpenInternal(restoreSuggestionSelection = true, rollbackSuggestion = true, preserveRoutePrefetch = true)
+
+    private fun cancelConversationOpenInternal(
+        restoreSuggestionSelection: Boolean,
+        rollbackSuggestion: Boolean,
+        preserveRoutePrefetch: Boolean = false,
+    ): Job? {
+        cancelActiveSuggestionGeneration097(preserveRoutePrefetch)
         val rollbackJob = cancelSuggestionAction(pendingOnly = true, restorePreviousSelection = restoreSuggestionSelection,
             rollbackOnCancel = rollbackSuggestion)
         if (!_ui.value.conversationOpening) return rollbackJob
@@ -389,6 +655,21 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     }
     fun finishOnboarding() = work {
         repository.update { it.copy(onboardingComplete = true) }
+        refresh()
+    }
+    /** Commit both first-run completion markers together, then begin the ordinary public-feed refresh. */
+    fun finishSetup099(onCommitted: () -> Unit = {}) = work {
+        repository.update { current ->
+            val freshOnboarding = !current.onboardingComplete
+            current.copy(
+                onboardingComplete = true,
+                setup099 = Setup099Logic.finish(
+                    current.setup099,
+                    preferChatGptIfUnknown = freshOnboarding,
+                ),
+            )
+        }
+        onCommitted()
         refresh()
     }
     fun refreshIfStale() = work {
@@ -448,6 +729,13 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             try {
                 cancelRefresh(); cancelAiWork()
                 withContext(Dispatchers.IO) { engine.connect(connection, key.trim().ifBlank { "local-no-key" }) }
+                if (generation == connectGeneration && connection.mode != "chatgpt") {
+                    repository.update { current ->
+                        if (current.connection == connection) current.copy(setup099 = Setup099Logic.recordPreferredConnection(
+                            current.setup099, Setup099ConnectionEntry.USER_SELECTED,
+                        )) else current
+                    }
+                }
                 apiPresence.definitive(true)
                 if (generation == connectGeneration) _ui.update { it.copy(connected = true, notice = "connected", error = null) }
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -505,7 +793,15 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                 if (!account.planEnabled) throw FeedFailure("chatgpt_permission")
                 _ui.update { it.copy(chatGptVerifying = true) }
                 withContext(Dispatchers.IO) { engine.connectChatGpt(account.id) }
-                if (generation == connectGeneration) _ui.update { it.copy(connected = true, notice = "connected", error = null) }
+                if (generation == connectGeneration) {
+                    repository.update { current ->
+                        if (current.connection.mode == "chatgpt" && current.connection.accountId == account.id)
+                            current.copy(setup099 = Setup099Logic.recordPreferredConnection(
+                                current.setup099, Setup099ConnectionEntry.CHATGPT,
+                            )) else current
+                    }
+                    _ui.update { it.copy(connected = true, notice = "connected", error = null) }
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (e: Exception) { if (generation == connectGeneration) _ui.update { it.copy(error = failureCode(e)) } }
             finally { if (generation == connectGeneration) _ui.update { it.copy(connecting = false, chatGptVerifying = false) } }
@@ -570,7 +866,15 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             try {
                 cancelRefresh(); cancelAiWork()
                 withContext(Dispatchers.IO) { engine.connectChatGpt(id, model) }
-                if (generation == connectGeneration) _ui.update { it.copy(connected = true, notice = "connected", error = null) }
+                if (generation == connectGeneration) {
+                    repository.update { current ->
+                        if (current.connection.mode == "chatgpt" && current.connection.accountId == id)
+                            current.copy(setup099 = Setup099Logic.recordPreferredConnection(
+                                current.setup099, Setup099ConnectionEntry.CHATGPT,
+                            )) else current
+                    }
+                    _ui.update { it.copy(connected = true, notice = "connected", error = null) }
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (e: Exception) { if (generation == connectGeneration) _ui.update { it.copy(error = failureCode(e)) } }
             finally { if (generation == connectGeneration) _ui.update { it.copy(connecting = false, chatGptVerifying = false) } }
@@ -608,7 +912,33 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         }
     }
     fun updateSpeechPreferences(rate: Float, voice: String) = work { repository.update { it.copy(speechRate = rate, speechVoice = voice) } }
-    fun toggleStar(id: String) = work { repository.update { StarredStories.toggle(it, id, System.currentTimeMillis()) } }
+    /**
+     * Toggle a follow and optionally report the committed snapshot. The callback runs only
+     * after persistence succeeds so UI feedback never promises a follow that failed to save.
+     */
+    fun toggleStar(id: String, onCommitted: ((FeedState) -> Unit)? = null) = work {
+        val updated = repository.update { StarredStories.toggle(it, id, System.currentTimeMillis()) }
+        onCommitted?.invoke(updated)
+    }
+    /** Idempotent desired-state write for rapid taps; success feedback receives only the durable snapshot. */
+    fun setStarred099(id: String, desired: Boolean, onCommitted: ((FeedState) -> Unit)? = null) = work {
+        var changed = false
+        val updated = repository.update { current ->
+            require(current.items.any { it.id == id })
+            val alreadyStarred = current.starredStories.any { it.itemId == id }
+            if (alreadyStarred == desired) current
+            else if (desired) {
+                require(current.starredStories.size < 100)
+                changed = true
+                current.copy(starredStories = current.starredStories + StarredStory(id,
+                    starredAtMillis = System.currentTimeMillis()))
+            } else {
+                changed = true
+                current.copy(starredStories = current.starredStories.filterNot { it.itemId == id })
+            }
+        }
+        if (changed) onCommitted?.invoke(updated)
+    }
     fun configureStar(id: String, paused: Boolean, hours: Int) = work { repository.update { StarredStories.configure(it, id, paused, hours) } }
     fun setSavedCollection(id: String, name: String) = work { repository.update { StarredStories.collection(it, id, name) } }
     fun saveReadingPreferences(update: (ReadingPreferences) -> ReadingPreferences) = work {
@@ -620,8 +950,54 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         repository.update { RelevanceFeedback.record(it, id, relevant, System.currentTimeMillis()) }
     }
     fun resetRelevanceFeedback() = work { repository.update { it.copy(relevanceSignals = emptyList()) } }
+
+    /** Called only after a ChatGPT account has been verified; callers must opt into eligible setup. */
+    fun recordSetup099ChatGptConfirmed(accountKey: String, setupEligible: Boolean = false) = work {
+        val presented = _ui.value
+        repository.update { current ->
+            val verifiedActiveAccount = setupEligible && accountKey.isNotBlank() &&
+                current.connection.mode == "chatgpt" && current.connection.accountId == accountKey &&
+                presented.connected && !presented.connecting && !presented.chatGptVerifying &&
+                !presented.providerAuthBusy && presented.error == null &&
+                presented.chatGpt.activeAccountId == accountKey &&
+                presented.chatGpt.accounts.any { it.id == accountKey && it.connected && it.planEnabled }
+            val setup = if (verifiedActiveAccount) Setup099Logic.recordChatGptSuccess(
+                state = current.setup099,
+                accountKey = accountKey,
+                confirmed = true,
+                hasConfirmedContext = Setup099Logic.hasConfirmedContext(current.context),
+                setupEligible = true,
+            ) else current.setup099
+            current.copy(setup099 = setup)
+        }
+    }
+
+    /** Consume only the pending first-account import route after its destination was entered. */
+    fun acknowledgeSetup099ImportRoute(accountKey: String) = work {
+        repository.update { current -> current.copy(
+            setup099 = Setup099Logic.acknowledgeImportRoute(current.setup099, accountKey),
+        ) }
+    }
+
+    /** Advance only when at least one confirmed, nonblank context entry is durably present. */
+    fun advanceSetup099ToStart() = work {
+        repository.update { current -> current.copy(
+            setup099 = Setup099Logic.contextConfirmed(current.setup099, current.context),
+        ) }
+    }
+
+    /** Explicitly continue without adding personal context; public feed reading remains available. */
+    fun skipSetup099Context() = work {
+        repository.update { current -> current.copy(setup099 = Setup099Logic.skipContext(current.setup099)) }
+    }
+
+    /** Invalid stage values and transitions out of completion are rejected by the pure state logic. */
+    fun setSetup099Stage(stage: String) = work {
+        repository.update { current -> current.copy(setup099 = Setup099Logic.setStage(current.setup099, stage)) }
+    }
+
     fun dismissSetupNotice(key: String) = work {
-        require(key in setOf("connection", "preferences"))
+        require(key in Setup099Logic.tipKeys + setOf("connection", "preferences"))
         repository.update { it.copy(dismissedNotices = it.dismissedNotices + (key to System.currentTimeMillis())) }
     }
     fun completeQuickGuide() = work { repository.update { it.copy(quickGuideSeen = true) } }
@@ -680,6 +1056,7 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             try {
                 cancelRefresh(); cancelAiWork(); lastAutomaticAttemptMillis = 0L
                 val saved = repository.update { s -> s.copy(name = name.trim(), region = region.trim(), timezone = timezone.trim(), context = entries,
+                    setup099 = Setup099Logic.contextConfirmed(s.setup099, entries),
                     items = s.items.map { AiSuggestedInteractions095.clear(it.copy(why = "", relevance = 0)) }, lastAiRefreshMillis = 0, lastRefreshMillis = 0) }
                 _ui.update { it.copy(state = saved, notice = "saved", error = null) }
             } finally {
@@ -869,26 +1246,34 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         val state = uiState.state ?: return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.UNAVAILABLE,
             failureCode = "suggestion_unavailable")
         val language = appLanguage.takeIf { it in setOf("en", "sw") } ?: "en"
-        if (uiState.appLanguage != language)
+        if (uiState.appLanguage != language || !SuggestionTargets097.current(state, target, language))
             return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.STALE_TARGET, failureCode = "suggestion_changed")
-        if (!SuggestionTargets097.current(state, target, language))
-            return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.STALE_TARGET, failureCode = "suggestion_changed")
-        val preparedSet = cachedSuggestionSet097(state, target, language, System.currentTimeMillis())
-        val prepared = preparedSet?.questions?.map { question -> SuggestionOptionSnapshot097(
-            AiSuggestionCache097.optionId(preparedSet, question), question, preparedSet.generatedAtMillis)
-        }.orEmpty()
-        if (prepared.isNotEmpty()) return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.READY,
-            prepared, validUntilMillis = preparedSet!!.generatedAtMillis + AiSuggestionCache097.CACHE_TTL_MILLIS)
+        val now = System.currentTimeMillis()
+        val batches = cachedSuggestionSets097(state, target, language, now)
+        val prepared = optionsFromBatches097(batches)
+        val capacity = batches.size < AiSuggestionCache097.MAX_BATCHES_PER_TARGET
         val generation = uiState.suggestionGeneration?.takeIf { it.target == target }
-        if (generation?.status == SuggestionSheetStatus097.GENERATING) return SuggestionSheetSnapshot097(target,
-            SuggestionSheetStatus097.GENERATING, requestId = generation.requestId)
-        generation?.let { return SuggestionSheetSnapshot097(target, it.status, requestId = it.requestId, failureCode = it.failureCode) }
+        if (prepared.isNotEmpty()) {
+            val moreIsRunning = generation?.appending == true && generation.status == SuggestionSheetStatus097.GENERATING_MORE
+            val moreFailed = generation?.appending == true && generation.status != SuggestionSheetStatus097.GENERATING_MORE
+            return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.READY, prepared,
+                requestId = generation?.requestId,
+                validUntilMillis = batches.minOfOrNull { it.generatedAtMillis + AiSuggestionCache097.CACHE_TTL_MILLIS },
+                canLoadMore = capacity,
+                loadingMore = moreIsRunning,
+                loadMoreFailureCode = if (moreFailed) generation?.failureCode else null)
+        }
+        if (generation?.status == SuggestionSheetStatus097.GENERATING)
+            return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.GENERATING,
+                requestId = generation.requestId)
+        generation?.let { return SuggestionSheetSnapshot097(target, it.status, requestId = it.requestId,
+            failureCode = it.failureCode) }
         if (!uiState.connected || app.appLock.state.value.locked)
             return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.UNAVAILABLE, failureCode = "suggestion_unavailable")
         return SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.NEEDS_GENERATION)
     }
 
-    /** Compatibility accessor for non-sheet clients; options are never fabricated locally. */
+    /** Compatibility accessor for non-sheet clients; options are only AI-generated questions. */
     fun suggestionOptions097(target: SuggestionTargetSnapshot097, appLanguage: String): List<SuggestionOptionSnapshot097> =
         suggestionSheet097(target, appLanguage).options
 
@@ -897,25 +1282,28 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         target: SuggestionTargetSnapshot097,
         appLanguage: String,
         now: Long,
-    ): List<SuggestionOptionSnapshot097> {
-        if (!SuggestionTargets097.current(state, target, appLanguage)) return emptyList()
-        val set = cachedSuggestionSet097(state, target, appLanguage, now) ?: return emptyList()
-        if (!AiSuggestionCache097.areValidQuestions(set.questions)) return emptyList()
-        return set.questions.map { question -> SuggestionOptionSnapshot097(
-            AiSuggestionCache097.optionId(set, question), question, set.generatedAtMillis)
-        }
+    ): List<SuggestionOptionSnapshot097> = if (!SuggestionTargets097.current(state, target, appLanguage)) emptyList()
+        else optionsFromBatches097(cachedSuggestionSets097(state, target, appLanguage, now))
+
+    private fun optionsFromBatches097(batches: List<AiSuggestionSet097>): List<SuggestionOptionSnapshot097> {
+        val seen = mutableSetOf<String>()
+        return batches.flatMap { set -> set.questions.mapNotNull { question ->
+            val normalized = question.trim().lowercase(java.util.Locale.ROOT).replace(Regex("\\s+"), " ")
+            if (!seen.add(normalized)) null else SuggestionOptionSnapshot097(
+                AiSuggestionCache097.optionId(set, question), question, set.generatedAtMillis)
+        } }
     }
 
-    private fun cachedSuggestionSet097(
+    private fun cachedSuggestionSets097(
         state: FeedState,
         target: SuggestionTargetSnapshot097,
         appLanguage: String,
         now: Long,
-    ): AiSuggestionSet097? {
+    ): List<AiSuggestionSet097> {
         val kind = target.kind.name.lowercase(java.util.Locale.ROOT)
-        val stored = state.suggestionSets097.lastOrNull { record ->
+        val stored = state.suggestionSets097.filter { record ->
             AiSuggestionCache097.isFresh(record, kind, target.targetId, target.revision, now)
-        }
+        }.sortedBy { it.generatedAtMillis }
         val itemCache = if (target.kind == SuggestionTargetKind097.ITEM) {
             state.items.singleOrNull { it.id == target.itemId }?.takeIf {
                 AiSuggestedInteractions095.isApplicable(state, it, now, appLanguage)
@@ -930,18 +1318,119 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                 ?.let { AiSuggestionSet097(kind, target.targetId, target.revision,
                     it.suggestedInteractions.map { interaction -> interaction.prompt }, it.suggestedInteractionsGeneratedAtMillis) }
         } else null
-        return listOfNotNull(stored, itemCache).filter { AiSuggestionCache097.isValid(it) }
-            .maxByOrNull { it.generatedAtMillis }
+        return (stored + listOfNotNull(itemCache)).filter(AiSuggestionCache097::isValid)
+            .distinctBy(AiSuggestionCache097::recordIdentity).sortedBy { it.generatedAtMillis }
     }
 
-    /** Explicit single request; opening a sheet is read-only. Duplicate taps share this job. */
-    fun generateSuggestions097(target: SuggestionTargetSnapshot097, appLanguage: String): SuggestionGenerationHandle097? {
+    /** Prepare once at a stable route/feed-ready transition; a failed prefetch never self-retries. */
+    fun prepareSuggestions097(target: SuggestionTargetSnapshot097, appLanguage: String): SuggestionGenerationHandle097? {
+        val language = appLanguage.takeIf { it in setOf("en", "sw") } ?: "en"
+        val connectionKey = _ui.value.state?.connection?.let { "${it.mode}:${it.accountId}:${it.model}:${it.serviceUrl}" }.orEmpty()
+        val attemptKey = "$connectionKey:${target.kind}:${target.targetId}:${target.revision}:$language"
+        synchronized(suggestionGenerationLock) {
+            suggestionGenerationJob?.takeIf { it.isActive }?.let { active ->
+                if (suggestionGenerationTarget == target && !suggestionGenerationAppending) {
+                    val isPrefetch = suggestionGenerationPrefetch
+                    val lease = if (isPrefetch) java.util.UUID.randomUUID().toString() else null
+                    lease?.let(suggestionPrefetchLeases097::add)
+                    return SuggestionGenerationHandle097(
+                        suggestionGenerationRequestId ?: return null,
+                        active,
+                        cancelOnDismiss = !isPrefetch,
+                        preparationLeaseId = lease,
+                    )
+                }
+                if (suggestionGenerationTarget == target || !suggestionGenerationPrefetch) return null
+                // A different stable target supersedes a hidden preparation, never explicit work.
+                cancelActiveSuggestionGeneration097()
+            }
+            if (attemptKey in suggestionPrefetchAttempts097) return null
+            val state = _ui.value.state ?: return null
+            if (cachedSuggestionSets097(state, target, language, System.currentTimeMillis()).isNotEmpty()) return null
+            val handle = requestSuggestions097(target, language, append = false, prefetch = true,
+                prefetchAttemptKey = attemptKey) ?: return null
+            if (!handle.cancelOnDismiss) {
+                suggestionPrefetchAttempts097 += attemptKey
+                while (suggestionPrefetchAttempts097.size > 256) suggestionPrefetchAttempts097.remove(suggestionPrefetchAttempts097.first())
+                if (!handle.job.isActive) return handle
+                val lease = java.util.UUID.randomUUID().toString()
+                suggestionPrefetchLeases097 += lease
+                return handle.copy(preparationLeaseId = lease)
+            }
+            return handle
+        }
+    }
+
+    /**
+     * Bridge a currently-running Home/route preparation across a navigation transition before
+     * the old route's lifecycle lease is released. This is deliberately adoption-only: it never
+     * starts generation, reserves budget, or calls the provider. The destination may subsequently
+     * acquire its ordinary route lease through [prepareSuggestions097].
+     */
+    fun retainActiveSuggestionPreparationForNavigation097(
+        target: SuggestionTargetSnapshot097,
+    ): SuggestionGenerationHandle097? = synchronized(suggestionGenerationLock) {
+        val job = suggestionGenerationJob?.takeIf { it.isActive } ?: return@synchronized null
+        if (!suggestionGenerationPrefetch || suggestionGenerationAppending || suggestionGenerationTarget != target)
+            return@synchronized null
+        val requestId = suggestionGenerationRequestId ?: return@synchronized null
+        val lease = java.util.UUID.randomUUID().toString()
+        suggestionPrefetchLeases097 += lease
+        SuggestionGenerationHandle097(
+            requestId = requestId,
+            job = job,
+            cancelOnDismiss = false,
+            preparationLeaseId = lease,
+        )
+    }
+
+    /** Release one route's ownership; a handoff keeps shared preparation alive while another route owns it. */
+    fun releaseSuggestionPreparation097(handle: SuggestionGenerationHandle097) {
+        val lease = handle.preparationLeaseId ?: return
+        val canceled = synchronized(suggestionGenerationLock) {
+            if (!suggestionPrefetchLeases097.remove(lease) || suggestionPrefetchLeases097.isNotEmpty() ||
+                suggestionGenerationRequestId != handle.requestId || !suggestionGenerationPrefetch) return
+            suggestionGenerationJob.also {
+                suggestionGenerationJob = null
+                suggestionGenerationRequestId = null
+                suggestionGenerationTarget = null
+                suggestionGenerationAppending = false
+                suggestionGenerationPrefetch = false
+                suggestionGenerationPrefetchAttemptKey?.let(suggestionPrefetchAttempts097::remove)
+                suggestionGenerationPrefetchAttemptKey = null
+            }
+        }
+        canceled?.cancel()
+        if (canceled != null) _ui.update {
+            if (it.suggestionGeneration?.requestId == handle.requestId) it.copy(suggestionGeneration = null) else it
+        }
+    }
+
+    /** Explicit icon-tap fallback for an empty cache; duplicate taps coalesce on the same target. */
+    fun generateSuggestions097(target: SuggestionTargetSnapshot097, appLanguage: String): SuggestionGenerationHandle097? =
+        requestSuggestions097(target, appLanguage, append = false, prefetch = false)
+
+    /** Explicit Load more action appends one new provider batch and never replaces earlier choices. */
+    fun loadMoreSuggestions097(target: SuggestionTargetSnapshot097, appLanguage: String): SuggestionGenerationHandle097? =
+        requestSuggestions097(target, appLanguage, append = true, prefetch = false)
+
+    private fun requestSuggestions097(
+        target: SuggestionTargetSnapshot097,
+        appLanguage: String,
+        append: Boolean,
+        prefetch: Boolean,
+        prefetchAttemptKey: String? = null,
+    ): SuggestionGenerationHandle097? {
         val language = appLanguage.takeIf { it in setOf("en", "sw") } ?: "en"
         synchronized(suggestionGenerationLock) {
             suggestionGenerationJob?.takeIf { it.isActive }?.let { active ->
-                if (suggestionGenerationTarget == target) return SuggestionGenerationHandle097(
-                    suggestionGenerationRequestId ?: return null, active)
-                return null
+                if (suggestionGenerationTarget == target && suggestionGenerationAppending == append)
+                    return SuggestionGenerationHandle097(suggestionGenerationRequestId ?: return null, active,
+                        cancelOnDismiss = !suggestionGenerationPrefetch)
+                // A stable new active target supersedes only hidden preparation. Never cancel
+                // an explicit user generation for another target behind their back.
+                if (!suggestionGenerationPrefetch) return null
+                cancelActiveSuggestionGeneration097()
             }
             val currentUi = _ui.value
             val state = currentUi.state ?: return null
@@ -949,15 +1438,17 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             if (!currentUi.connected || currentUi.appLanguage != language || currentUi.asking || currentUi.importWorking || currentUi.conversationOpening ||
                 currentUi.suggestionWorking || actionAlreadyWorking || app.appLock.state.value.locked ||
                 !SuggestionTargets097.current(state, target, language)) return null
-            // A full, fresh AI set needs no second request. Generate/Retry is only valid when
-            // prepared data is missing, expired, or was explicitly rejected as incomplete.
-            if (cachedSuggestionSet097(state, target, language, System.currentTimeMillis()) != null) return null
+            val cached = cachedSuggestionSets097(state, target, language, System.currentTimeMillis())
+            if (append && cached.isEmpty()) return null
+            if (!append && cached.isNotEmpty()) return null
+            if (append && cached.size >= AiSuggestionCache097.MAX_BATCHES_PER_TARGET) return null
             val requestId = java.util.UUID.randomUUID().toString()
+            val busyStatus = if (append) SuggestionSheetStatus097.GENERATING_MORE else SuggestionSheetStatus097.GENERATING
             lateinit var launched: Job
             launched = viewModelScope.launch(start = CoroutineStart.LAZY) {
                 try {
                     _ui.update { it.copy(suggestionGeneration = SuggestionGenerationState097(
-                        requestId, target, SuggestionSheetStatus097.GENERATING)) }
+                        requestId, target, busyStatus, appending = append, prefetch = prefetch)) }
                     if (briefLanguage() != language || app.appLock.state.value.locked) throw FeedFailure("suggestion_changed")
                     val initial = repository.current()
                     if (!SuggestionTargets097.current(initial, target, language)) throw FeedFailure("suggestion_changed")
@@ -968,8 +1459,12 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                             target = target,
                             expectedLanguage = language,
                             expectedCurrent = { latest ->
-                                _ui.value.appLanguage == language && !app.appLock.state.value.locked &&
-                                    !_ui.value.asking && !_ui.value.importWorking &&
+                                val latestUi = _ui.value
+                                latestUi.appLanguage == language && !app.appLock.state.value.locked &&
+                                    (target.kind != SuggestionTargetKind097.CONVERSATION ||
+                                        (latestUi.activeConversationId == target.targetId && latestUi.conversationReady &&
+                                            !latestUi.conversationOpening)) &&
+                                    !latestUi.asking && !latestUi.importWorking &&
                                     synchronized(suggestionGenerationLock) {
                                         suggestionGenerationRequestId == requestId && suggestionGenerationJob?.isActive == true
                                     } && synchronized(suggestionActionLock) { suggestionActionJob?.isActive != true } &&
@@ -992,7 +1487,7 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                 catch (error: Exception) {
                     val rawCode = failureCode(error, "suggestion_failed")
                     val code = when (rawCode) {
-                        "suggestion_incomplete", "suggestion_changed", "suggestion_unavailable" -> rawCode
+                        "suggestion_incomplete", "suggestion_changed", "suggestion_unavailable", "suggestion_limit" -> rawCode
                         "unauthorized", "chatgpt_reauth", "quota", "limit_reached", "rate_limit", "offline" -> rawCode
                         else -> "suggestion_failed"
                     }
@@ -1002,10 +1497,10 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                             requestId, target,
                             when (code) {
                                 "suggestion_incomplete" -> SuggestionSheetStatus097.INCOMPLETE
+                                "suggestion_limit" -> SuggestionSheetStatus097.LIMIT_REACHED
                                 "suggestion_unavailable", "unauthorized", "chatgpt_reauth", "offline" -> SuggestionSheetStatus097.UNAVAILABLE
                                 else -> SuggestionSheetStatus097.ERROR
-                            },
-                            code)) else current
+                            }, code, appending = append, prefetch = prefetch)) else current
                     }
                 } finally {
                     val released = synchronized(suggestionGenerationLock) {
@@ -1013,12 +1508,17 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                             suggestionGenerationJob = null
                             suggestionGenerationRequestId = null
                             suggestionGenerationTarget = null
+                            suggestionGenerationAppending = false
+                            suggestionGenerationPrefetch = false
+                            suggestionGenerationPrefetchAttemptKey = null
+                            suggestionPrefetchLeases097.clear()
                             true
                         } else false
                     }
                     if (released) _ui.update { current ->
                         val generation = current.suggestionGeneration
-                        if (generation?.requestId == requestId && generation.status == SuggestionSheetStatus097.GENERATING)
+                        if (generation?.requestId == requestId && generation.status in setOf(
+                            SuggestionSheetStatus097.GENERATING, SuggestionSheetStatus097.GENERATING_MORE))
                             current.copy(suggestionGeneration = null) else current
                     }
                 }
@@ -1026,10 +1526,13 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             suggestionGenerationJob = launched
             suggestionGenerationRequestId = requestId
             suggestionGenerationTarget = target
+            suggestionGenerationAppending = append
+            suggestionGenerationPrefetch = prefetch
+            suggestionGenerationPrefetchAttemptKey = prefetchAttemptKey.takeIf { prefetch }
             _ui.update { it.copy(suggestionGeneration = SuggestionGenerationState097(
-                requestId, target, SuggestionSheetStatus097.GENERATING)) }
+                requestId, target, busyStatus, appending = append, prefetch = prefetch)) }
             launched.start()
-            return SuggestionGenerationHandle097(requestId, launched)
+            return SuggestionGenerationHandle097(requestId, launched, cancelOnDismiss = !prefetch)
         }
     }
 
@@ -1040,15 +1543,49 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             suggestionGenerationJob = null
             suggestionGenerationRequestId = null
             suggestionGenerationTarget = null
+            suggestionGenerationAppending = false
+            suggestionGenerationPrefetch = false
+            suggestionGenerationPrefetchAttemptKey?.let(suggestionPrefetchAttempts097::remove)
+            suggestionGenerationPrefetchAttemptKey = null
+            suggestionPrefetchLeases097.clear()
             current
         }
         job?.cancel()
         _ui.update { if (it.suggestionGeneration?.requestId == requestId) it.copy(suggestionGeneration = null) else it }
     }
 
-    private fun cancelActiveSuggestionGeneration097() {
-        val requestId = synchronized(suggestionGenerationLock) { suggestionGenerationRequestId } ?: return
-        cancelSuggestionGeneration097(requestId)
+    /** ON_STOP must invalidate every hidden route lease, including a navigation bridge, without
+     * canceling work the person explicitly opened and is actively using. */
+    fun cancelSuggestionPreparationsOnBackground099() {
+        cancelActiveSuggestionGeneration097(prefetchOnly = true)
+    }
+
+    private fun cancelActiveSuggestionGeneration097(
+        preserveRoutePrefetch: Boolean = false,
+        prefetchOnly: Boolean = false,
+    ) {
+        val requestId = synchronized(suggestionGenerationLock) {
+            if (prefetchOnly && !suggestionGenerationPrefetch) return
+            if (preserveRoutePrefetch && suggestionGenerationPrefetch &&
+                suggestionPrefetchLeases097.isNotEmpty() &&
+                suggestionGenerationTarget?.kind != SuggestionTargetKind097.CONVERSATION) return
+            suggestionGenerationRequestId
+        } ?: return
+        val job = synchronized(suggestionGenerationLock) {
+            if (suggestionGenerationRequestId != requestId) return
+            suggestionGenerationJob.also {
+                suggestionGenerationJob = null
+                suggestionGenerationRequestId = null
+                suggestionGenerationTarget = null
+                suggestionGenerationAppending = false
+                suggestionGenerationPrefetch = false
+                suggestionGenerationPrefetchAttemptKey?.let(suggestionPrefetchAttempts097::remove)
+                suggestionGenerationPrefetchAttemptKey = null
+                suggestionPrefetchLeases097.clear()
+            }
+        }
+        job?.cancel()
+        _ui.update { if (it.suggestionGeneration?.requestId == requestId) it.copy(suggestionGeneration = null) else it }
     }
 
     private fun resolveSuggestion097(
@@ -1760,8 +2297,9 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     }
     private suspend fun applyContext(imported: PersonalContextImport) {
         cancelRefresh(); cancelAiWork(); lastAutomaticAttemptMillis = 0L
+        val entries = imported.entries.map { it.copy(origin = "imported", global = false) }
         val saved = repository.update { s -> s.copy(name = imported.name, region = imported.region, timezone = imported.timezone,
-            context = imported.entries.map { it.copy(origin = "imported", global = false) },
+            context = entries, setup099 = Setup099Logic.contextConfirmed(s.setup099, entries),
             modules = ModuleCatalog.mergeCatalog(imported.modules.ifEmpty { s.modules }),
             items = s.items.map { AiSuggestedInteractions095.clear(it.copy(why = "", relevance = 0, aiRelevance = null)) },
             briefs = emptyList(), suggestionSets097 = emptyList(), personalDailySelection098 = null, lastAiRefreshMillis = 0, lastRefreshMillis = 0) }
@@ -1776,10 +2314,15 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         cancelConnection(); cancelRefresh(); cancelAiWork(discardSuggestionRollback = true)
         // Commit the data first. A failed store write must not erase a working account.
         // A blank plan account prevents old API credentials being used if cleanup fails.
-        repository.update { candidate.copy(notifications = false, personalSeedApplied = true, modules = ModuleCatalog.mergeCatalog(candidate.modules),
-            items = candidate.items.map { AiSuggestedInteractions095.clear(it.copy(aiRelevance = null)) },
-            suggestionSets097 = emptyList(), personalDailySelection098 = null,
-            connection = AiConnection(mode = "chatgpt", model = candidate.connection.model), aiPauseCode = "") }
+        repository.update { local ->
+            val setup = Setup099Logic.contextConfirmed(local.setup099, candidate.context)
+            candidate.copy(notifications = false, personalSeedApplied = true, modules = ModuleCatalog.mergeCatalog(candidate.modules),
+                items = candidate.items.map { AiSuggestedInteractions095.clear(it.copy(aiRelevance = null)) },
+                suggestionSets097 = emptyList(), personalDailySelection098 = null,
+                // Wizard identity and notice snoozes belong to this installation, not an imported backup.
+                setup099 = setup, dismissedNotices = local.dismissedNotices,
+                connection = AiConnection(mode = "chatgpt", model = candidate.connection.model), aiPauseCode = "")
+        }
         apiPresence.definitive(false)
         FeedWorker.cancel(app)
         withContext(Dispatchers.IO) { engine.clearAllCredentials() }
@@ -1878,7 +2421,12 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         write(uri, Json { prettyPrint = true; encodeDefaults = true }.encodeToString(state.copy(
             items = state.items.map(AiSuggestedInteractions095::clear),
             suggestionSets097 = emptyList(), personalDailySelection098 = null,
-            connection = state.connection.copy(accountId = ""), aiPauseCode = "")))
+            connection = state.connection.copy(accountId = ""), aiPauseCode = "",
+            // Account correlation keys stay on device. An already-onboarded backup must not
+            // resurrect the first-run wizard on another installation.
+            setup099 = if (state.onboardingComplete) Setup099State(stage = Setup099Stage.COMPLETE)
+                else state.setup099.copy(firstChatGptAccountKey = "", pendingImportAccountKey = "", importRouteAcknowledgedAccountKey = ""),
+        )))
         _ui.update { it.copy(notice = "saved", error = null) }
     }
     fun importFeedBackup(uri: Uri) {

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="realtime_setup_title">Mipangilio ya huduma ya sauti</string>
+    <string name="realtime_setup_intro">Sanidi huduma ya sauti ya MeBot unayoamini kando na muunganisho wako wa maandishi. Hakuna kinachounganishwa au kuanzishwa kiotomatiki.</string>
+    <string name="realtime_setup_chatgpt_title">Muunganisho wa maandishi wa ChatGPT</string>
+    <string name="realtime_setup_chatgpt_body">Kuingia kwako kwa ChatGPT hakutabadilika na hutumika kwa vipengele vya maandishi vinavyotumika. Hakutoi ufikiaji wa OpenAI API Realtime wala kulipia matumizi ya sauti ya API.</string>
+    <string name="realtime_setup_broker_title">Huduma tofauti ya sauti ya OpenAI API</string>
+    <string name="realtime_setup_broker_body">Huduma hii ya hiari lazima isanidiwe na wewe au msimamizi unayemwamini. Matumizi ya sauti ya API hutozwa kando na ChatGPT na yanaweza kuwa na gharama.</string>
+    <string name="realtime_setup_no_auto_call">Kuhifadhi taarifa hizi huweka tu URL ya huduma na tokeni. Hakukagui huduma, hakuombi kipindi, hakutumia maikrofoni, wala kuanzisha simu.</string>
+    <string name="realtime_setup_url_label">URL ya HTTPS ya huduma ya sauti</string>
+    <string name="realtime_setup_url_placeholder">https://voice.example.com</string>
+    <string name="realtime_setup_url_help">Tumia URL ya msingi ya umma ya HTTPS ya huduma yako ya MeBot unayoamini. Maswali na sehemu za mwisho za URL haziruhusiwi.</string>
+    <string name="realtime_setup_token_label">Tokeni ya huduma ya MeBot</string>
+    <string name="realtime_setup_token_placeholder">Bandika tokeni ya huduma kutoka kwa msimamizi</string>
+    <string name="realtime_setup_token_saved_placeholder">Tokeni iliyohifadhiwa imefichwa; acha wazi ili ibaki</string>
+    <string name="realtime_setup_token_help">Hii ni tokeni iliyotolewa na huduma, si ufunguo wa msanidi wa OpenAI API.</string>
+    <string name="realtime_setup_token_replace_help">Tokeni ya huduma imehifadhiwa. Iache wazi ibaki kwa URL hii au weka nyingine.</string>
+    <string name="realtime_setup_token_security">Tokeni imesimbwa kwenye hifadhi binafsi ya programu na haijumuishwi kwenye nakala rudufu za mlisho.</string>
+    <string name="realtime_setup_save">Hifadhi huduma ya sauti</string>
+    <string name="realtime_setup_save_help">Kuhifadhi hakutumi ombi la mtandao. Kagua huduma kando utakapoamua.</string>
+    <string name="realtime_setup_error_https">Weka URL halali ya umma ya HTTPS bila swali au sehemu ya mwisho.</string>
+    <string name="realtime_setup_error_token">Tokeni ya huduma lazima iwe na herufi 32–4096 bila nafasi.</string>
+    <string name="realtime_setup_error_token_required">Weka tokeni ya huduma kwa URL hii kabla ya kuhifadhi.</string>
+    <string name="realtime_setup_status_title">Hali ya uwezo wa huduma</string>
+    <string name="realtime_setup_not_checked">Bado haijakaguliwa. Tumia Kagua huduma kuomba ukaguzi wa uwezo.</string>
+    <string name="realtime_setup_test_help">Kukagua hutuma ombi kwa sehemu ya uwezo ya huduma pekee. Hakuanzishi kipindi cha sauti au kutuma sauti ya maikrofoni.</string>
+    <string name="realtime_setup_unsaved_changes">Hifadhi mabadiliko ya URL/tokeni kabla ya kukagua hali.</string>
+    <string name="realtime_setup_checking">Inakagua uwezo wa huduma…</string>
+    <string name="realtime_setup_test">Kagua huduma</string>
+    <string name="realtime_setup_voice_status">Sauti ya moja kwa moja ya Realtime</string>
+    <string name="realtime_setup_transcription_status">Unukuzi wa rekodi</string>
+    <string name="realtime_setup_voice_available">Huduma inaripoti kuwa sauti ya moja kwa moja inapatikana. Haya ni matokeo ya hali tu; hakuna simu iliyoanzishwa.</string>
+    <string name="realtime_setup_transcription_available">Huduma inaripoti kuwa unukuzi wa rekodi umesanidiwa. Haya ni matokeo ya hali tu; hakuna rekodi wala upakiaji wa sauti ulioanzishwa.</string>
+    <string name="realtime_setup_remove">Ondoa huduma ya sauti</string>
+    <string name="realtime_setup_remove_title">Uondoe huduma hii ya sauti?</string>
+    <string name="realtime_setup_remove_body">Hii huondoa tu URL na tokeni ya huduma tofauti ya sauti. Muunganisho na mipangilio ya maandishi ya ChatGPT hubaki bila kubadilika.</string>
+</resources>

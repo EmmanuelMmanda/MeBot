@@ -1,0 +1,11 @@
+<resources>
+    <string name="star_099_following_background">Following this topic. Background checks are on; Android may delay them.</string>
+    <string name="star_099_following_refresh">Following this topic. New coverage is checked during feed refresh.</string>
+    <string name="star_099_following_connect">Following this topic is saved on this device. Connect AI to check for new coverage.</string>
+    <string name="star_099_unfollowed">You are no longer following this topic.</string>
+    <string name="suggestions_load_more_099">More angles</string>
+    <string name="suggestions_loading_more_099">Preparing more angles…</string>
+    <string name="suggestions_more_error_099">Couldn’t prepare more angles. Your current options are still here.</string>
+    <string name="suggestions_more_retry_099">Try again</string>
+    <string name="suggestions_limit_099">You’ve reached the maximum saved angles for this topic.</string>
+</resources>

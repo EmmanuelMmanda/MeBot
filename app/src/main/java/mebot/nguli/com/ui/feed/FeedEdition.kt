@@ -34,6 +34,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import mebot.nguli.com.R
 import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.FeedUiState
@@ -43,9 +46,72 @@ import mebot.nguli.com.feed.SuggestionSheetStatus097
 import mebot.nguli.com.feed.SuggestionTargetSnapshot097
 import mebot.nguli.com.feed.SuggestionTargets097
 import mebot.nguli.com.ui.*
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+
+internal enum class OpportunityDeadlineStatus099 { UPCOMING, TODAY, PASSED }
+internal data class OpportunityDeadlinePresentation099(val date: LocalDate, val status: OpportunityDeadlineStatus099)
+
+/**
+ * Surface only date-only opportunity deadlines supported by the existing source pipeline. The
+ * field is not shown as independently verified: require an HTTPS source and a matching citation,
+ * and honor typed event evidence if present. A publication temporal can never stand in for a close
+ * date. Timed/unparseable dates are intentionally omitted because the model stores ISO dates only.
+ */
+internal fun opportunityDeadlinePresentation099(item: FeedItem, nowMillis: Long, fallbackTimezone: String): OpportunityDeadlinePresentation099? {
+    if (item.contentType != "opportunity" || item.deadline.isBlank() ||
+        !FeedLogic.safeUrl(item.sourceUrl, httpsOnly = true)) return null
+    val canonicalSource = FeedLogic.canonicalUrl(item.sourceUrl)
+    if (canonicalSource.isBlank() || item.citations.none {
+            FeedLogic.safeUrl(it.url, httpsOnly = true) && FeedLogic.canonicalUrl(it.url) == canonicalSource
+        }) return null
+    val date = runCatching { LocalDate.parse(item.deadline) }.getOrNull() ?: return null
+    val temporal = item.temporal
+    // Publication metadata and event-start metadata are independent of this close date. Only a
+    // typed deadline that contradicts the deadline field is a conflict; never reinterpret a
+    // publication timestamp as a closing instant.
+    val typedDeadline = temporal?.takeIf {
+        it.provenance == TemporalProvenance.EVENT_SOURCE && it.relevanceKind == TemporalRelevance.DEADLINE
+    }
+    if (typedDeadline != null && typedDeadline.relevanceDate != item.deadline) return null
+    val eventZone = typedDeadline?.let {
+        runCatching { ZoneId.of(it.sourceTimezone.orEmpty()) }.getOrNull() ?: return null
+    }
+    // A date-only deadline carries no source hour/zone unless typed event evidence supplies one.
+    // The configured feed timezone is only used to decide which calendar day the user sees.
+    val zone = eventZone ?: runCatching { ZoneId.of(fallbackTimezone) }.getOrElse { ZoneId.of("UTC") }
+    val today = runCatching { Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate() }.getOrNull() ?: return null
+    val status = when {
+        date.isBefore(today) -> OpportunityDeadlineStatus099.PASSED
+        date == today -> OpportunityDeadlineStatus099.TODAY
+        else -> OpportunityDeadlineStatus099.UPCOMING
+    }
+    return OpportunityDeadlinePresentation099(date, status)
+}
+
+internal fun opportunityDeadlineDateLabel099(date: LocalDate, language: String): String {
+    val months = if (language == "sw")
+        listOf("Januari", "Februari", "Machi", "Aprili", "Mei", "Juni", "Julai", "Agosti", "Septemba", "Oktoba", "Novemba", "Desemba")
+    else listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    return "${date.dayOfMonth} ${months[date.monthValue - 1]} ${date.year}"
+}
+
+@Composable
+private fun opportunityDeadlineLabel099(item: FeedItem, nowMillis: Long, timezone: String, language: String): String? {
+    val deadline = opportunityDeadlinePresentation099(item, nowMillis, timezone) ?: return null
+    val resource = when (deadline.status) {
+        OpportunityDeadlineStatus099.UPCOMING -> R.string.opportunity_deadline_closes_099
+        OpportunityDeadlineStatus099.TODAY -> R.string.opportunity_deadline_today_099
+        OpportunityDeadlineStatus099.PASSED -> R.string.opportunity_deadline_passed_099
+    }
+    return stringResource(resource, opportunityDeadlineDateLabel099(deadline.date, language))
+}
 
 /** The first edition stays finite; each card has a source action and a useful next step. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,6 +130,9 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
         SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.NEEDS_GENERATION, emptyList())
     },
     onGenerateSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
+    onLoadMoreSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
+    onPrepareActiveSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
+    onReleaseSuggestionPreparation: (SuggestionGenerationHandle097) -> Unit = {},
     onCancelSuggestionGeneration: (String) -> Unit = {},
     onEnsureDailySelection: () -> Unit = {},
 ) {
@@ -135,7 +204,8 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
         // While reading, retain current card order. New results are appended until the reader opts in.
         val presented=remember(stories,acceptedIds){FeedPaging.ordered(stories, acceptedIds)}
         val visible=remember(presented,visibleCount){presented.take(visibleCount)}
-        val suggestionItem = visible.firstOrNull() ?: weather
+        val suggestionItem = if (filter == "today") personalTodaySelection.firstOrNull() ?: visible.firstOrNull() ?: weather
+            else visible.firstOrNull() ?: weather
         val filteredModule = state.modules.find { it.id == filter }
         val suggestionTarget = remember(state, suggestionItem?.id, filter, appLanguage) {
             suggestionItem?.let { SuggestionTargets097.item(state, it.id, appLanguage) }
@@ -147,6 +217,33 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
         }
         val suggestionContext = suggestionItem?.title ?: filteredModule?.let { moduleName(it) }
             ?: stringResource(R.string.workspace_general)
+        val lifecycleOwner = LocalLifecycleOwner.current
+        val prepareActiveSuggestion by rememberUpdatedState(onPrepareActiveSuggestion)
+        val releasePreparedSuggestion by rememberUpdatedState(onReleaseSuggestionPreparation)
+        val readyForSuggestionPreparation by rememberUpdatedState(
+            ui.connected && !ui.connecting && !ui.chatGptVerifying && !ui.providerAuthBusy &&
+                !ui.refreshing && !ui.refreshProgress.running)
+        LaunchedEffect(lifecycleOwner, suggestionTarget, suggestionItem?.id, filter, appLanguage, ui.connected, ui.connecting,
+            ui.chatGptVerifying, ui.providerAuthBusy) {
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                var preparation: SuggestionGenerationHandle097? = null
+                try {
+                    val ready = snapshotFlow {
+                        suggestionItem != null && suggestionTarget?.kind == mebot.nguli.com.feed.SuggestionTargetKind097.ITEM &&
+                            readyForSuggestionPreparation
+                    }.first { it }
+                    // Warm only the stable, currently presented matter. Do not attach this to
+                    // card composition or list scrolling (including auto-page expansion).
+                    if (ready && suggestionTarget != null) {
+                        preparation = prepareActiveSuggestion?.invoke(suggestionTarget, appLanguage)
+                    }
+                    awaitCancellation()
+                } finally {
+                    preparation?.takeIf { it.preparationLeaseId != null }
+                        ?.let(releasePreparedSuggestion)
+                }
+            }
+        }
         var autoDiscoveryUsed by rememberSaveable { mutableStateOf(false) }
         val nearEnd by remember { derivedStateOf {
             val info = listState.layoutInfo
@@ -244,7 +341,7 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                         Text(message,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                if (state.items.isNotEmpty() && onContext != null && onDismissNotice != null && SetupGuidance.next(state, ui.connected, "feed", now) != null)
+                if (onContext != null && onDismissNotice != null)
                     item(key = "setup-notice", contentType = "notice") { SetupNotice(state, ui.connected, "feed", onConnect, onContext, onDismissNotice) }
                 if (ui.error != null) item(key = "status", contentType = "status") {
                     FeedStatus(ui.error, if (!ui.refreshing) refreshSelected else null, onDismissError, onConnect)
@@ -300,6 +397,7 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                                         onEditSuggestion = onEditSuggestion,
                                         onSuggestionSheet = onSuggestionSheet,
                                         onGenerateSuggestion = onGenerateSuggestion,
+                                        onLoadMoreSuggestion = onLoadMoreSuggestion,
                                         onCancelSuggestionGeneration = onCancelSuggestionGeneration,
                                     )
                                 }
@@ -341,6 +439,7 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                                     onEditSuggestion = onEditSuggestion,
                                     onSuggestionSheet = onSuggestionSheet,
                                     onGenerateSuggestion = onGenerateSuggestion,
+                                    onLoadMoreSuggestion = onLoadMoreSuggestion,
                                     onCancelSuggestionGeneration = onCancelSuggestionGeneration)
                                 if (entry.item.weather != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                                     SuggestionAction097(
@@ -351,6 +450,7 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                                         busy = ui.asking || ui.importWorking || ui.suggestionWorking,
                                         onReadSnapshot = onSuggestionSheet,
                                         onGenerate = onGenerateSuggestion,
+                                        onLoadMore = onLoadMoreSuggestion,
                                         onCancelGeneration = onCancelSuggestionGeneration,
                                         onConnect = onConnect,
                                         onUse = onUseSuggestion,
@@ -378,6 +478,7 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                                 onEditSuggestion = onEditSuggestion,
                                 onSuggestionSheet = onSuggestionSheet,
                                 onGenerateSuggestion = onGenerateSuggestion,
+                                onLoadMoreSuggestion = onLoadMoreSuggestion,
                                 onCancelSuggestionGeneration = onCancelSuggestionGeneration,
                             )
                         }
@@ -434,6 +535,7 @@ fun FeedHome(ui: FeedUiState, onItem: (String) -> Unit, onModules: () -> Unit, o
                             busy = ui.asking || ui.importWorking || ui.suggestionWorking,
                             onReadSnapshot = onSuggestionSheet,
                             onGenerate = onGenerateSuggestion,
+                            onLoadMore = onLoadMoreSuggestion,
                             onCancelGeneration = onCancelSuggestionGeneration,
                             onConnect = onConnect,
                             onUse = onUseSuggestion,
@@ -499,8 +601,14 @@ private fun LeadStory(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
     onEditSuggestion: (SuggestionTargetSnapshot097, String, String) -> Unit,
     onSuggestionSheet: (SuggestionTargetSnapshot097, String) -> SuggestionSheetSnapshot097,
     onGenerateSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097?,
+    onLoadMoreSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097?,
     onCancelSuggestionGeneration: (String) -> Unit,
 ) {
+    val now = LocalFeedClock.current
+    val deadline = opportunityDeadlinePresentation099(item, now, timezone)
+    val deadlineLabel = deadline?.let {
+        opportunityDeadlineLabel099(item, now, timezone, suggestionLanguage)
+    }
     val hasMedia = item.media != null
     val configuration = LocalConfiguration.current
     val compact = configuration.screenWidthDp < 360 || configuration.fontScale > 1.15f
@@ -523,9 +631,18 @@ private fun LeadStory(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
                                 Icon(if (item.contentType == "video") Icons.Outlined.PlayArrow else Icons.Outlined.Headphones, null, Modifier.padding(6.dp).size(18.dp), tint = Color(0xFF171922))
                             }
                         }
-                        Column(Modifier.align(Alignment.BottomStart).padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(editionAuthorLabel(item) + " · " + editionTimestampLabel(item, timezone),
-                                style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = .88f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Column(Modifier.align(Alignment.BottomStart).padding(20.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(
+                                editionAuthorLabel(item) + if (deadlineLabel == null) " · ${editionTimestampLabel(item, timezone)}" else "",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.White.copy(alpha = .88f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                            if (deadlineLabel != null) Text(
+                                deadlineLabel,
+                                modifier = Modifier.testTag("opportunity-deadline-${item.id}"),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.White.copy(alpha = .94f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                     Text(item.title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 17.dp),
@@ -550,6 +667,7 @@ private fun LeadStory(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
                     busy = suggestionsBusy,
                     onReadSnapshot = onSuggestionSheet,
                     onGenerate = onGenerateSuggestion,
+                    onLoadMore = onLoadMoreSuggestion,
                     onCancelGeneration = onCancelSuggestionGeneration,
                     onConnect = onConnect,
                     onUse = onUseSuggestion,
@@ -603,11 +721,19 @@ internal fun StoryRow(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
         SuggestionSheetSnapshot097(target, SuggestionSheetStatus097.NEEDS_GENERATION, emptyList())
     },
     onGenerateSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
+    onLoadMoreSuggestion: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
     onCancelSuggestionGeneration: (String) -> Unit = {},
     timezone: String = "",
     todayMetadata: TodayEntry? = null,
 ) {
     val originalReadTimezone = timezone.ifBlank { LocalRelevanceContext.current.state?.timezone.orEmpty() }
+    val now = LocalFeedClock.current
+    val deadline = opportunityDeadlinePresentation099(item, now, originalReadTimezone)
+    val localeLanguage = LocalConfiguration.current.locales.get(0).language
+    val deadlineLanguage = if (localeLanguage == "sw") "sw" else suggestionLanguage
+    val deadlineLabel = deadline?.let {
+        opportunityDeadlineLabel099(item, now, originalReadTimezone, deadlineLanguage)
+    }
     Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface, modifier = Modifier.testTag("story-card-${item.id}")) {
         Column {
             todayMetadata?.let { TodayReasonLabel090(it, originalReadTimezone) }
@@ -618,9 +744,10 @@ internal fun StoryRow(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
                             color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(item.title, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
                         if (timestampOverride != null && timestampOverride.isNotBlank()) Text(timestampOverride, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        else if (timestampOverride == null && item.deadline.isNotBlank()) Text(stringResource(R.string.feed_deadline, item.deadline), style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary)
-                        else if (timestampOverride == null) Text(editionTimestampLabel(item, originalReadTimezone), Modifier.testTag("story-created-${item.id}"),
+                        else if (deadlineLabel != null) Text(deadlineLabel, Modifier.testTag("opportunity-deadline-${item.id}"), style = MaterialTheme.typography.labelMedium,
+                            color = if (deadline?.status == OpportunityDeadlineStatus099.PASSED)
+                                MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
+                        else if (timestampOverride == null && item.deadline.isBlank()) Text(editionTimestampLabel(item, originalReadTimezone), Modifier.testTag("story-created-${item.id}"),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Box(Modifier.size(82.dp).clip(RoundedCornerShape(16.dp))) { PublisherImage(item, Modifier.fillMaxSize()) }
@@ -637,6 +764,7 @@ internal fun StoryRow(item: FeedItem, saved: Boolean, onItem: (String) -> Unit, 
                     busy = suggestionsBusy,
                     onReadSnapshot = onSuggestionSheet,
                     onGenerate = onGenerateSuggestion,
+                    onLoadMore = onLoadMoreSuggestion,
                     onCancelGeneration = onCancelSuggestionGeneration,
                     onConnect = onConnect,
                     onUse = onUseSuggestion,
@@ -674,7 +802,7 @@ private fun StoryActions(item: FeedItem, saved: Boolean, onSave: (String) -> Uni
                     leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) }, modifier = Modifier.testTag("source-${item.id}"))
             }
             ctx.onStar?.let { toggle -> DropdownMenuItem(text = { Text(stringResource(if (star) R.string.star_following else R.string.star_follow)) },
-                onClick = { menu = false; toggle(item.id) }, leadingIcon = { Icon(Icons.Outlined.StarOutline, null) }) }
+                onClick = { menu = false; toggle(item.id, !star) }, leadingIcon = { Icon(Icons.Outlined.StarOutline, null) }) }
             ctx.onVote?.let { rate ->
                 DropdownMenuItem(text = { Text(stringResource(if (vote == false) R.string.feedback_undo_083 else R.string.feedback_less_083)) },
                     onClick = { menu = false; rate(item.id, if (vote == false) null else false) }, leadingIcon = { Icon(Icons.Outlined.NotInterested, null) })

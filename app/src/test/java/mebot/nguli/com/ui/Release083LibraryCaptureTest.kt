@@ -45,7 +45,7 @@ class Release083LibraryCaptureTest {
  private val base=FeedUiState(state=state,loading=false,connected=true)
  @Composable private fun Frame(page:String,body:@Composable ()->Unit) {
    MeBotTheme { CompositionLocalProvider(LocalPublisherImageLoader provides {null},LocalFeedClock provides now,
-       LocalRelevanceContext provides RelevanceUiContext(state,onVote={_,_->},onStar={},onConfigureStar={_,_,_->},onCollection={_,_->})) {
+       LocalRelevanceContext provides RelevanceUiContext(state,onVote={_,_->},onStar={_,_->},onConfigureStar={_,_,_->},onCollection={_,_->})) {
        Scaffold(bottomBar={MeBotNavigation(page,{})}) { padding -> Box(Modifier.fillMaxSize().padding(padding)){body()} }
    } }
  }

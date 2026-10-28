@@ -65,10 +65,10 @@ class Release082UiTest {
         compose.onNodeWithTag("detail-summary-intro").performScrollTo().assertIsDisplayed()
         compose.runOnIdle{ui.value=ui.value.copy(detailText="The first streamed sentence.")}
         compose.onNodeWithTag("detail-summary-intro").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithTag("detail-brief-draft").performScrollTo().assertTextContains("The first streamed sentence.")
+        compose.onNodeWithTag("detail-brief-draft").performScrollTo().assert(hasAnyDescendant(hasText("The first streamed sentence.", substring = false)))
         compose.runOnIdle{ui.value=ui.value.copy(detailLoading=false,detailText="",detailTurns=listOf(AiTurn("answer","assistant","The completed explanation.")))}
         compose.onNodeWithTag("detail-summary-intro").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithTag("detail-brief-answer").performScrollTo().assertTextContains("The completed explanation.")
+        compose.onNodeWithTag("detail-brief-answer").performScrollTo().assert(hasAnyDescendant(hasText("The completed explanation.", substring = false)))
         compose.onNodeWithTag("detail-story-notes").performScrollTo().assertTextContains("Show more")
     }
     @Test fun allowancePresetsUnlimitedAndCustomKeepConsumedUsage() {
@@ -92,7 +92,7 @@ class Release082UiTest {
         val item=FeedItem("a","music","Piano practice","Useful practice.",sourceUrl="https://example.com/a",sourceName="Source",kind="music")
         val state=mutableStateOf(FeedState(items=listOf(item)))
         compose.setContent { MeBotTheme { CompositionLocalProvider(LocalRelevanceContext provides RelevanceUiContext(
-            state = state.value, onStar = { id -> state.value = StarredStories.toggle(state.value,id,100) })) {
+            state = state.value, onStar = { id, _ -> state.value = StarredStories.toggle(state.value,id,100) })) {
             RelevanceControls(item)
         } } }
         compose.onNodeWithTag("star-a").performClick().assertIsSelected()

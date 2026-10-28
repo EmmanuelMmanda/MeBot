@@ -257,6 +257,7 @@ fun feedMessageResource(code: String?): Int = when (code) {
     "invalid_response" -> R.string.feed_error_invalid_response
     "storage_error" -> R.string.feed_error_storage
     "invalid_input" -> R.string.feed_error_invalid_input
+    "module_identity_conflict" -> R.string.personal_interests_module_conflict_099
     "suggestion_changed" -> R.string.suggestion097_changed
     "ai_interrupted" -> R.string.polish_ai_interrupted
     "ai_incomplete" -> R.string.polish_ai_incomplete

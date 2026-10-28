@@ -17,7 +17,7 @@ import mebot.nguli.com.core.PersonalProfile085
 
 @Composable
 internal fun PersonalProfileEditor085(text: String, enabled: Boolean, onChange: (String) -> Unit,
-    tag: String = "context-edit", onboarding: Boolean = false) {
+    tag: String = "context-edit", onboarding: Boolean = false, autosave: Boolean = false) {
     var showExample by rememberSaveable { mutableStateOf(false) }
     var replace by rememberSaveable { mutableStateOf(false) }
     val example = stringResource(R.string.profile_example_085)
@@ -44,7 +44,10 @@ internal fun PersonalProfileEditor085(text: String, enabled: Boolean, onChange: 
         }, enabled = enabled, modifier = Modifier.testTag("$tag-insert-example")) { Text(stringResource(R.string.profile_insert_example_085)) } },
         dismissButton = { TextButton(onClick = { showExample = false }, modifier = Modifier.testTag("$tag-dismiss-example")) { Text(stringResource(R.string.profile_cancel_085)) } })
     if (replace) AlertDialog(onDismissRequest = { replace = false },
-        title = { Text(stringResource(R.string.profile_replace_title_085)) }, text = { Text(stringResource(R.string.profile_replace_body_085), modifier = Modifier.heightIn(max = 200.dp).verticalScroll(rememberScrollState())) },
+        title = { Text(stringResource(R.string.profile_replace_title_085)) }, text = {
+            Text(stringResource(if (autosave) R.string.profile_replace_body_099_autosave else R.string.profile_replace_body_085),
+                modifier = Modifier.heightIn(max = 200.dp).verticalScroll(rememberScrollState()))
+        },
         confirmButton = { mebot.nguli.com.security.ProtectedWindowRegistration(); TextButton(onClick = { replace = false; onChange(example) }, enabled = enabled,
             modifier = Modifier.testTag("$tag-confirm-example")) { Text(stringResource(R.string.profile_replace_085)) } },
         dismissButton = { TextButton(onClick = { replace = false }, modifier = Modifier.testTag("$tag-cancel-example")) { Text(stringResource(R.string.profile_cancel_085)) } })

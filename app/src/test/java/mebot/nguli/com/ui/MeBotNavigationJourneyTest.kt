@@ -44,8 +44,8 @@ class MeBotNavigationJourneyTest {
         runBlocking { application.repository.erase(); application.feedRepository.erase() }
         application.alarms.clearAll()
         ShadowAlarmManager.setCanScheduleExactAlarms(false)
-        waitForTag("onboarding-screen")
-        compose.onNodeWithTag("onboarding-start").performScrollTo().performClick()
+        waitForTag("setup-099-onboarding")
+        compose.onNodeWithTag("setup099-continue-public").performScrollTo().performClick()
         // The initial system shortcut waits for onboarding, then opens Alarms.
         waitForText(R.string.mebot_empty_alarm)
         compose.onNodeWithContentDescription(text(R.string.back)).performClick()

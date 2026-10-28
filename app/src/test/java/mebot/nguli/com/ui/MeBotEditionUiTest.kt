@@ -467,7 +467,7 @@ class MeBotEditionUiTest {
                 CompositionLocalProvider(
                     LocalDensity provides Density(LocalDensity.current.density, fontScale),
                     LocalPublisherImageLoader provides imageLoader,
-                    LocalRelevanceContext provides RelevanceUiContext(state = ui.value.state, onStar = {}),
+                    LocalRelevanceContext provides RelevanceUiContext(state = ui.value.state, onStar = { _, _ -> }),
                 ) {
                     Scaffold(containerColor = MaterialTheme.colorScheme.background,
                         topBar = { Text(if (settings.language == "sw") "Toleo la mfano" else "Preview edition", style = MaterialTheme.typography.labelSmall,

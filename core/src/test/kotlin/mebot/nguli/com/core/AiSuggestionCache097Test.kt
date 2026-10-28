@@ -40,6 +40,36 @@ class AiSuggestionCache097Test {
             record.generatedAtMillis + AiSuggestionCache097.CACHE_TTL_MILLIS + 1))
     }
 
+    @Test fun retainedLegacyDuplicatesDoNotPoisonNoveltyChecksForNewBatches() {
+        val repeatedOld = "Which evidence about an older launch announcement appears in this source?"
+        assertTrue(AiSuggestionCache097.areValidQuestions(questions,
+            existingQuestions = listOf(repeatedOld, repeatedOld)))
+        assertFalse("new angles still cannot repeat an existing angle",
+            AiSuggestionCache097.areValidQuestions(questions,
+                existingQuestions = listOf(questions.first(), questions.first())))
+        assertFalse("near-duplicate new angles are still rejected",
+            AiSuggestionCache097.areValidQuestions(questions.mapIndexed { index, value ->
+                if (index == 4) "What evidence supports the main claim about the public launch?" else value
+            }))
+    }
+
+    @Test fun suggestionCacheKeepsMultipleBatchesPerTargetUnderGlobalAndPerTargetBounds() {
+        val targets = (0..1).flatMap { target -> (0 until 110).map { batch ->
+            record.copy(targetKind = "module", targetId = "module-$target",
+                generatedAtMillis = record.generatedAtMillis + target * 1_000L + batch)
+        } }
+
+        val clean = AiSuggestionCache097.bounded(targets)
+
+        assertEquals(AiSuggestionCache097.MAX_CACHED_BATCHES, clean.size)
+        assertTrue(clean.groupBy { AiSuggestionCache097.key(it.targetKind, it.targetId) }
+            .values.all { it.size <= AiSuggestionCache097.MAX_BATCHES_PER_TARGET })
+        assertEquals("the latest batch per target remains available", 109L, clean
+            .filter { it.targetId == "module-0" }.maxOf { it.generatedAtMillis - record.generatedAtMillis })
+        assertEquals("all records are ordered oldest to newest within their preserved stream",
+            clean.map { it.generatedAtMillis }, clean.map { it.generatedAtMillis }.sorted())
+    }
+
     @Test fun invalidDerivedSuggestionCacheIsDroppedWithoutLosingFeedNotesOrHistory() {
         val item = FeedItem("source", "news", "Public source", "Safe excerpt", sourceUrl = "https://example.com/source")
         val conversation = AiConversation(id = "chat", title = "Local chat",

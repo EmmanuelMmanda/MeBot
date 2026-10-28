@@ -6,6 +6,9 @@ import android.os.Looper
 import android.view.PixelCopy
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import mebot.nguli.com.MainActivity
 import mebot.nguli.com.R
 import mebot.nguli.com.core.*
@@ -53,6 +56,7 @@ class MeBotToday090JourneyTest {
         compose.onNodeWithTag("filter-today").performScrollTo().performClick()
         compose.onNodeWithTag("feed-screen").performScrollToNode(hasTestTag("star-${item.id}"))
         compose.onNodeWithTag("star-${item.id}").assertIsDisplayed()
+        compose.onNodeWithTag("star-${item.id}").assertContentDescriptionEquals(compose.activity.getString(R.string.star_add_label))
         compose.onNodeWithTag("save-${item.id}").assertIsDisplayed()
         val star=compose.onNodeWithTag("star-${item.id}").getUnclippedBoundsInRoot()
         val bookmark=compose.onNodeWithTag("save-${item.id}").getUnclippedBoundsInRoot()
@@ -60,6 +64,12 @@ class MeBotToday090JourneyTest {
         assertEquals(star.top,bookmark.top)
         compose.onNodeWithTag("star-${item.id}").performClick()
         waitForState { it.starredStories.any { star->star.itemId==item.id } }
+        val starFeedback = compose.activity.getString(R.string.star_099_following_connect)
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText(starFeedback).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText(starFeedback).assertIsDisplayed()
+        assertTrue("Durable follow feedback is within a polite live region", hasPoliteAnnouncement(starFeedback))
         compose.onNodeWithTag("save-${item.id}").performClick()
         waitForState { item.id in it.savedIds }
         capture("today-full-shell-en")
@@ -91,6 +101,39 @@ class MeBotToday090JourneyTest {
         compose.onNodeWithText(item.title).assertExists()
         assertEquals(1,state().items.size)
         assertEquals(0,state().requestsToday)
+    }
+
+    @Test
+    @Config(qualifiers="sw-rTZ-w411dp-h891dp-xhdpi")
+    fun swahiliStarFollowFeedbackNamesTheTopicAndUsesAPoliteLiveRegion() {
+        val now = System.currentTimeMillis()
+        val item = FeedItem(id="star-topic-sw", moduleId="news", kind="news", title="Mfano wa mada ya leo",
+            summary="Makala ya mfano kwa jaribio la ufuatiliaji.", sourceName="Mchapishaji wa mfano",
+            sourceUrl="https://example.com/star-topic-sw", publishedAtMillis=now, fetchedAtMillis=now)
+        runBlocking {
+            app.feedEngine.disconnect()
+            app.repository.update { AppState(profile=Profile(onboardingComplete=true), settings=Settings(language="sw")) }
+            app.feedRepository.update { FeedState(onboardingComplete=true, interestsConfigured=true, quickGuideSeen=true,
+                timezone="UTC", modules=listOf(FeedModule(id="news", kind="news")), items=listOf(item), lastRefreshMillis=now) }
+        }
+        waitForTag("feed-screen")
+        compose.onNodeWithTag("star-${item.id}").performScrollTo().performClick()
+        waitForState { it.starredStories.any { star -> star.itemId == item.id } }
+        val feedback = compose.activity.getString(R.string.star_099_following_connect)
+        assertTrue("Swahili follow feedback is about a topic", feedback.contains("mada"))
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(feedback).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(feedback).assertIsDisplayed()
+        assertTrue("Swahili durable follow feedback is within a polite live region", hasPoliteAnnouncement(feedback))
+    }
+
+    private fun hasPoliteAnnouncement(message: String): Boolean {
+        val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode()
+        fun contains(node: androidx.compose.ui.semantics.SemanticsNode, politeAncestor: Boolean): Boolean {
+            val polite = politeAncestor || node.config.getOrNull(SemanticsProperties.LiveRegion) == LiveRegionMode.Polite
+            val text = node.config.getOrNull(SemanticsProperties.Text).orEmpty().joinToString(" ") { it.text }
+            return (polite && message in text) || node.children.any { child -> contains(child, polite) }
+        }
+        return contains(root, false)
     }
 
     @Test fun actualTodayShellSeparatesPersonalSelectionFromVerifiedTodayInEnAndSw() {

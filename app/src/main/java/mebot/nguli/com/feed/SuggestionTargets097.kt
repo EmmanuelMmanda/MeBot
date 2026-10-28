@@ -37,9 +37,11 @@ enum class SuggestionSheetStatus097 {
     NEEDS_GENERATION,
     INCOMPLETE,
     GENERATING,
+    GENERATING_MORE,
     UNAVAILABLE,
     ERROR,
     STALE_TARGET,
+    LIMIT_REACHED,
 }
 
 /** Immutable render-time result. Empty options are intentional unless status is READY. */
@@ -50,6 +52,9 @@ data class SuggestionSheetSnapshot097(
     val requestId: String? = null,
     val failureCode: String? = null,
     val validUntilMillis: Long? = null,
+    val canLoadMore: Boolean = false,
+    val loadingMore: Boolean = false,
+    val loadMoreFailureCode: String? = null,
 )
 
 data class SuggestionGenerationState097(
@@ -57,6 +62,8 @@ data class SuggestionGenerationState097(
     val target: SuggestionTargetSnapshot097,
     val status: SuggestionSheetStatus097,
     val failureCode: String? = null,
+    val appending: Boolean = false,
+    val prefetch: Boolean = false,
 )
 
 /** Target fingerprints do not expose confirmed context, message text, credentials, or server settings. */

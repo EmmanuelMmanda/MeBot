@@ -12,7 +12,7 @@ This application uses third-party open-source components, including:
 - JSpecify annotations — JSpecify contributors, Apache License 2.0.
 - Figtree — Erik Kennedy and contributors, SIL Open Font License 1.1.
 
-The original Figtree license is included in docs/FONT-LICENSE.txt and in the app's assets.
+The original Figtree license is included in docs/FONT-LICENSE.txt and in the app's assets. The website copy at docs/assets/figtree.ttf is identical to the app font.
 The application icon is an original vector. The bundled alarm tones are original
 synthesized waveforms; the additional Pulse, Chime and Bell sounds and their
 reproducible generator are licensed under Apache License 2.0. See docs/ALARM-AUDIO.md.

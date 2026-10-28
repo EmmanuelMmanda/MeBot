@@ -49,6 +49,7 @@ internal fun SuggestionAction097(
     busy: Boolean,
     onReadSnapshot: (SuggestionTargetSnapshot097, String) -> SuggestionSheetSnapshot097,
     onGenerate: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097?,
+    onLoadMore: (SuggestionTargetSnapshot097, String) -> SuggestionGenerationHandle097? = { _, _ -> null },
     onCancelGeneration: (String) -> Unit,
     onConnect: () -> Unit,
     onUse: (SuggestionTargetSnapshot097, String, String) -> Unit,
@@ -62,14 +63,65 @@ internal fun SuggestionAction097(
     val openLabel = stringResource(R.string.suggestions_open)
 
     // Keep the entry point available for a valid destination even when there are no AI
-    // suggestions yet. Opening only reads a snapshot; it never starts model work.
+    // suggestions yet. Only an explicit tap on this icon may start the one-shot request;
+    // composition, scrolling and snapshot reads stay side-effect free.
+    fun requestGeneration(current: OpenedSuggestion097): OpenedSuggestion097 {
+        if (current.generationRequestId != null || busy) return current
+        val handle = onGenerate(current.snapshot.target, current.language)
+        return if (handle == null) {
+            current.copy(snapshot = onReadSnapshot(current.snapshot.target, current.language))
+        } else {
+            current.copy(
+                snapshot = current.snapshot.copy(
+                    status = SuggestionSheetStatus097.GENERATING,
+                    options = emptyList(),
+                    requestId = handle.requestId,
+                ),
+                generationRequestId = handle.requestId,
+                generationJob = handle.job,
+                cancelGenerationOnDismiss = handle.cancelOnDismiss,
+            )
+        }
+    }
+
+    fun attachExistingGeneration(current: OpenedSuggestion097): OpenedSuggestion097 {
+        val handle = onGenerate(current.snapshot.target, current.language)
+            ?: return current.copy(snapshot = onReadSnapshot(current.snapshot.target, current.language))
+        return current.copy(
+            snapshot = current.snapshot.copy(requestId = handle.requestId),
+            generationRequestId = handle.requestId,
+            generationJob = handle.job,
+            cancelGenerationOnDismiss = handle.cancelOnDismiss,
+        )
+    }
+
+    fun requestMore(current: OpenedSuggestion097): OpenedSuggestion097 {
+        if (current.generationRequestId != null || busy || !connected || !current.snapshot.canLoadMore) return current
+        val handle = onLoadMore(current.snapshot.target, current.language)
+        return if (handle == null) current.copy(snapshot = onReadSnapshot(current.snapshot.target, current.language))
+        else current.copy(
+            snapshot = current.snapshot.copy(loadingMore = true, loadMoreFailureCode = null, requestId = handle.requestId),
+            generationRequestId = handle.requestId,
+            generationJob = handle.job,
+            cancelGenerationOnDismiss = handle.cancelOnDismiss,
+        )
+    }
+
     if (target != null) {
         IconButton(
             onClick = {
                 keyboard?.hide()
                 actionHandled = false
                 val snapshot = onReadSnapshot(target, language)
-                opened = OpenedSuggestion097(snapshot, contextLabel, language)
+                val next = OpenedSuggestion097(snapshot, contextLabel, language)
+                // A cache miss is handled at the moment the person asks for suggestions,
+                // not while rendering a card or inferring intent from a scroll. The VM
+                // still owns target validation, request budgets, deduplication and cancel.
+                opened = when (snapshot.status) {
+                    SuggestionSheetStatus097.NEEDS_GENERATION -> requestGeneration(next)
+                    SuggestionSheetStatus097.GENERATING -> attachExistingGeneration(next)
+                    else -> next
+                }
             },
             modifier = modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("$testTag-open"),
         ) {
@@ -79,12 +131,12 @@ internal fun SuggestionAction097(
 
     val session = opened
     if (session != null) {
-        val latestGenerationRequestId = rememberUpdatedState(session.generationRequestId)
+        val latestGeneration = rememberUpdatedState(session.generationRequestId to session.cancelGenerationOnDismiss)
         // A lock curtain, navigation, or parent teardown can dispose this sheet without an
         // onDismissRequest. Fence that in-flight request as well as explicit dismissals.
         DisposableEffect(session.snapshot.target) {
             onDispose {
-                latestGenerationRequestId.value?.let(onCancelGeneration)
+                latestGeneration.value.let { (requestId, shouldCancel) -> if (shouldCancel) requestId?.let(onCancelGeneration) }
             }
         }
         val renderedTargetChanged = target != session.snapshot.target
@@ -96,7 +148,7 @@ internal fun SuggestionAction097(
         LaunchedEffect(target, session.snapshot.target, session.generationRequestId) {
             val current = opened ?: return@LaunchedEffect
             if (target != current.snapshot.target) {
-                current.generationRequestId?.let(onCancelGeneration)
+                if (current.cancelGenerationOnDismiss) current.generationRequestId?.let(onCancelGeneration)
                 if (current.snapshot.status != SuggestionSheetStatus097.STALE_TARGET || current.generationRequestId != null) {
                     opened = current.copy(
                         snapshot = current.snapshot.copy(
@@ -106,6 +158,7 @@ internal fun SuggestionAction097(
                         ),
                         generationRequestId = null,
                         generationJob = null,
+                        cancelGenerationOnDismiss = false,
                     )
                 }
             } else if (current.generationRequestId != null && current.generationJob != null) {
@@ -140,28 +193,18 @@ internal fun SuggestionAction097(
 
         fun startGeneration() {
             val current = opened ?: return
-            if (current.generationRequestId != null || busy) return
-            val handle = onGenerate(current.snapshot.target, current.language)
-            if (handle == null) {
-                opened = current.copy(snapshot = onReadSnapshot(current.snapshot.target, current.language))
-            } else {
-                opened = current.copy(
-                    snapshot = current.snapshot.copy(
-                        status = SuggestionSheetStatus097.GENERATING,
-                        options = emptyList(),
-                        requestId = handle.requestId,
-                    ),
-                    generationRequestId = handle.requestId,
-                    generationJob = handle.job,
-                )
-            }
+            opened = requestGeneration(current)
+        }
+        fun startMore() {
+            val current = opened ?: return
+            opened = requestMore(current)
         }
 
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         fun dismiss() {
             // Fence a pending one-shot before dismissing state; disposal remains a
             // fallback for lock/navigation teardown, not the only cancellation edge.
-            opened?.generationRequestId?.let(onCancelGeneration)
+            opened?.let { if (it.cancelGenerationOnDismiss) it.generationRequestId?.let(onCancelGeneration) }
             opened = null
         }
 
@@ -300,6 +343,8 @@ internal fun SuggestionAction097(
                             )
                         }
                     }
+                    status == SuggestionSheetStatus097.LIMIT_REACHED -> SuggestionStatusMessage097(
+                        tag = "$testTag-limit-note", text = stringResource(R.string.suggestions_limit_099), error = true)
                     status == SuggestionSheetStatus097.READY && !hasFiveDistinctQuestions(session.snapshot) -> {
                         SuggestionGenerationPrompt097(
                             testTag = testTag,
@@ -387,6 +432,27 @@ internal fun SuggestionAction097(
                                 }
                             }
                         }
+                        if (session.snapshot.loadingMore) SuggestionGenerationProgress097("$testTag-loading-more") {
+                            Text(stringResource(R.string.suggestions_loading_more_099),
+                                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                        }
+                        session.snapshot.loadMoreFailureCode?.let { code ->
+                            if (code == "suggestion_limit" || !session.snapshot.canLoadMore) {
+                                SuggestionStatusMessage097("$testTag-limit-note", stringResource(R.string.suggestions_limit_099))
+                            } else {
+                                SuggestionStatusMessage097("$testTag-more-error", stringResource(R.string.suggestions_more_error_099), error = true)
+                            }
+                        }
+                        if (session.snapshot.canLoadMore) {
+                            TextButton(
+                                onClick = { startMore() },
+                                enabled = connected && !busy && !actionHandled && !session.snapshot.loadingMore,
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$testTag-load-more"),
+                            ) {
+                                Text(stringResource(if (session.snapshot.loadMoreFailureCode == null)
+                                    R.string.suggestions_load_more_099 else R.string.suggestions_more_retry_099))
+                            }
+                        } else SuggestionStatusMessage097("$testTag-limit-note", stringResource(R.string.suggestions_limit_099))
                     }
                 }
             }
@@ -395,7 +461,11 @@ internal fun SuggestionAction097(
 }
 
 @Composable
-private fun SuggestionGenerationProgress097(testTag: String) {
+private fun SuggestionGenerationProgress097(testTag: String, content: @Composable () -> Unit = {
+    Text(stringResource(R.string.suggestions_generating),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSecondaryContainer)
+}) {
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.secondaryContainer,
@@ -405,11 +475,7 @@ private fun SuggestionGenerationProgress097(testTag: String) {
             Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(9.dp),
         ) {
-            Text(
-                stringResource(R.string.suggestions_generating),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
+            content()
             LinearProgressIndicator(Modifier.fillMaxWidth())
         }
     }
@@ -516,4 +582,5 @@ private data class OpenedSuggestion097(
     val language: String,
     val generationRequestId: String? = null,
     val generationJob: kotlinx.coroutines.Job? = null,
+    val cancelGenerationOnDismiss: Boolean = false,
 )

@@ -128,24 +128,28 @@
 
   const releaseNodes = document.querySelectorAll('[data-release-status]');
   const archiveNodes = document.querySelectorAll('[data-release-entry]');
-  if (releaseNodes.length || archiveNodes.length) {
+  if (releaseNodes.length || archiveNodes.length || document.querySelector('[data-release-apk]')) {
     const source = document.body.dataset.releaseManifest || 'assets/release.json';
     fetch(source, {cache: 'no-cache'}).then(response => {
       if (!response.ok) throw new Error('Unavailable release metadata');
       return response.json();
-    }).then(release => {
+    }).then(catalog => {
       const repository = 'https://github.com/EmmanuelMmanda/MeBot';
       const valid = item => item && /^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?$/.test(item.version) && item.tag === `v${item.version}`;
-      const validApk = item => [`mebot-${item.version}.apk`, `MeBot-${item.version}.apk`].includes(item.filename)
+      const validApk = item => item.filename === `mebot-${item.version}.apk`
         && /^[a-f0-9]{64}$/i.test(item.sha256 || '')
         && Number.isSafeInteger(item.sizeBytes) && item.sizeBytes > 0;
       const validSource = item => [`mebot-${item.version}-source.zip`, `MeBot-${item.version}-source.zip`].includes(item.sourceFilename)
         && ((/^[a-f0-9]{64}$/i.test(item.sourceSha256 || '') && Number.isSafeInteger(item.sourceSizeBytes) && item.sourceSizeBytes > 0) || item.sourceIntegrityFile === 'SHA256SUMS.txt')
         && /^[a-f0-9]{40}$/i.test(item.sourceCommit || '');
       const unavailable = () => document.querySelectorAll('[data-release-load-error]').forEach(item => { item.hidden = false; });
-      if (!valid(release)) throw new Error('Invalid release version');
-      if (Array.isArray(release.releases)) archiveNodes.forEach(node => {
-        const entry = release.releases.find(item => item && item.version === node.dataset.releaseEntry);
+      const releases = Array.isArray(catalog.releases) ? catalog.releases : [];
+      const release = valid(catalog) && catalog.status === 'published' && catalog.apk === true
+        ? catalog
+        : [...releases].reverse().find(item => valid(item) && item.status === 'published' && item.apk === true);
+      if (!release || !valid(release)) throw new Error('No published Android release is available');
+      if (archiveNodes.length) archiveNodes.forEach(node => {
+        const entry = releases.find(item => item && item.version === node.dataset.releaseEntry);
         if (!valid(entry) || entry.status !== 'published') return;
         if (!validSource(entry) || (entry.apk !== false && (entry.apk !== true || !validApk(entry)))) {
           unavailable(); return;
@@ -164,18 +168,17 @@
           if (checksum) { checksum.textContent = entry.sha256; checksum.parentElement.hidden = false; }
         }
       });
-      if (release.status !== 'published') return;
+      if (release.status !== 'published') throw new Error('Latest published release is not verified');
       if (!validApk(release) || !validSource(release)) throw new Error('Incomplete public release metadata');
       const file = release.filename;
-      const apk = `${repository}/releases/download/v${release.version}/${file}`;
+      const apk = `${repository}/releases/latest/download/${file}`;
       document.querySelectorAll('[data-release-apk]').forEach(link => { link.href = apk; link.hidden = false; });
       document.querySelectorAll('[data-release-pending]').forEach(item => { item.hidden = true; });
       document.querySelectorAll('[data-release-source]').forEach(link => {
         link.href = `${repository}/releases/download/v${release.version}/${release.sourceFilename}`; link.hidden = false;
       });
-      releaseNodes.forEach(item => { item.textContent = `Version ${release.version} · ${release.channel === 'beta' ? 'Testing release' : 'Official release'}`; });
+      releaseNodes.forEach(item => { item.textContent = 'Latest public Android release'; });
       document.querySelectorAll('[data-release-filename]').forEach(item => { item.textContent = file; });
-      document.querySelectorAll('[data-release-version]').forEach(item => { item.textContent = release.version; });
       if (/^[a-f0-9]{64}$/i.test(release.sha256 || '')) {
         document.querySelectorAll('[data-release-sha]').forEach(item => { item.textContent = release.sha256; });
         document.querySelectorAll('[data-release-integrity]').forEach(item => { item.hidden = false; });

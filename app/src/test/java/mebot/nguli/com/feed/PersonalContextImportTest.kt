@@ -285,7 +285,11 @@ class PersonalContextImportTest {
         viewModel.exportFeedBackup(Uri.fromFile(backupFile)).join()
         assertEquals("saved", viewModel.ui.value.notice)
         val backup = FeedJson.decodeFromString<FeedState>(backupFile.readText())
-        assertEquals(before.copy(connection = before.connection.copy(accountId = ""), aiPauseCode = ""), backup)
+        assertEquals(before.copy(
+            connection = before.connection.copy(accountId = ""),
+            aiPauseCode = "",
+            setup099 = Setup099State(stage = Setup099Stage.COMPLETE),
+        ), backup)
         assertFalse(backupFile.readText().contains("existing-synthetic-api-credential"))
         assertEquals(before, app.feedRepository.current())
     }

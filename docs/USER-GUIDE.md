@@ -1,17 +1,17 @@
-> **MeBot 0.9.8 is the current official release.** It includes five AI-generated story questions and Original Read. Existing users can check **You → Software Updates** for a compatible update. See [release status](INSTALL.md) and [verification limits](PUBLIC-RELEASES.md).
+> The latest public MeBot release includes five story-specific AI questions and Original Read. Existing users can check **You → Software Updates** for a compatible update. See [release status](INSTALL.md) and [verification limits](PUBLIC-RELEASES.md).
 
-# MeBot user guide — 0.9.8
+# MeBot user guide
 
 [Start here](../START-HERE.md) · [Workflow guides](guide.html) · [Published releases](PUBLIC-RELEASES.md)
 
 ## Install and start
-Install the official `mebot.nguli.com` package. The current official APK is 0.9.8. Compatible production updates do not require uninstalling; earlier signer/package installations have different migration requirements. See [installation guidance](INSTALL.md). Choose English or Kiswahili, interests and an optional city. Skip the introduction or replay the quick guide from Help. Alarm, Focus and Daily Check-in are optional.
+With ChatGPT, first-run setup guides you through three stages: connect for AI guidance, optionally add context you choose, then start the feed. If you prefer not to connect, continue directly with public sources. Other AI connections remain available later from **You → AI connection**. MeBot never imports ChatGPT history automatically. Install the official `mebot.nguli.com` package. The latest public APK is linked from the [installation guide](INSTALL.md). Compatible production updates do not require uninstalling; earlier signer/package installations have different migration requirements. See [installation guidance](INSTALL.md). Choose English or Kiswahili, interests and an optional city. Skip the introduction or replay the quick guide from Help. Alarm, Focus and Daily Check-in are optional.
 
 ## Feed and discovery
 Public sources are usable without AI. Each module owns its preferences, fallback sources and permitted context. Connected AI prepares richer information only when that provider supports it. Sources remain visible. Refresh the selected module by pulling down. Completed modules appear while others work; failures preserve completed and cached content. While reading, use Show new items to accept newly prepared content without losing your position. Source-verified forecasts and events leave active reading after their useful dates; unknown dates remain unknown. Saved and starred records are not deleted, and evergreen material ages more slowly.
 
 ## Item details and MeBot
-Stories open in MeBot with the publisher and story context retained. In MeBot 0.9.8, opening the question sheet does not call AI or send a question. Explicit generation uses your selected AI connection to produce five distinct questions about that item. **Send** asks the selected question directly; **Edit** prepares an editable story-scoped draft. New suggestions require AI and connectivity; there is no offline question-generator fallback. Your original source remains available. See the [story guide](guides/feed-and-ai.html).
+Stories open in MeBot with the publisher and story context retained. Tap a story’s question icon to open its AI angles; if no cached set is available and an AI connection is ready, this requests questions from your selected AI but does not send one. When available, the first set contains five distinct questions about that item. In the sheet, **More angles** asks the selected AI for one additional batch and appends those questions when the provider and batch limit allow. **Send** asks the selected question directly; **Edit** prepares an editable story-scoped draft. New suggestions require AI and connectivity; there is no offline question-generator fallback. Your original source remains available. See the [story guide](guides/feed-and-ai.html).
 
 **Original Read** is AI-authored and labelled with its **Created** time, not a publisher date. Supporting evidence is separate from optional further reading. Verify claims and eligibility at the linked source. **Today** distinguishes your personal selection from items with verified publication, forecast or event dates. A recent check does not change a source’s publication date; unknown dates remain unknown.
 
@@ -30,13 +30,13 @@ Select a model and run the connection check. Credentials are isolated by provide
 Choose English or Kiswahili. In **You → Preferences → Appearance**, choose one of eight accents (Ember, Sage, Blue, Violet, Teal, Amber, Rose or Slate) or a custom six-digit colour. Original, Warm, Soft colour and Deep black page styles are separate from system, light and dark mode. Deep black applies in dark mode. Saving appearance does not change your content or AI connection.
 
 ## Your preferences
-Onboarding interests are enough to begin. You may add editable notes or use Copy starter prompt with an assistant to generate MeBot JSON. Use Import file or Paste JSON and review the replacement before applying. After confirmation, MeBot returns to **You → My context** and shows the saved notes. If the input is invalid or you cancel the review, the current draft stays in place. An empty module list keeps your module choices. Notes require approved scopes. Never import passwords or API keys as preferences.
+Choose feed topics from **You → About you** or from the context-import screen. Search with **Find your interests**, filter by category, use **Show more topics** or **Show fewer topics**, and select topics to follow. Selections save on this device without starting an AI request. The optional custom-interest field saves as a confirmed local note when edited; connected AI may use it only for the selected topics. Leaving the field blank keeps an existing note; edit your context notes under About you to remove it. You may also add editable notes or use Copy starter prompt with an assistant to prepare MeBot JSON. Use Import file or Paste JSON and review the replacement before applying. After confirmation, MeBot returns to **You → About you** and shows the saved notes. If the input is invalid or you cancel the review, the current draft stays in place. An empty module list keeps your module choices. Notes require approved scopes. Never import passwords or API keys as preferences.
 
 ## Background settings
 Use cards to configure automatic refresh, interval, preparation batches, network/battery conditions, notifications and quiet hours. Refresh now is explicit. Android determines actual background timing. Manage the request budget in AI connection, not here.
 
 ## Software Updates
-Automatic checks inspect the trusted public release list; only compatible published releases are offered. MeBot 0.9.8 is available to compatible older production installations through **You → Software Updates**. Optional Wi-Fi download preparation is separate from AI requests. An update must match the installed package and signing certificate, have a higher version code and a supported Android minimum. Downloads are bounded and checked against their published size and SHA-256; Android's archive metadata is checked before installation. Approve installation through Android. Interrupted/invalid downloads do not replace the installed app. Provider connections and personal data are not in the release metadata.
+Automatic checks inspect the trusted public release list; only compatible published releases are offered through **You → Software Updates**. Optional Wi-Fi download preparation is separate from AI requests. An update must match the installed package and signing certificate, have a higher version code and a supported Android minimum. Downloads are bounded and checked against their published size and SHA-256; Android's archive metadata is checked before installation. Approve installation through Android. Interrupted/invalid downloads do not replace the installed app. Provider connections and personal data are not in the release metadata.
 
 ## Data controls
 Clear reading history asks for confirmation and explains its scope. It does not erase saved items, conversations, preferences or relevance feedback. Those are separate controls. Export personal data only to destinations you trust. Keys are not included in portable JSON exports.
@@ -45,34 +45,13 @@ Clear reading history asks for confirmation and explains its scope. It does not 
 Tap media to load it; provider permission/availability may prevent playback. Keep Open original as a fallback. Supported public file links are checked before verified file counts and Save file. Files are bounded to 20 MiB and are rechecked when saved. Android's picker chooses the destination. This does not bypass sign-in or paywalls.
 
 ## Troubleshooting
-A failed connection does not block public-source reading or daily tools. Check provider credentials, capabilities and model access. A completed response is required to report a usable AI connection. If an update is not offered, it may be the same/older version or a different package/certificate. If no new stories appear, the source may have nothing new; MeBot must not manufacture freshness.
+A failed connection does not block public-source reading or daily tools. Check provider credentials, capabilities and model access. A completed response is required to report a usable AI connection. If an update is not offered, it may be the same or an older build, or use a different package/certificate. If no new stories appear, the source may have nothing new; MeBot must not manufacture freshness.
 
 Test alarm permissions, audio, lock-screen behavior and overnight delivery on your actual phone. Automated UI captures and controlled provider tests do not establish those properties.
 
-## Historical 0.9.0 candidate notes
-
-These were candidate-era notes, not a current feature list or a claim that the
-0.9.0 candidate was publicly released. See [historical details](RELEASE-0.9.0.md).
-
-- **Feed → Today** shows only items with qualifying source dates for your selected
-  local day. Publication, forecast validity and event dates are labeled separately.
-  Older and unknown-date items remain in your regular feed and Saved. Opening Today
-  does not call AI; deliberate pull-to-refresh uses your usual connection/allowance.
-- Compact onboarding icons retain topic labels. Your optional typed interests are
-  saved as the existing module-scoped note. Revisiting with an empty draft preserves
-  it; edit/delete the note in your context editor when that is your intent.
-- **You → App lock** lets you choose and confirm a separate app PIN, then optionally
-  enable supported strong biometrics using the current app PIN. Never enter your
-  device PIN into an app-owned prompt. Locking hides personal screens, not encryption
-  of the feed database. Change/disable requires current authentication. Keep the PIN;
-  biometric enrollment changes or lockout may require it. Forgot-PIN guidance does
-  not bypass protection or erase data automatically.
-- **You → Your data** retains reading-history disable/clear controls. Clearing history
-  changes local ranking without deleting your notes or saved stories.
-
 ## Context import and local account removal
 
-Open the visible context import screen from your personal setup. Copy its starter prompt into your preferred assistant, then paste the returned JSON or choose its downloaded file. Review changes before saving. After confirmation, MeBot returns to your context details and shows the imported notes; cancelling or correcting invalid input leaves the current draft intact. “About you” applies globally only with your explicit save; separate notes retain module-specific access. If you are still using 0.9.3 and an import seems not to return, check **You → My context** before repeating it.
+The first-run guide offers three stages: connect ChatGPT, optionally add personal context, then start the feed. In the context stage, open the import screen, choose feed topics, write a note, or copy the starter prompt into ChatGPT and send it there yourself. Then paste the returned JSON or choose its downloaded file and review changes before saving. This is a manual import, not automatic history access or ongoing sync. After confirmation, MeBot returns to your context details and shows the imported notes; cancelling or correcting invalid input leaves the current draft intact. “About you” applies globally only with your explicit save; separate notes retain module-specific access.
 
 AI connection lets you remove a saved account from this device after confirmation. This is local removal, not deletion of your provider account. It does not erase your notes or other saved accounts.
 

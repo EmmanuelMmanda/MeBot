@@ -1,38 +1,53 @@
-<div align="center"><img src="docs/assets/mebot.svg" width="64" height="64" alt="MeBot robot logo"><h1>MeBot</h1><p>Read with purpose. Choose your next step.</p><p>Android · English &amp; Kiswahili · Apache 2.0</p></div>
+<div align="center"><img src="docs/assets/mebot.svg" width="64" height="64" alt="MeBot robot logo"><h1>MeBot</h1><p>A personal feed for stories, opportunities and everyday tools.</p><p>Android · English · Kiswahili · Apache 2.0</p></div>
 
-> **MeBot 0.9.8 is available now.** Update in the app or [download the official APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.8/mebot-0.9.8.apk). [Installation and verification](docs/download.html).
+[Download latest version](https://github.com/EmmanuelMmanda/MeBot/releases/latest/download/mebot-0.9.8.apk) · [Installation guide](docs/download.html) · [App screens](docs/screenshots.html)
 
-## Explore MeBot
+## Personal reading and story questions
 
-Open Suggestions when you want another angle. Explicit generation prepares five distinct questions with your connected AI. Send asks the selected question; the pencil lets you edit first. Opening or closing the sheet never sends a question. Without AI, questions are unavailable, while public reading and saved items remain usable.
+For You collects sourced stories around topics you choose. Original Read is a separate, longer AI-authored piece with its Created date—not a publisher date. Optional further reading is separate from the reflection and does not verify it by itself.
 
-Original Reads are clearly labelled AI-authored, with Created dates rather than publisher dates. Read the complete sections, inspect evidence, and explore optional further reading separately. Today keeps your personal selection distinct from verified source-day stories; an undated source is not relabelled as published today.
+Browse source-checked grants, jobs, contracts and scholarships. Publication dates and application deadlines appear separately when available. Confirm current eligibility, dates and requirements on the official listing.
 
-Choose eight accent colours or your own, with Original, Warm, Soft colour and Deep black page styles. Your phone’s theme, light and dark are supported; Deep black applies in dark mode.
+With an AI provider connected, open the story’s question sheet. Choose Send to ask a question, or Edit to change the draft first. Opening the sheet alone sends nothing.
 
-## See MeBot
+## About You and appearance
 
-<p align="center"><a href="docs/screenshots/v098-showcase/en-feed-light-ember.png"><img src="docs/screenshots/v098-showcase/en-feed-light-ember.png" width="225" alt="MeBot English feed with an EMAICON conference story and source attribution."></a>
-<a href="docs/screenshots/v098-showcase/sw-today-light-sage.png"><img src="docs/screenshots/v098-showcase/sw-today-light-sage.png" width="225" alt="MeBot Kiswahili personal reading selection with translated Tanzania headlines and a dated FSDT deadline."></a>
-<a href="docs/screenshots/v098-showcase/en-detail-dark-slate.png"><img src="docs/screenshots/v098-showcase/en-detail-dark-slate.png" width="225" alt="TCRA quarter-ending-June-2026 report detail with the subscription-count caveat and source access."></a></p>
+Set interests and region under About You. Review which notes each module may use, change those choices, or leave personal context empty.
 
-**Read what matters** — en, Light · Raspberry · Original · **Kwa ajili yako leo** — sw, Light · Sage · Warm · **The source and its caveats** — en, Dark · Slate · Original
-<p align="center"><a href="docs/screenshots/v098-showcase/sw-opportunity-dark-teal.png"><img src="docs/screenshots/v098-showcase/sw-opportunity-dark-teal.png" width="225" alt="FSDT grant detail in Kiswahili with source access, expanded notes and AI-disconnected state."></a>
-<a href="docs/screenshots/v098-showcase/en-appearance-light-violet.png"><img src="docs/screenshots/v098-showcase/en-appearance-light-violet.png" width="225" alt="MeBot Appearance dialog showing system, light and dark themes and the accent-colour choices."></a>
-<a href="docs/screenshots/v098-showcase/en-appearance-page-style-light-violet.png"><img src="docs/screenshots/v098-showcase/en-appearance-page-style-light-violet.png" width="225" alt="Scrolled MeBot Appearance dialog showing Original, Warm, Soft color and Deep black page styles."></a></p>
+Choose English or Kiswahili under You → Personalization → Language. In Appearance, select system, light or dark mode, an accent colour, and one of four page styles.
 
-**Fursa, kwa Kiswahili** — sw, Dark · Teal · Soft colour · **Your colours, your comfort** — en, Light · Violet · Original · **A page style that suits you** — en, Light · Violet · Original
-<p align="center"><a href="docs/screenshots/v098-showcase/sw-today-verified-light-sage.png"><img src="docs/screenshots/v098-showcase/sw-today-verified-light-sage.png" width="225" alt="Kiswahili verified source-day section honestly states there are no source items for today."></a></p>
+MeBot also includes Saved reading, Focus, Daily Check-in and alarms. Local tools remain available without an AI connection.
 
-**Leo, bila kubuni tarehe** — sw, Light · Sage · Warm
+## Screens
 
-Native Android host renders of the 0.9.8 debug preview build using a static editorial fixture built from source-verified public facts; no live feed refresh is shown. Sources were checked on 28 October 2026; a checked date is not a publication date. These are not live provider responses, personal accounts or physical-device acceptance evidence. [Capture sources](docs/screenshots/v098-showcase/README.md). Historical screenshots remain evidence only, outside this current gallery.
+<p align="center"><a href="docs/screenshots/v099-showcase/en-feed-for-you.png"><img src="docs/screenshots/v099-showcase/en-feed-for-you.png" width="225" alt="MeBot For You feed with a public FSDT opportunity and its closing date."></a>
+<a href="docs/screenshots/v099-showcase/en-fsdt-opportunity-detail-source.png"><img src="docs/screenshots/v099-showcase/en-fsdt-opportunity-detail-source.png" width="225" alt="Opportunity details include a direct FSDT source link and eligibility notes."></a>
+<a href="docs/screenshots/v099-showcase/en-fsdt-opportunity-deadline.png"><img src="docs/screenshots/v099-showcase/en-fsdt-opportunity-deadline.png" width="225" alt="Opportunity notes show the FSDT cycle-two deadline as 5 November 2026."></a></p>
 
-## Installation and release identity
+**For You feed** · **FSDT opportunity source** · **FSDT application deadline**
+<p align="center"><a href="docs/screenshots/v099-showcase/en-original-read.png"><img src="docs/screenshots/v099-showcase/en-original-read.png" width="225" alt="Sample Original Read labeled AI-authored, with its created date visible."></a>
+<a href="docs/screenshots/v099-showcase/en-original-read-further-reading.png"><img src="docs/screenshots/v099-showcase/en-original-read-further-reading.png" width="225" alt="Original Read source tab presents a UNESCO and Tanzania readiness report separately as further reading."></a>
+<a href="docs/screenshots/v099-showcase/sw-original-read-dark-teal.png"><img src="docs/screenshots/v099-showcase/sw-original-read-dark-teal.png" width="225" alt="Usomaji Asilia wa mfano ulioandikwa na AI, kwa mandhari meusi yenye rangi ya teal."></a></p>
 
-[Published 0.9.8 APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.8/mebot-0.9.8.apk) · [Published release files](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.8) · [Start here](START-HERE.md) · [User guide](docs/USER-GUIDE.md).
+**A reflection on Kiswahili and AI readiness** · **Further reading** · **Tafakari kuhusu Kiswahili na utayari wa AI**
+<p align="center"><a href="docs/screenshots/v099-showcase/en-five-questions-top.png"><img src="docs/screenshots/v099-showcase/en-five-questions-top.png" width="225" alt="Suggestions sheet with the first FSDT follow-up questions and explicit Edit and Send actions."></a>
+<a href="docs/screenshots/v099-showcase/en-five-questions-bottom.png"><img src="docs/screenshots/v099-showcase/en-five-questions-bottom.png" width="225" alt="Suggestions sheet scrolled to show questions two through five, including the complete fifth prompt."></a>
+<a href="docs/screenshots/v099-showcase/en-question-edit-draft.png"><img src="docs/screenshots/v099-showcase/en-question-edit-draft.png" width="225" alt="A selected FSDT follow-up question appears in the editable MeBot composer before sending."></a></p>
 
-Install an eligible update over your existing production 0.9.x app. Do not uninstall or clear data. Older separately installed builds have different package or signing identities; see the installation guide before replacing them. Package: `mebot.nguli.com`. The published APK source is `b081584d68413bcda330f23d760474871ea705de`, tree `f7f98aaab2b754931dde9ad1c962fdf9b0540bc1`. This identifies the published APK; the gallery retains its separate debug-build capture provenance. Technical evidence is separate from experience-first release notes.
+**Five follow-up angles** · **More follow-up angles** · **Edit a suggested question**
+<p align="center"><a href="docs/screenshots/v099-showcase/en-about-you.png"><img src="docs/screenshots/v099-showcase/en-about-you.png" width="225" alt="About You screen with optional profile fields, context import and Choose feed topics."></a>
+<a href="docs/screenshots/v099-showcase/en-about-you-context-note.png"><img src="docs/screenshots/v099-showcase/en-about-you-context-note.png" width="225" alt="A generic interest note is shown with its selected News, Opportunities, and Tech &amp; AI scopes."></a>
+<a href="docs/screenshots/v099-showcase/en-appearance-page-styles-dialog-only.png"><img src="docs/screenshots/v099-showcase/en-appearance-page-styles-dialog-only.png" width="225" alt="Appearance dialog with nine accent choices, four page styles, and a Done control."></a></p>
+
+**About You** · **About You context note** · **Appearance controls**
+
+Screen images are examples. Any AI response shown uses sample content, not a live account result. Check linked sources for current dates and requirements. Technical capture and provenance are in the [capture record](docs/screenshots/v099-showcase/README.md).
+
+## Install and verify
+
+[Download latest version](https://github.com/EmmanuelMmanda/MeBot/releases/latest/download/mebot-0.9.8.apk) · [Latest release files](https://github.com/EmmanuelMmanda/MeBot/releases/latest) · [Start here](START-HERE.md) · [User guide](docs/USER-GUIDE.md).
+
+Install a compatible update over your existing app. Do not uninstall or clear app data as an update step. If Android reports a signing conflict, check the installation guide before changing installations.
 
 ## Choose your AI connection
 
