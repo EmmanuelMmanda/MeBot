@@ -169,13 +169,14 @@ class PersonalDailySelection098ViewModelTest {
     @Test fun invalidationArrivingBeforeEnsureJobCompletesIsCoalescedAndRecomputedFromLatestFeed() = runBlocking {
         val now = System.currentTimeMillis()
         val firstCommit = CompletableDeferred<Unit>()
+        val latestCommitCallback = CompletableDeferred<Unit>()
         val releaseFirstJob = CompletableDeferred<Unit>()
         val pauseCount = AtomicInteger()
         vm.afterPersonalDailySelectionCommit098 = {
             if (pauseCount.getAndIncrement() == 0) {
                 firstCommit.complete(Unit)
                 releaseFirstJob.await()
-            }
+            } else latestCommitCallback.complete(Unit)
         }
 
         vm.ensurePersonalDailySelection098()
@@ -205,6 +206,9 @@ class PersonalDailySelection098ViewModelTest {
         val expected = PersonalDailySelectionLogic098.ensure(localized, now).personalDailySelection098
         assertEquals(expected?.itemIds, selected.itemIds)
         assertEquals(expected?.itemRevisions, selected.itemRevisions)
+        // DataStore publishes the committed state before the post-commit test callback resumes.
+        // Await that callback with a bound before asserting the worker completed its second pass.
+        withTimeout(10_000) { latestCommitCallback.await() }
         assertTrue("The latest localized invalidation is not silently dropped", pauseCount.get() >= 2)
         assertEquals(0, app.sourceReaderCalls.get())
         assertEquals(0, app.aiProviderCalls.get())
