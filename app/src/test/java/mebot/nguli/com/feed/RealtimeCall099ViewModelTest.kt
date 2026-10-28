@@ -187,7 +187,10 @@ class RealtimeCall099ViewModelTest {
         withTimeout(TEST_TIMEOUT) { waitFor { !peer.microphoneActive } }
         assertEquals(1, peer.privacyStopCalls)
         awaitClosed(peer)
-        withTimeout(TEST_TIMEOUT) { waitFor { backend.endCalls.get() >= 1 } }
+        // The broker counts receipt before returning; await the emitted terminal state too.
+        withTimeout(TEST_TIMEOUT) {
+            waitFor { backend.endCalls.get() >= 1 && vm.ui.value.snapshot.phase == RealtimeCallPhase.ENDED }
+        }
         assertEquals(RealtimeCallPhase.ENDED, vm.ui.value.snapshot.phase)
         store.clear()
     }
@@ -251,7 +254,10 @@ class RealtimeCall099ViewModelTest {
         assertFalse("A disconnected peer cannot keep its microphone open", peer.microphoneActive)
         assertEquals(1, peer.privacyStopCalls)
         awaitClosed(peer)
-        withTimeout(TEST_TIMEOUT) { waitFor { backend.endCalls.get() >= 1 } }
+        // The broker counts receipt before returning; await the emitted terminal state too.
+        withTimeout(TEST_TIMEOUT) {
+            waitFor { backend.endCalls.get() >= 1 && vm.ui.value.snapshot.phase == RealtimeCallPhase.ENDED }
+        }
         assertEquals(RealtimeCallPhase.ENDED, vm.ui.value.snapshot.phase)
         store.clear()
     }
