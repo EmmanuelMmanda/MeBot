@@ -1,4 +1,4 @@
-> **Historical verification record.** The figures below describe MeBot 0.6.1, not the current preview. As of 28 October 2026, published **0.9.7** is an earlier experience and **0.9.8** remains a source-qualified preview without a public APK. See [current release availability](download.html) and [release identity evidence](PUBLIC-RELEASES.md). The [0.7.0-beta.1 record](RELEASE-0.7.0-beta.1.md) is also historical. No old test totals establish acceptance of newer source.
+> **Historical verification record.** The figures below describe MeBot 0.6.1, not the current release. **MeBot 0.9.8 is now officially published.** See [current download and update availability](download.html), the [original 0.9.8 prepublication technical-report snapshot](VERIFICATION-0.9.8.md), and [published identity evidence](releases/v0.9.8.json). The original report’s pending-publication text is historical; the published identity evidence records the completed release. Website promotion is a separate step. The [0.7.0-beta.1 record](RELEASE-0.7.0-beta.1.md) is also historical. No old test totals establish acceptance of newer source.
 
 # Verification — MeBot 0.6.1
 

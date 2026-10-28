@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate current preview presentation, published asset identity and preserved archives."""
+"""Validate current presentation, published asset identity and preserved archives."""
 from pathlib import Path
 from html.parser import HTMLParser
 import json, re, hashlib
@@ -14,7 +14,7 @@ expected_apk=base+official['filename']
 assert r['tag']=='v'+r['version'] and official['tag']=='v'+official['version']
 integrity=json.loads((DOCS/r['integrityFile']).read_text())
 for a,b in [('sourceCommit','source_code_commit'),('sourceTree','source_tree'),('applicationId','application_id'),('versionCode','version_code'),('filename','apk_file'),('sha256','apk_sha256'),('sizeBytes','apk_size_bytes'),('certificateSha256','signer_certificate_sha256')]:
-    assert r[a]==integrity[b], f'Preview identity mismatch: {a}'
+    assert r[a]==integrity[b], f'Current identity mismatch: {a}'
 if not published:
     assert r['privateCandidate'] and not r['publicAssetsAvailable'] and not r['inAppUpdateAvailable']
     assert integrity['publication_status']=='pending' and integrity['published_at'] is None
@@ -78,6 +78,9 @@ for path in current:
     if not published:
         assert f"/releases/download/{r['tag']}/" not in text
         assert 'preview' in text.lower(), path
+    if published:
+        for stale in ('not yet a public download','not offered as a public apk yet','remains an unreleased preview','does not contain the full preview experience','there is no public '+r['version'].lower()+' apk'):
+            assert stale not in text.lower(), (path,stale)
     for im in p.images:
         assert 'alt' in im, path
         src=im.get('src','')
@@ -101,7 +104,8 @@ for path in current:
         assert 'Do not uninstall' in text and 'physical-phone' in text
 for name in ('README.md','START-HERE.md'):
     text=(ROOT/name).read_text()
-    assert expected_apk in text and r['version'] in text and 'not yet a public download' in text.lower()
+    assert expected_apk in text and r['version'] in text
+    assert ('available now' if published else 'not yet a public download') in text.lower()
     assert not re.search(r'screenshots/(?!v098-showcase/)',text)
 for name in ('USER-GUIDE.md','INSTALL.md','PRIVACY.md','ACTIVITY-AND-DISCOVERY.md'):
     text=(DOCS/name).read_text()
@@ -123,6 +127,15 @@ assert 'never switches from plan usage to API billing automatically' in provider
 assert 'Keys stay out of context and backup exports' in provider
 assert 'separate API billing' in readme and 'Claude.ai subscription credentials are not used' in readme
 assert 'known launch failures' in (DOCS/'releases.html').read_text()
+if published and r['version']=='0.9.8':
+    download_text=(DOCS/'download.html').read_text().lower()
+    assert 'prepublication snapshot' in download_text and 'pending-publication wording is historical' in download_text
+    assert r['integrityFile'] in download_text
+    for index in (DOCS/'PUBLIC-RELEASES.md',DOCS/'VERIFICATION.md'):
+        for line in index.read_text().splitlines():
+            if '(VERIFICATION-0.9.8.md)' in line:
+                assert 'prepublication' in line.lower() and 'snapshot' in line.lower(), index
+    assert hashlib.sha256((DOCS/'VERIFICATION-0.9.8.md').read_bytes()).hexdigest()==r['verificationSha256'], 'Public technical-report snapshot must remain byte-identical'
 assert 'MeBot 0.9.6 is the current official release' not in (DOCS/'PUBLIC-RELEASES.md').read_text()
 # Frozen historical evidence remains byte-identical; do not rewrite old release claims as new proof.
 assert hashlib.sha256((DOCS/'releases/v0.9.5.json').read_bytes()).hexdigest()=='3eb625d5bbd60b89aa1a91d674c6c8625ba380554f8a05daa43028714b4b47be'
@@ -185,4 +198,4 @@ assert 'Do not uninstall' in (DOCS/'download.html').read_text()
 assert official['version'] == r['version'] if published else True
 for name in ('preview-083.html', 'preview-084.html', 'preview-085.html', 'preview-090.html'):
     assert (DOCS/name).read_text().count('<aside class="release-archive wrap">') == 1
-print(f'Showcase checks passed: {len(screens)} fresh bilingual themed captures; unsigned preview, exact published assets and historical records checked.')
+print(f'Showcase checks passed: {len(screens)} fresh bilingual themed captures; release availability, exact published assets and historical records checked.')

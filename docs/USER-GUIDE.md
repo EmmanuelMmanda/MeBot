@@ -1,17 +1,17 @@
-> **0.9.8 preview — not yet released.** This guide describes the preview source. Published 0.9.7 does not include the corrected five-question and Original Read experience. See [release status](INSTALL.md) and [verification limits](PUBLIC-RELEASES.md).
+> **MeBot 0.9.8 is the current official release.** It includes five AI-generated story questions and Original Read. Existing users can check **You → Software Updates** for a compatible update. See [release status](INSTALL.md) and [verification limits](PUBLIC-RELEASES.md).
 
-# MeBot user guide — 0.9.8 preview
+# MeBot user guide — 0.9.8
 
 [Start here](../START-HERE.md) · [Workflow guides](guide.html) · [Published releases](PUBLIC-RELEASES.md)
 
 ## Install and start
-Install the official `mebot.nguli.com` package. The current public APK is 0.9.7, not this 0.9.8 preview. Compatible production updates do not require uninstalling; earlier signer/package installations have different migration requirements. See [installation guidance](INSTALL.md). Choose English or Kiswahili, interests and an optional city. Skip the introduction or replay the quick guide from Help. Alarm, Focus and Daily Check-in are optional.
+Install the official `mebot.nguli.com` package. The current official APK is 0.9.8. Compatible production updates do not require uninstalling; earlier signer/package installations have different migration requirements. See [installation guidance](INSTALL.md). Choose English or Kiswahili, interests and an optional city. Skip the introduction or replay the quick guide from Help. Alarm, Focus and Daily Check-in are optional.
 
 ## Feed and discovery
 Public sources are usable without AI. Each module owns its preferences, fallback sources and permitted context. Connected AI prepares richer information only when that provider supports it. Sources remain visible. Refresh the selected module by pulling down. Completed modules appear while others work; failures preserve completed and cached content. While reading, use Show new items to accept newly prepared content without losing your position. Source-verified forecasts and events leave active reading after their useful dates; unknown dates remain unknown. Saved and starred records are not deleted, and evergreen material ages more slowly.
 
 ## Item details and MeBot
-Stories open in MeBot with the publisher and story context retained. In the 0.9.8 preview, opening the question sheet does not call AI or send a question. Explicit generation uses your selected AI connection to produce five distinct questions about that item. **Send** asks the selected question directly; **Edit** prepares an editable story-scoped draft. New suggestions require AI and connectivity; there is no offline question-generator fallback. Your original source remains available. See the [story guide](guides/feed-and-ai.html).
+Stories open in MeBot with the publisher and story context retained. In MeBot 0.9.8, opening the question sheet does not call AI or send a question. Explicit generation uses your selected AI connection to produce five distinct questions about that item. **Send** asks the selected question directly; **Edit** prepares an editable story-scoped draft. New suggestions require AI and connectivity; there is no offline question-generator fallback. Your original source remains available. See the [story guide](guides/feed-and-ai.html).
 
 **Original Read** is AI-authored and labelled with its **Created** time, not a publisher date. Supporting evidence is separate from optional further reading. Verify claims and eligibility at the linked source. **Today** distinguishes your personal selection from items with verified publication, forecast or event dates. A recent check does not change a source’s publication date; unknown dates remain unknown.
 
@@ -36,7 +36,7 @@ Onboarding interests are enough to begin. You may add editable notes or use Copy
 Use cards to configure automatic refresh, interval, preparation batches, network/battery conditions, notifications and quiet hours. Refresh now is explicit. Android determines actual background timing. Manage the request budget in AI connection, not here.
 
 ## Software Updates
-Automatic checks inspect the trusted public release list; only compatible published releases are offered. The 0.9.8 preview is not an available update. Optional Wi-Fi download preparation is separate from AI requests. An update must match the installed package and signing certificate, have a higher version code and a supported Android minimum. Downloads are bounded and checked against their published size and SHA-256; Android's archive metadata is checked before installation. Approve installation through Android. Interrupted/invalid downloads do not replace the installed app. Provider connections and personal data are not in the release metadata.
+Automatic checks inspect the trusted public release list; only compatible published releases are offered. MeBot 0.9.8 is available to compatible older production installations through **You → Software Updates**. Optional Wi-Fi download preparation is separate from AI requests. An update must match the installed package and signing certificate, have a higher version code and a supported Android minimum. Downloads are bounded and checked against their published size and SHA-256; Android's archive metadata is checked before installation. Approve installation through Android. Interrupted/invalid downloads do not replace the installed app. Provider connections and personal data are not in the release metadata.
 
 ## Data controls
 Clear reading history asks for confirmation and explains its scope. It does not erase saved items, conversations, preferences or relevance feedback. Those are separate controls. Export personal data only to destinations you trust. Keys are not included in portable JSON exports.

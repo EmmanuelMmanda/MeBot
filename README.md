@@ -1,8 +1,8 @@
 <div align="center"><img src="docs/assets/mebot.svg" width="64" height="64" alt="MeBot robot logo"><h1>MeBot</h1><p>Read with purpose. Choose your next step.</p><p>Android · English &amp; Kiswahili · Apache 2.0</p></div>
 
-> **MeBot 0.9.8 preview — not yet a public download.** Published 0.9.7 is an earlier experience, without the corrected AI-only five-question flow or Original Reads shown here. [Version availability](docs/download.html) · [Source review](https://github.com/EmmanuelMmanda/MeBot/pull/19).
+> **MeBot 0.9.8 is available now.** Update in the app or [download the official APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.8/mebot-0.9.8.apk). [Installation and verification](docs/download.html).
 
-## Explore the next experience
+## Explore MeBot
 
 Open Suggestions when you want another angle. Explicit generation prepares five distinct questions with your connected AI. Send asks the selected question; the pencil lets you edit first. Opening or closing the sheet never sends a question. Without AI, questions are unavailable, while public reading and saved items remain usable.
 
@@ -10,7 +10,7 @@ Original Reads are clearly labelled AI-authored, with Created dates rather than 
 
 Choose eight accent colours or your own, with Original, Warm, Soft colour and Deep black page styles. Your phone’s theme, light and dark are supported; Deep black applies in dark mode.
 
-## See the current preview
+## See MeBot
 
 <p align="center"><a href="docs/screenshots/v098-showcase/en-feed-light-ember.png"><img src="docs/screenshots/v098-showcase/en-feed-light-ember.png" width="225" alt="MeBot English feed with an EMAICON conference story and source attribution."></a>
 <a href="docs/screenshots/v098-showcase/sw-today-light-sage.png"><img src="docs/screenshots/v098-showcase/sw-today-light-sage.png" width="225" alt="MeBot Kiswahili personal reading selection with translated Tanzania headlines and a dated FSDT deadline."></a>
@@ -26,13 +26,13 @@ Choose eight accent colours or your own, with Original, Warm, Soft colour and De
 
 **Leo, bila kubuni tarehe** — sw, Light · Sage · Warm
 
-Native Android host renders of the preview app using a static editorial fixture built from source-verified public facts; no live feed refresh is shown. Sources were checked on 28 October 2026; a checked date is not a publication date. These are not live provider responses, personal accounts or physical-device acceptance evidence. [Capture sources](docs/screenshots/v098-showcase/README.md). Historical screenshots remain evidence only, outside this current gallery.
+Native Android host renders of the 0.9.8 debug preview build using a static editorial fixture built from source-verified public facts; no live feed refresh is shown. Sources were checked on 28 October 2026; a checked date is not a publication date. These are not live provider responses, personal accounts or physical-device acceptance evidence. [Capture sources](docs/screenshots/v098-showcase/README.md). Historical screenshots remain evidence only, outside this current gallery.
 
 ## Installation and release identity
 
-[Published 0.9.7 APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.7/mebot-0.9.7.apk) · [Published release files](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.7) · [Start here](START-HERE.md) · [User guide](docs/USER-GUIDE.md).
+[Published 0.9.8 APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.8/mebot-0.9.8.apk) · [Published release files](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.8) · [Start here](START-HERE.md) · [User guide](docs/USER-GUIDE.md).
 
-Install an eligible update over your existing production 0.9.x app. Do not uninstall or clear data. Older separately installed builds have different package or signing identities; see the installation guide before replacing them. Package: `mebot.nguli.com`. The published APK source is `c1597b94fef288cc917541dfee0e63fa2366764e`, tree `3ae9fef24f5489ce5d80bfb1bf78eef6574187e8`. This identifies the earlier APK, not the preview images. Technical evidence is separate from experience-first release notes.
+Install an eligible update over your existing production 0.9.x app. Do not uninstall or clear data. Older separately installed builds have different package or signing identities; see the installation guide before replacing them. Package: `mebot.nguli.com`. The published APK source is `b081584d68413bcda330f23d760474871ea705de`, tree `f7f98aaab2b754931dde9ad1c962fdf9b0540bc1`. This identifies the published APK; the gallery retains its separate debug-build capture provenance. Technical evidence is separate from experience-first release notes.
 
 ## Choose your AI connection
 

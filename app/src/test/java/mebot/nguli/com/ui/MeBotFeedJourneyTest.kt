@@ -19,7 +19,14 @@ import mebot.nguli.com.feed.SuggestionTargets097
 import mebot.nguli.com.feed.SuggestionSheetStatus097
 import mebot.nguli.com.feed.FeedTestApplication
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
@@ -63,12 +70,17 @@ class MeBotFeedJourneyTest {
     @Test fun firstVisitRefreshSaveReopenAndOfflineRetryKeepTheSameStory() {
         app.sourceItems = stories()
         screenshot("20-mebot-feed-onboarding")
+        val viewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]
+        val refreshStartedBeforeOnboarding = viewModel.ui.value.refreshProgress.startedAt
         start()
         waitForState { it.items.size == 3 && it.lastRefreshMillis > 0 }
+        // Do not block the Compose test Main while the onboarding refresh is still unwinding.
+        waitForRefreshCompletion(viewModel, refreshStartedBeforeOnboarding)
         assertEquals("", state().name)
         assertTrue(state().context.isEmpty())
         assertFalse(state().notifications)
-        runBlocking { app.feedRepository.update { it.copy(name = "Alex") } }
+        val namedState = updateFeedFixtureAndAwait { it.copy(name = "Alex") }
+        assertEquals("The greeting fixture is persisted before rendering the personalized feed", "Alex", namedState.name)
         waitForText(text(R.string.feed_greeting, "Alex"))
         screenshot("21-mebot-personal-feed")
 
@@ -190,10 +202,17 @@ class MeBotFeedJourneyTest {
     }
 
     @Test fun editingContextPreservesExistingScopesAndChangesTheReopenedGreeting() {
+        val viewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]
+        val refreshStartedBeforeOnboarding = viewModel.ui.value.refreshProgress.startedAt
         start()
+        // The fixture replaces feed state, so let any initial source refresh commit first.
+        waitForRefreshCompletion(viewModel, refreshStartedBeforeOnboarding)
         val scoped = ContextEntry(id = "scoped-interest", text = "For business updates, focus on stock management and customer service in Tanzania.", scopes = setOf("business"), origin = "imported", updatedAtMillis = 1)
         val changedText = "I am a Tanzanian entrepreneur running a neighbourhood shop, a food business and a delivery service. I want practical ideas and concise explanations with local examples."
-        runBlocking { app.feedRepository.update { it.copy(context = listOf(scoped), items = listOf(stories().first().copy(why = "An old explanation", relevance = 90))) } }
+        val fixtureStory = stories().first().copy(why = "An old explanation", relevance = 90)
+        val persisted = updateFeedFixtureAndAwait { it.copy(context = listOf(scoped), items = listOf(fixtureStory)) }
+        assertEquals(listOf(scoped), persisted.context)
+        assertEquals(listOf(fixtureStory), persisted.items)
         tab("you")
         clickText(R.string.preferences_title_083)
         waitForTag("context-name")
@@ -347,7 +366,10 @@ class MeBotFeedJourneyTest {
         if (language == "sw") runBlocking {
             app.repository.update { it.copy(settings = it.settings.copy(language = "sw")) }
         }
+        val viewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]
+        val refreshStartedBeforeOnboarding = viewModel.ui.value.refreshProgress.startedAt
         start()
+        waitForRefreshCompletion(viewModel, refreshStartedBeforeOnboarding)
         val now = System.currentTimeMillis()
         val topic = if (language == "sw") "Mfano wa jaribio: zana ya AI kwa timu za utafiti" else "Synthetic preview: an AI toolkit for research teams"
         val syntheticStory = FeedItem(
@@ -356,17 +378,17 @@ class MeBotFeedJourneyTest {
             sourceName = "Example Research", sourceUrl = "https://example.com/research-toolkit",
             publishedAtMillis = now, fetchedAtMillis = now, relevance = 100,
         )
-        runBlocking {
-            app.feedRepository.update { current ->
-                current.copy(
-                    modules = current.modules.map { it.copy(enabled = it.id == "technology") },
-                    items = listOf(syntheticStory),
-                    lastRefreshMillis = now,
-                    connection = AiConnection(),
-                )
-            }
+        val persisted = updateFeedFixtureAndAwait { current ->
+            current.copy(
+                modules = current.modules.map { it.copy(enabled = it.id == "technology") },
+                items = listOf(syntheticStory),
+                lastRefreshMillis = now,
+                connection = AiConnection(),
+            )
         }
-        val viewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]
+        assertEquals("The disconnected synthetic story is persisted before asserting fallback behavior",
+            listOf(syntheticStory), persisted.items)
+        assertEquals(AiConnection(), persisted.connection)
         waitForState { it.items.singleOrNull()?.id == syntheticStory.id }
         compose.waitUntil(15_000) { viewModel.ui.value.state?.items?.singleOrNull()?.id == syntheticStory.id }
         assertFalse("The disconnected fixture remains local/RSS usable", viewModel.ui.value.connected)
@@ -688,8 +710,29 @@ class MeBotFeedJourneyTest {
         compose.waitUntil(15_000) {
             androidx.lifecycle.ViewModelProvider(compose.activity)[mebot.nguli.com.feed.FeedViewModel::class.java].ui.value.connected
         }
-        compose.onNodeWithTag("connection-continue").performScrollTo().performClick()
+        val beforeConnectionRefresh = state()
+        compose.onNodeWithTag("connection-continue").performScrollTo()
+            .assertTextEquals(text(R.string.feed_refresh_mine)).performClick()
         waitForText(text(R.string.feed_you_title))
+        val feedViewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]
+        // A changed connection explicitly refreshes the feed on Continue. Wait for its
+        // provider discovery + request-budget commit to finish before the sheet's read-only
+        // budget baseline; otherwise the background refresh can reserve after that baseline.
+        compose.waitUntil(15_000) {
+            val current = state()
+            val currentUi = feedViewModel.ui.value
+            current.requestsToday > beforeConnectionRefresh.requestsToday &&
+                current.lastAiRefreshMillis > beforeConnectionRefresh.lastAiRefreshMillis &&
+                !currentUi.refreshing && !currentUi.connecting
+        }
+        compose.waitForIdle()
+        val afterConnectionRefresh = state()
+        assertTrue("Connection Continue must finish its explicit feed refresh",
+            afterConnectionRefresh.requestsToday > beforeConnectionRefresh.requestsToday)
+        assertTrue("The explicit refresh must complete fake-provider discovery",
+            afterConnectionRefresh.lastAiRefreshMillis > beforeConnectionRefresh.lastAiRefreshMillis)
+        assertFalse(feedViewModel.ui.value.refreshing)
+        assertEquals("Connection refresh is not suggestion generation", 0, app.suggestionCalls)
     }
 
     private fun syntheticProviderQuestions(language: String): List<String> = if (language == "sw") listOf(
@@ -758,6 +801,32 @@ class MeBotFeedJourneyTest {
         compose.onNodeWithTag("onboarding-start").performScrollTo().performClick()
         waitForTag("feed-screen")
         waitForState { it.onboardingComplete }
+    }
+    private fun waitForRefreshCompletion(viewModel: FeedViewModel, previousStartedAt: Long) {
+        compose.waitUntil(15_000) {
+            compose.waitForIdle()
+            val ui = viewModel.ui.value
+            val progress = ui.refreshProgress
+            progress.startedAt > previousStartedAt &&
+                progress.finishedAt >= progress.startedAt && !progress.running && !ui.refreshing
+        }
+    }
+    /** Persist fixtures off Compose Main, while driving Main until the durable update finishes. */
+    private fun updateFeedFixtureAndAwait(update: (FeedState) -> FeedState): FeedState {
+        val feedRepository = app.feedRepository
+        val fixtureScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val fixtureUpdate = fixtureScope.async { withTimeout(10_000) { feedRepository.update(update) } }
+        try {
+            compose.waitUntil(15_000) {
+                compose.waitForIdle()
+                fixtureUpdate.isCompleted
+            }
+            return runBlocking { fixtureUpdate.await() }
+        } finally {
+            fixtureUpdate.cancel()
+            fixtureScope.cancel()
+            runBlocking { withTimeoutOrNull(1_000) { fixtureUpdate.join() } }
+        }
     }
     private fun state() = runBlocking { app.feedRepository.current() }
     private fun text(resource: Int, vararg args: Any) = compose.activity.getString(resource, *args)

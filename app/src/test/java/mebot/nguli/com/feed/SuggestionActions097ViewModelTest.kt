@@ -7,10 +7,10 @@ import android.net.Uri
 import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -96,7 +96,7 @@ class SuggestionActions097ViewModelTest {
         val duplicateTap = vm.sendSuggestion(target, option.id, "en")
         firstTap.join(); duplicateTap.join()
         val answered = withTimeout(10_000) {
-            app.feedRepository.state.first { it.conversations.singleOrNull()?.turns?.lastOrNull()?.role == "assistant" }
+            app.feedRepository.awaitFeedState { it.conversations.singleOrNull()?.turns?.lastOrNull()?.role == "assistant" }
         }
         val thread = answered.conversations.single()
         assertEquals(item.id, thread.itemId)
@@ -204,7 +204,7 @@ class SuggestionActions097ViewModelTest {
             val before = app.feedRepository.current()
             val target = requireNotNull(SuggestionTargets097.module(before, module.id, "en"))
             val handle = requireNotNull(vm.generateSuggestions097(target, "en"))
-            withTimeout(10_000) { app.feedRepository.state.first { it.requestsToday == before.requestsToday + 1 } }
+            withTimeout(10_000) { app.feedRepository.awaitFeedState { it.requestsToday == before.requestsToday + 1 } }
             assertTrue("provider call has not crossed the semaphore boundary", app.suggestedScopes.isEmpty())
             assertEquals(SuggestionSheetStatus097.GENERATING, vm.suggestionSheet097(target, "en").status)
             vm.cancelSuggestionGeneration097(handle.requestId)
@@ -260,7 +260,7 @@ class SuggestionActions097ViewModelTest {
         vm.sendSuggestion(target, option.id, "en").join()
 
         val answered = withTimeout(10_000) {
-            app.feedRepository.state.first { it.conversations.singleOrNull()?.turns?.lastOrNull()?.role == "assistant" }
+            app.feedRepository.awaitFeedState { it.conversations.singleOrNull()?.turns?.lastOrNull()?.role == "assistant" }
         }
         val saved = answered.conversations.single()
         assertEquals(thread.id, saved.id)
@@ -415,7 +415,7 @@ class SuggestionActions097ViewModelTest {
             val option = vm.suggestionOptions097(target, "en").single { it.questionText == interaction.prompt }
             val send = vm.sendSuggestion(target, option.id, "en")
             withTimeout(10_000) {
-                app.feedRepository.state.first { state ->
+                app.feedRepository.awaitFeedState { state ->
                     state.requestsToday == before.requestsToday + 1 &&
                         state.conversations.singleOrNull()?.turns?.lastOrNull()?.text == option.questionText
                 }
@@ -435,15 +435,19 @@ class SuggestionActions097ViewModelTest {
             send.join()
             // The request was conservatively reserved before entering the semaphore, but its
             // unsent user turn and action-created thread must not masquerade as a submitted chat.
+            var rollbackPhase = "waiting-for-empty-thread"
             try {
                 withTimeout(10_000) {
-                    app.feedRepository.state.first { it.conversations.isEmpty() }
+                    app.feedRepository.awaitFeedState { it.conversations.isEmpty() }
+                    rollbackPhase = "empty-thread-observed-waiting-for-cleanup-job"
                     rollbackJob?.join()
+                    rollbackPhase = "cleanup-job-completed"
                 }
             } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
                 val stateAtTimeout = kotlinx.coroutines.withTimeoutOrNull(1_000) { app.feedRepository.current() }
                 val current = stateAtTimeout?.conversations?.singleOrNull { it.id == rollbackThreadId }
-                throw AssertionError("rollback timeout: id=$rollbackThreadId, epoch=$rollbackEpoch, selectionGeneration=$selectionGeneration, " +
+                throw AssertionError("rollback timeout: phase=$rollbackPhase, cleanupJobCompleted=${rollbackJob?.isCompleted}, " +
+                    "cleanupJobCancelled=${rollbackJob?.isCancelled}, id=$rollbackThreadId, epoch=$rollbackEpoch, selectionGeneration=$selectionGeneration, " +
                     "originalId=${rollbackOriginal!!.id}, appendedId=${rollbackAppended!!.id}, originalTurns=${rollbackOriginal.turns.size}, " +
                     "appendedTurns=${rollbackAppended!!.turns.size}, currentId=${current?.id}, currentTurns=${current?.turns?.size}, " +
                     "currentMatchesAppended=${current == rollbackAppended}, askCancelled=${queuedAskJob.isCancelled}, " +
@@ -485,16 +489,43 @@ class SuggestionActions097ViewModelTest {
             entered.forEach { withTimeout(5_000) { it.await() } }
             val send = vm.sendSuggestion(target, option.id, "en")
             withTimeout(10_000) {
-                app.feedRepository.state.first { state ->
+                app.feedRepository.awaitFeedState { state ->
                     state.requestsToday == before.requestsToday + 1 &&
                         state.conversations.singleOrNull()?.turns?.lastOrNull()?.text == option.questionText
                 }
             }
+            val queuedAskJob = privateField("suggestionAskJob") as? kotlinx.coroutines.Job
+            val rollbackThreadId = privateField("pendingSuggestionThreadId") as? String
+            val rollbackOriginal = privateField("pendingSuggestionOriginalThread") as? AiConversation
+            val rollbackAppended = privateField("pendingSuggestionAppendedThread") as? AiConversation
+            val rollbackEpoch = privateField("suggestionRollbackEpoch")
+            val selectionGeneration = privateField("conversationSelectionGeneration")
+            assertNotNull("existing-chat send must own a queued ask job before navigation cancels it", queuedAskJob)
+            // CONVERSATION targets roll back from the captured original/appended snapshots; the
+            // created-thread ID is intentionally null because no new thread was created.
+            assertEquals(originalThread, rollbackOriginal)
+            assertNotNull("the exact appended existing-thread revision must be retained for rollback", rollbackAppended)
             val rollbackJob = vm.cancelConversationOpen()
+            assertTrue("navigation must cancel the captured queued ask job", queuedAskJob!!.isCancelled)
             send.join()
-            withTimeout(10_000) {
-                app.feedRepository.state.first { it.conversations.singleOrNull() == originalThread }
-                rollbackJob?.join()
+            var rollbackPhase = "waiting-for-original-thread"
+            try {
+                withTimeout(10_000) {
+                    app.feedRepository.awaitFeedState { it.conversations.singleOrNull() == originalThread }
+                    rollbackPhase = "original-thread-observed-waiting-for-cleanup-job"
+                    rollbackJob?.join()
+                    rollbackPhase = "cleanup-job-completed"
+                }
+            } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
+                val stateAtTimeout = kotlinx.coroutines.withTimeoutOrNull(1_000) { app.feedRepository.current() }
+                val current = stateAtTimeout?.conversations?.singleOrNull { it.id == originalThread.id }
+                throw AssertionError("existing-chat rollback timeout: phase=$rollbackPhase, cleanupJobCompleted=${rollbackJob?.isCompleted}, " +
+                    "cleanupJobCancelled=${rollbackJob?.isCancelled}, epoch=$rollbackEpoch, selectionGeneration=$selectionGeneration, " +
+                    "createdThreadId=$rollbackThreadId, " +
+                    "originalId=${rollbackOriginal?.id}, originalTurns=${rollbackOriginal?.turns?.size}, appendedTurns=${rollbackAppended?.turns?.size}, " +
+                    "currentId=${current?.id}, currentTurns=${current?.turns?.size}, currentEqualsOriginal=${current == originalThread}, " +
+                    "currentEqualsAppended=${current == rollbackAppended}, askCancelled=${queuedAskJob.isCancelled}, " +
+                    "requestsToday=${stateAtTimeout?.requestsToday ?: "unavailable"}, providerCalls=${app.askedQuestions.size}", timeout)
             }
             assertTrue(app.askedQuestions.isEmpty())
         } finally {
@@ -530,7 +561,7 @@ class SuggestionActions097ViewModelTest {
             entered.forEach { withTimeout(5_000) { it.await() } }
             val send = vm.sendSuggestion(target, option.id, "en")
             withTimeout(10_000) {
-                app.feedRepository.state.first { state ->
+                app.feedRepository.awaitFeedState { state ->
                     state.requestsToday == before.requestsToday + 1 &&
                         state.conversations.singleOrNull()?.turns?.lastOrNull()?.text == option.questionText
                 }
@@ -552,7 +583,7 @@ class SuggestionActions097ViewModelTest {
             releases.forEach { it.complete(Unit) }
             blockers.forEach { it.await() }
         }
-        withTimeout(10_000) { app.feedRepository.state.first { it.conversations.singleOrNull()?.title == "Reviewed backup conversation" } }
+        withTimeout(10_000) { app.feedRepository.awaitFeedState { it.conversations.singleOrNull()?.title == "Reviewed backup conversation" } }
         assertTrue("cancelled pre-dispatch request must never reach the provider", app.askedQuestions.isEmpty())
     }
 
@@ -582,7 +613,7 @@ class SuggestionActions097ViewModelTest {
             val option = vm.suggestionOptions097(target, "en").first()
             val send = vm.sendSuggestion(target, option.id, "en")
             withTimeout(10_000) {
-                app.feedRepository.state.first { state ->
+                app.feedRepository.awaitFeedState { state ->
                     state.requestsToday == before.requestsToday + 1 &&
                         state.conversations.singleOrNull()?.turns?.lastOrNull()?.text == option.questionText
                 }
@@ -593,7 +624,7 @@ class SuggestionActions097ViewModelTest {
             assertTrue(lock.state.value.locked)
             releases.forEach { it.complete(Unit) }
             send.join()
-            withTimeout(10_000) { app.feedRepository.state.first { it.conversations.isEmpty() } }
+            withTimeout(10_000) { app.feedRepository.awaitFeedState { it.conversations.isEmpty() } }
             assertFalse(vm.ui.value.suggestionWorking)
             assertEquals("suggestion_changed", vm.ui.value.error)
             assertTrue(app.askedQuestions.isEmpty())

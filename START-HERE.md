@@ -1,6 +1,6 @@
-# Start here — MeBot 0.9.8 preview
+# Start here — MeBot 0.9.8
 
-**Not yet a public download.** The [published 0.9.7 APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.7/mebot-0.9.7.apk) does not contain the full preview experience. [Version availability](docs/download.html).
+**MeBot 0.9.8 is available now.** [Download the official APK](https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.9.8/mebot-0.9.8.apk) or check Software Updates in your compatible production app. [Installation and verification](docs/download.html).
 
 ## 1. Choose interests
 

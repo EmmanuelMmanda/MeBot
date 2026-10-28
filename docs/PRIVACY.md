@@ -1,6 +1,6 @@
 # Privacy and data
 
-This describes the 0.9.8 preview source, not an available APK. Published 0.9.7 does not include the corrected five-question and Original Read experience. See [release status](INSTALL.md).
+This describes MeBot 0.9.8, the current official release, including five AI-generated story questions and Original Read. See [release status](INSTALL.md).
 
 ## Provider and update privacy
 
@@ -32,7 +32,7 @@ The app relies on Android's application storage boundary for personal JSON and o
 
 ## Suggestions and Original Read
 
-In the 0.9.8 preview, opening the question sheet alone does not call AI or send a question. Explicit generation requests five distinct story-specific suggestions from the selected provider; there is no local offline fallback. Send submits a selected question; Edit prepares a draft. Existing scoped-context and provider billing rules apply. Original Read is AI-authored and labelled with its Created time, separate from publisher dates. Supporting evidence and optional further reading are distinct; neither is permission to broaden personal-context access.
+In MeBot 0.9.8, opening the question sheet alone does not call AI or send a question. Explicit generation requests five distinct story-specific suggestions from the selected provider; there is no local offline fallback. Send submits a selected question; Edit prepares a draft. Existing scoped-context and provider billing rules apply. Original Read is AI-authored and labelled with its Created time, separate from publisher dates. Supporting evidence and optional further reading are distinct; neither is permission to broaden personal-context access.
 
 ## Network and AI processing
 

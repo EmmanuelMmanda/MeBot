@@ -1,8 +1,8 @@
 # Install or update MeBot
 
-**MeBot 0.9.8 is a preview, not a released APK.** Its corrected AI-only five-question and Original Read experience is not included in the currently published 0.9.7 APK. Do not treat source qualification or documentation screenshots as a signed update.
+**MeBot 0.9.8 is the current official Android release.** It includes five AI-generated story questions and Original Read. Existing users can check **You → Software Updates** for a compatible update. Download only the official signed APK; documentation screenshots and locally built source are not signed updates.
 
-The [published 0.9.7 release page](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.7) provides the existing APK and release files. Android 8.0 or later is required. The production package is `mebot.nguli.com`. Review the release details before installing; wait for a qualified 0.9.8 release if you need the preview improvements.
+The [official 0.9.8 release page](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.9.8) provides **mebot-0.9.8.apk** and the release files. Android 8.0 or later is required. The production package is `mebot.nguli.com`. Review the release details and verification information before installing.
 
 ## Compatible production updates
 

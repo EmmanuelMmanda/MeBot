@@ -1,6 +1,6 @@
 # Activity, refresh and resource checks
 
-> Workflow reference for the 0.9.8 source preview, not a public APK availability claim. See [release availability](download.html). Older host screenshots have been removed from this current guide; archived captures remain in their dated folders.
+> Workflow reference for the official 0.9.8 release. See [release availability](download.html). Older host screenshots have been removed from this current guide; archived captures remain in their dated folders.
 
 ## What the top panel means
 
