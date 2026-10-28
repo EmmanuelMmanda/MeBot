@@ -11,11 +11,18 @@ import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.*
 import mebot.nguli.com.feed.auth.*
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
@@ -173,15 +180,44 @@ class ChatGptConnectedJourneyTest {
         openConnectionFromOnboarding()
         compose.onNodeWithTag("chatgpt-retry-account").performClick()
         waitForTag("chatgpt-model-picker")
+        val feedViewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]
+        val discoveriesBeforeContinue = app.providerDiscoveries.size
+        val refreshBeforeContinue = feedViewModel.ui.value.state?.lastAiRefreshMillis ?: 0L
         compose.onNodeWithTag("connection-continue").performScrollTo().performClick()
         waitForText(text(R.string.feed_you_title))
-        compose.waitUntil(15_000) { state().lastAiRefreshMillis > 0 }
+        compose.waitUntil(15_000) {
+            compose.waitForIdle()
+            val refreshed = feedViewModel.ui.value
+            (refreshed.state?.lastAiRefreshMillis ?: 0L) > refreshBeforeContinue &&
+                !refreshed.refreshing && app.providerDiscoveries.size > discoveriesBeforeContinue
+        }
         val approved = ContextEntry(id = "search-interest", text = "Useful open-source tools", scopes = setOf("news"))
         val unshared = ContextEntry(id = "private-interest", text = "An unrelated music interest", scopes = setOf("music"))
         val url = "https://example.com/discovered-tool"
         val item = FeedItem("search-tool", "news", "A discovered open-source tool", "A synthetic source-backed search result.",
             sourceName = "Example documentation", sourceUrl = url, citations = listOf(FeedCitation("Example documentation", url)))
-        runBlocking { app.feedRepository.update { it.copy(context = listOf(approved, unshared)) } }
+        // Keep the Compose test dispatcher live while DataStore serializes this fixture update.
+        // Blocking here can prevent a pending refresh/Main continuation from making progress.
+        val feedRepository = app.feedRepository
+        val contextUpdateScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val contextUpdate = contextUpdateScope.async {
+            withTimeout(10_000) {
+                feedRepository.update { it.copy(context = listOf(approved, unshared)) }
+            }
+        }
+        try {
+            compose.waitUntil(15_000) {
+                compose.waitForIdle()
+                contextUpdate.isCompleted
+            }
+            val persisted = runBlocking { contextUpdate.await() }
+            assertEquals("The fixture context must be durably stored before the search begins",
+                listOf(approved, unshared), persisted.context)
+        } finally {
+            contextUpdate.cancel()
+            contextUpdateScope.cancel()
+            runBlocking { withTimeoutOrNull(1_000) { contextUpdate.join() } }
+        }
         app.searchItems = listOf(item)
         val requestsBeforeSearch = state().requestsToday
         compose.onNodeWithTag("nav-feed").performClick()
