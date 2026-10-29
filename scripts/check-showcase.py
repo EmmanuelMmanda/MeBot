@@ -251,7 +251,7 @@ for path in current_pages:
                         'Recording and live voice', 'Notifications and background updates', 'Export, import, and remove local data',
                         'Software updates', 'Quick recovery checklist'):
             assert section.lower() in manual_html.lower(), section
-        assert 'does not give MeBot your ChatGPT conversations' in manual_html
+        assert 'does <strong>not</strong> give MeBot your ChatGPT conversations' in manual_html
         assert 'USER-GUIDE.md' in (DOCS / 'guide.html').read_text()
         manual_body = re.sub(r'<footer[\s\S]*?</footer>', '', manual_html)
         assert not re.search(r'MeBot\s+0\.\d+', manual_body)
