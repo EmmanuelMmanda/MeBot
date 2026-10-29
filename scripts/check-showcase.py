@@ -18,9 +18,15 @@ published = r.get('status') == 'published' and r.get('apk') is True
 public_releases = [x for x in r.get('releases', []) if x.get('status') == 'published' and x.get('apk') is True]
 official = r if published else public_releases[-1]
 assert official.get('filename') == f"mebot-{official['version']}.apk", 'Latest APK filename must match verified lowercase public asset'
-latest_apk = f"{REPO}/releases/latest/download/{official['filename']}"
+latest_release = f'{REPO}/releases/latest'
 release_base = f"{REPO}/releases/download/{official['tag']}/"
 latest_release = f'{REPO}/releases/latest'
+archived_screens = {
+    'screenshots/v085/modules.png', 'screenshots/v092/connection-sw.png',
+    'screenshots/v085/saved.png', 'screenshots/v082/my-mebot.png',
+    'screenshots/v082/background.png', 'screenshots/v085/notes.png',
+    'screenshots/v082/software-updates.png',
+}
 capture_version = screens[0]['version']
 capture_dir = '/'.join(Path(screens[0]['file']).parts[:2])
 capture_prefix = capture_dir + '/'
@@ -181,43 +187,48 @@ for path in current_pages:
     p = inspect(path)
     assert 'shot-version' not in path.read_text() and 'version-pill' not in path.read_text().lower(), path
     assert not re.search(r'(?i)(debug host capture|static editorial fixture|test-provider|time unavailable)', path.read_text()), path
-    primary = [a for a in p.anchors if a['class'] in ('header-download', 'button') or 'data-release-apk' in a['attrs']]
-    assert any(a['text'].strip() == 'Download latest version' and a['href'] == latest_apk for a in primary), f'Exact primary direct-download CTA missing: {path}'
-    for a in primary:
-        if 'data-release-apk' in a['attrs']:
-            assert a['text'].strip() == 'Download latest version' and a['href'] == latest_apk, (path, a)
+    text = path.read_text()
+    header_download = next((a for a in p.anchors if a['class'] == 'header-download'), None)
+    expected_header = '../download.html' if path.parent.name == 'guides' else 'download.html'
+    assert header_download and header_download['text'].strip() == 'Download latest version' and header_download['href'] == expected_header, f'Safe download-page CTA missing: {path}'
     body = unescape(' '.join(p.body_text))
     footer = unescape(' '.join(p.footer_text))
     technical = unescape(' '.join(p.technical_text))
-    assert f'MeBot {official["version"]}' not in body, f'App version appears in current page body: {path}'
-    assert f'MeBot {official["version"]}' in footer, f'Public release version belongs in the site footer: {path}'
+    assert not re.search(r'MeBot\s+0\.\d+', body), f'App version appears in current page body: {path}'
+    assert not re.search(r'MeBot\s+0\.\d+', footer), f'Static release version appears in footer: {path}'
+    if path.name == 'download.html':
+        button = next((a for a in p.anchors if 'data-release-apk' in a['attrs']), None)
+        assert button and button['text'].strip() == 'Open latest GitHub release' and button['href'] == latest_release
+        assert 'data-release-page' in text and 'data-release-status' in text and 'data-release-error' in text
+        assert 'data-release-info hidden' in text and 'data-release-assets' in text and 'data-release-sha' in text
+        assert 'data-release-version' in text and 'data-release-details-link' in text
+    else:
+        assert not any('data-release-apk' in a['attrs'] for a in p.anchors), f'Direct APK action belongs on the verified download page: {path}'
     assert capture_version not in body or capture_version == official['version'], f'Unpublished capture build leaks into copy: {path}'
     for phrase in ('read what matters', 'read with purpose', 'choose your next step', 'your next reading experience is ready'):
         assert phrase not in body.lower(), (path, phrase)
     for image in p.images:
         if 'screenshots/' in image.get('src', ''):
             assert image.get('alt', '').strip(), (path, image)
-            assert image['src'].startswith(capture_prefix), (path, image['src'])
+            assert image['src'].startswith(capture_prefix) or image['src'] in archived_screens, (path, image['src'])
     for a in p.anchors:
         href = a['href']
-        if '/releases/latest/download/' in href:
-            assert href == latest_apk and a['text'].strip() == 'Download latest version', (path, a)
-        elif '/releases/download/' in href:
-            assert href.startswith(release_base), (path, href)
-            assert href.rsplit('/', 1)[-1] in expected_assets, (path, href)
-            if href.lower().endswith('.apk'):
-                assert href == latest_apk and a['text'].strip() == 'Download latest version', (path, a)
+        assert '/releases/latest/download/' not in href, (path, a)
+        assert '/releases/download/' not in href, (path, a)
     if path.name == 'screenshots.html':
         text = path.read_text()
         assert p.groups == len(screens)
         assert 'id="screen-count" role="status"' in text
         assert 'data-screen-filter="all" aria-pressed="true"' in text
-        assert {im['src'] for im in p.images if 'screenshots/' in im.get('src', '')} == {s['file'] for s in screens}
+        gallery = text.split('id="screen-gallery">', 1)[1].split('</div>', 1)[0]
+        assert set(re.findall(r'<img[^>]+src="([^"]+)"', gallery)) == {s['file'] for s in screens}
+        assert len(re.findall(r'<figure class="shot archived-shot"', text)) == len(archived_screens)
+        assert 'Additional app screens' in text and 'current layouts and labels may differ' in text
         examples = re.findall(r'<figcaption><strong>.*?</strong><span>(?:Example|Sample|Mfano)\b', text, flags=re.I | re.S)
         assert len(examples) == len(screens), 'Every capture needs a concise example caption'
         assert 'screen images are examples' in body.lower() and 'sample content' in body.lower() and 'not a live account result' in body.lower()
     if path.name == 'index.html':
-        for term in ('about you', 'five', 'kiswahili', 'opportunities', 'theme', 'original read'):
+        for term in ('about you', 'modules', 'saved', 'ai connection', 'settings', 'notifications', 'notes', 'software updates', 'five', 'kiswahili', 'opportunities', 'theme', 'original read'):
             assert term in body.lower(), (term, path)
         assert 'read what matters' not in body.lower()
         assert '0.9.9 is available' not in body.lower()
@@ -225,10 +236,25 @@ for path in current_pages:
             assert question in body, question
         assert question_screen['sampleItem'] in body
     if path.name == 'download.html':
-        for field in ('filename', 'sourceFilename', 'verificationFilename', 'sourceCommit', 'sourceTree', 'applicationId', 'certificateSha256', 'sha256', 'releaseNotesFilename', 'checksumFilename', 'releaseMetadataFilename'):
-            assert official[field] in path.read_text(), field
-        assert 'Do not uninstall' in body and 'physical-phone' in body
-        assert f'{official["filename"]}' in technical
+        assert 'Do not uninstall' in body and 'GitHub SHA-256 digest' in body
+        assert 'releases/latest/download/' not in path.read_text()
+        site = (ROOT / 'docs/site.js').read_text()
+        assert 'api.github.com/repos/EmmanuelMmanda/MeBot/releases/latest' in site
+        assert "cache: 'no-store'" in site and "credentials: 'omit'" in site
+        assert "asset.state !== 'uploaded'" in site and 'apk?.digest' in site
+        assert 'data-release-manifest' not in path.read_text() and 'release.json' not in site
+        manual = DOCS / 'user-manual.html'
+        assert manual.is_file()
+        manual_html = manual.read_text()
+        for section in ('Install and start', 'Choose interests and modules', 'Sign in with ChatGPT', 'Add personal context safely',
+                        'Read your feed and Today', 'Save, follow, and star stories', 'Ask questions and use chat',
+                        'Recording and live voice', 'Notifications and background updates', 'Export, import, and remove local data',
+                        'Software updates', 'Quick recovery checklist'):
+            assert section.lower() in manual_html.lower(), section
+        assert 'does not give MeBot your ChatGPT conversations' in manual_html
+        assert 'USER-GUIDE.md' in (DOCS / 'guide.html').read_text()
+        manual_body = re.sub(r'<footer[\s\S]*?</footer>', '', manual_html)
+        assert not re.search(r'MeBot\s+0\.\d+', manual_body)
     if path.name == 'releases.html':
         assert 'latest published' in body.lower()
         assert f'{official["version"]}' not in body
@@ -240,8 +266,8 @@ for path in (ROOT / 'README.md', ROOT / 'START-HERE.md'):
     visible = re.sub(r'\[[^]]*\]\([^)]*\)', lambda m: m.group(0).split(']')[0] + ']', visible)
     assert '0.9.9 is available' not in visible.lower()
     assert f'MeBot {official["version"]}' not in visible
-    assert '[Download latest version]' in text
-    assert latest_apk in text
+    assert latest_release in text and 'docs/download.html' in text
+    assert 'releases/latest/download/' not in text
     for phrase in ('read what matters', 'read with purpose', 'choose your next step', 'time unavailable', 'static editorial fixture', 'debug preview build', 'unpublished app build', 'simulated provider content'):
         assert phrase not in visible.lower(), (path, phrase)
 if capture_version != official['version']:
@@ -295,4 +321,4 @@ assert (DOCS / 'preview-083.html').is_file() and (DOCS / 'preview-084.html').is_
 assert (DOCS / 'preview-085.html').is_file() and (DOCS / 'preview-090.html').is_file()
 assert 'Preview, not a published APK' in (DOCS / 'preview-083.html').read_text()
 assert not re.search(r'/(?:workspace|home/agent|tmp)/', (ROOT / 'README.md').read_text())
-print(f'Showcase checks passed: {len(screens)} native screens, latest direct APK, current copy, app font, source/date provenance and immutable release evidence checked.')
+print(f'Showcase checks passed: {len(screens)} current native screens, safe GitHub release fallback, manual coverage, current copy, app font, source/date provenance and immutable release evidence checked.')
