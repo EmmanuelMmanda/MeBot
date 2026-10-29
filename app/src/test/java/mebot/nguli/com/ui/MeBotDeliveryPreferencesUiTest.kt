@@ -71,6 +71,19 @@ class MeBotDeliveryPreferencesUiTest {
         Dispatchers.resetMain()
     }
 
+    @Test
+    @Config(qualifiers = "w411dp-h1400dp-xhdpi")
+    fun notificationSettingsCaptureShowsTheCurrentPreferenceScreen() {
+        runBlocking { app.feedRepository.update { it.copy(backgroundEnabled = true, notifications = true) } }
+        compose.waitUntil(10_000) {
+            selected.value!!.ui.value.state?.let { it.backgroundEnabled && it.notifications } == true
+        }
+        show()
+        compose.onNodeWithText(compose.activity.getString(R.string.feed_delivery)).assertIsDisplayed()
+        compose.onNodeWithTag("background-notifications").assertIsDisplayed().assertIsOn()
+        screenshot("v099-notifications-settings")
+    }
+
     @Test fun backgroundIsOptionalAndSavingDoesNotChangeTheSharedAiBudget() {
         show()
         compose.onNodeWithTag("delivery-enabled").assertIsOff().performClick()

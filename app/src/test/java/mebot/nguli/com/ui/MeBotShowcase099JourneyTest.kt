@@ -246,12 +246,12 @@ class MeBotShowcase099JourneyTest {
         compose.onNodeWithTag("nav-you").performClick()
         compose.onNodeWithText(text(R.string.preferences_title_083)).performScrollTo().performClick()
         waitForTag("context-name")
-        compose.onNodeWithTag("context-edit-$CONTEXT_ID").performScrollTo().assertTextContains("Kiswahili-first", substring = true)
+        compose.onNodeWithTag("context-edit-$CONTEXT_ID").performScrollTo().assertTextContains("official sources", substring = true)
         compose.onNodeWithTag("context-screen").performScrollToNode(hasText(text(R.string.preferences_title_083)))
         compose.onAllNodesWithText(text(R.string.preferences_title_083)).onFirst().assertIsDisplayed()
         capture("en-about-you")
         compose.onNodeWithTag("context-edit-$CONTEXT_ID").performScrollTo()
-        compose.onNodeWithTag("context-edit-$CONTEXT_ID").assertTextContains("Kiswahili-first", substring = true)
+        compose.onNodeWithTag("context-edit-$CONTEXT_ID").assertTextContains("official sources", substring = true)
         compose.onNodeWithTag("context-scopes-$CONTEXT_ID", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         capture("en-about-you-context-note")
 
@@ -280,7 +280,7 @@ class MeBotShowcase099JourneyTest {
         val items = verifiedPackItems(now, "en") + originalRead
         val context = ContextEntry(
             id = "showcase-practical-tools",
-            text = "Interested in practical digital tools, Kiswahili-first resources, open-source software, and affordable technology for small businesses.",
+            text = "Find practical digital tools and explain terms using official sources.",
             category = "interest",
             scopes = setOf("news", "opportunities", "technology"),
             confirmed = true,

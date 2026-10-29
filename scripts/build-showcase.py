@@ -12,7 +12,6 @@ public_releases=[x for x in r.get('releases',[]) if x.get('status')=='published'
 official=r if r.get('status')=='published' and r.get('apk') is True else public_releases[-1]
 assert official.get('filename')==f'mebot-{official["version"]}.apk', 'Latest APK must match the verified lowercase release asset name'
 artifact_base=f'{REPO}/releases/download/{official["tag"]}/'
-apk=f'{REPO}/releases/latest/download/{official["filename"]}'
 release_url=f'{REPO}/releases/latest'
 size=f'{official["sizeBytes"]/1000000:.1f} MB'
 screens=json.loads((DOCS/'assets/screens.json').read_text())
@@ -46,10 +45,12 @@ for s in screens:
 shell=(DOCS/'index.html').read_text()
 header=shell[shell.index('<a class="skip-link"'):shell.index('<main')]
 header=re.sub(r'<aside class="[^"]*release-hold[^"]*".*?</aside>','',header,flags=re.S).replace(' aria-current="page"','')
-header=re.sub(r'(<a class="header-download")[^>]*>.*?</a>',f'\\1 href="{apk}" data-release-apk>Download latest version</a>',header,flags=re.S)
+header=re.sub(r'<a class="header-download"[^>]*>.*?</a>', '<a class="header-download" href="download.html">Download latest version</a>', header, flags=re.S)
+if 'href="user-manual.html"' not in header:
+    header=header.replace('<a href="guide.html">Guide</a>', '<a href="guide.html">Guide</a><a href="user-manual.html">Manual</a>')
 footer=shell[shell.index('<footer'):]
 footer=footer.replace('A modular Android feed with connected AI and local everyday tools.','A personal Android feed with optional AI and local everyday tools.')
-footer=re.sub(r'MeBot 0\.[0-9.]+(?:-beta\.[0-9]+)?(?: preview)? ·',f'MeBot {official["version"]} ·',footer)
+footer=re.sub(r'<span>MeBot 0\.[0-9.]+(?:-beta\.[0-9]+)?(?: preview)? ·', '<span>MeBot<span data-release-version></span> ·', footer)
 footer=re.sub(r'<span>Native Android host renders.*?<a href="guides/privacy.html#this-website">About this site</a></span>','<span><a href="guides/privacy.html#this-website">Privacy and this website</a></span>',footer)
 footer=re.sub(r'<p class="image-note">.*?</p>','<p class="image-note">Check the linked source for current dates or requirements. <a id="image-original">Open image</a></p>',footer,flags=re.S)
 notice=''
@@ -83,11 +84,99 @@ def theme_examples():
     dark=next(s for s in screens if s.get('theme','').split('·',1)[0].strip().lower()=='dark')
     controls=next(s for s in screens if s['group']=='appearance')
     return [light,dark,controls]
-def download(label='Download latest version'): return f'<a class="button" data-release-apk href="{apk}">{label}</a>'
+def download(label='Download latest version'):
+    return f'<a class="button" href="download.html">{label}</a>'
+def markdown_inline(source):
+    tokens=re.split(r'(\[[^\]]+\]\([^)]+\)|\*\*.+?\*\*|\x60[^\x60]+\x60)',source)
+    out=[]
+    for token in tokens:
+        if token.startswith('**') and token.endswith('**'):
+            out.append('<strong>'+esc(token[2:-2])+'</strong>')
+        elif token.startswith(chr(96)) and token.endswith(chr(96)):
+            out.append('<code>'+esc(token[1:-1])+'</code>')
+        elif token.startswith('[') and '](' in token and token.endswith(')'):
+            label,url=token[1:-1].split('](',1)
+            if not url.startswith(('https://','http://','#','../','./')) and not re.match(r'^[A-Za-z0-9_./-]+(?:#[A-Za-z0-9_-]+)?$',url):
+                out.append(esc(token))
+            else:
+                out.append(f'<a href="{esc(url,quote=True)}">{esc(label)}</a>')
+        else:
+            out.append(esc(token))
+    return ''.join(out)
+def render_manual(source):
+    lines=source.splitlines()
+    out=[]; paragraph=[]; list_kind=None; section_open=False; in_code=False; code=[]
+    def flush_paragraph():
+        nonlocal paragraph
+        if paragraph:
+            out.append('<p>'+markdown_inline(' '.join(x.strip() for x in paragraph))+'</p>')
+            paragraph=[]
+    def flush_list():
+        nonlocal list_kind
+        if list_kind:
+            out.append('</'+list_kind+'>')
+            list_kind=None
+    for raw in lines:
+        line=raw.rstrip()
+        anchor=re.fullmatch(r'<a id="([a-z0-9-]+)"></a>',line)
+        if anchor:
+            flush_paragraph(); flush_list()
+            out.append(f'<a id="{anchor.group(1)}"></a>')
+            continue
+        if line.startswith(chr(96)*3):
+            flush_paragraph(); flush_list()
+            if in_code:
+                out.append('<pre><code>'+esc('\n'.join(code))+'</code></pre>')
+                code=[]; in_code=False
+            else: in_code=True
+            continue
+        if in_code:
+            code.append(line); continue
+        if line.startswith('# '):
+            continue
+        if line.startswith('## '):
+            flush_paragraph(); flush_list()
+            if section_open: out.append('</section>')
+            title=line[3:].strip()
+            slug=re.sub(r'^\d+\.\s*','',title).lower()
+            slug=re.sub(r'[^a-z0-9]+','-',slug).strip('-')
+            out.append(f'<section class="article-section" id="{slug}"><h2>{markdown_inline(title)}</h2>')
+            section_open=True
+            continue
+        if line.startswith('### '):
+            flush_paragraph(); flush_list()
+            title=line[4:].strip()
+            out.append('<h3>'+markdown_inline(title)+'</h3>')
+            continue
+        if line.startswith('> '):
+            flush_paragraph(); flush_list()
+            out.append('<aside class="beta-note">'+markdown_inline(line[2:])+'</aside>')
+            continue
+        match=re.match(r'^\d+\.\s+(.*)$',line)
+        kind='ol' if match else None
+        if match is None:
+            match=re.match(r'^-\s+(.*)$',line)
+            kind='ul' if match else None
+        if match:
+            flush_paragraph()
+            if list_kind!=kind:
+                flush_list(); out.append('<'+kind+'>'); list_kind=kind
+            out.append('<li>'+markdown_inline(match.group(1))+'</li>')
+            continue
+        flush_list()
+        if not line.strip():
+            flush_paragraph()
+        else:
+            paragraph.append(line)
+    flush_paragraph(); flush_list()
+    if section_open: out.append('</section>')
+    return ''.join(out)
 def page(name,title,desc,body,current=None):
     nav=header.replace(f'href="{current}"',f'href="{current}" aria-current="page"',1) if current else header
+    download_href='../download.html' if name.startswith('guides/') else 'download.html'
+    nav=re.sub(r'<a class="header-download"[^>]*>.*?</a>', f'<a class="header-download" href="{download_href}">Download latest version</a>', nav, flags=re.S)
     og=screens[0]['file'] if screens else 'assets/mebot.svg'
-    head=f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{esc(title)} · MeBot</title><meta name="description" content="{esc(desc,quote=True)}"><meta name="theme-color" content="#f7f8fa"><meta name="color-scheme" content="light dark"><meta name="referrer" content="strict-origin-when-cross-origin"><link rel="canonical" href="{SITE}{name}"><link rel="icon" href="assets/mebot.svg" type="image/svg+xml"><link rel="preload" href="assets/figtree.ttf" as="font" type="font/ttf" crossorigin><meta property="og:title" content="{esc(title,quote=True)}"><meta property="og:image" content="{SITE}{og}"><meta property="og:image:alt" content="{esc(screens[0]["alt"] if screens else "MeBot robot mark",quote=True)}"><link rel="stylesheet" href="site.css"><link rel="stylesheet" href="showcase.css"><script src="site.js" defer></script><script src="showcase.js" defer></script></head><body data-release-manifest="assets/release.json">'
+    head=f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{esc(title)} · MeBot</title><meta name="description" content="{esc(desc,quote=True)}"><meta name="theme-color" content="#f7f8fa"><meta name="color-scheme" content="light dark"><meta name="referrer" content="strict-origin-when-cross-origin"><link rel="canonical" href="{SITE}{name}"><link rel="icon" href="assets/mebot.svg" type="image/svg+xml"><link rel="preload" href="assets/figtree.ttf" as="font" type="font/ttf" crossorigin><meta property="og:title" content="{esc(title,quote=True)}"><meta property="og:image" content="{SITE}{og}"><meta property="og:image:alt" content="{esc(screens[0]["alt"] if screens else "MeBot robot mark",quote=True)}"><link rel="stylesheet" href="site.css"><link rel="stylesheet" href="showcase.css"><script src="site.js" defer></script><script src="showcase.js" defer></script></head><body{(' data-release-page' if name=='download.html' else '')}>'
     (DOCS/name).write_text(head+nav+notice+'<main id="main">'+body+'</main>'+footer)
 def pick(*groups,limit=3):
     found=[]
@@ -110,25 +199,22 @@ page('index.html','MeBot — personal reading and everyday tools','Follow topics
 <section class="section wrap hairline"><div class="section-heading"><div><p class="eyebrow">For You · Original Read</p><h2>Stories selected for your interests.</h2><p>{reads}</p></div><a class="text-link" href="screenshots.html">See app screens</a></div>{gallery(pick('feed','reads',limit=1))}</section>
 <section class="section wrap hairline"><div class="section-heading"><div><p class="eyebrow">Grants · jobs · contracts · scholarships</p><h2>Check dates and deadlines at the source.</h2><p>{opportunities}</p></div></div>{gallery(opportunity_screens())}</section>
 <section class="section wrap hairline"><div class="section-heading"><div><p class="eyebrow">About You</p><h2>Choose what personal context to use.</h2><p>{about_you}</p></div></div>{gallery(selected('about'))}</section>
+<section class="section wrap hairline" id="manual-coverage"><div class="section-heading"><div><p class="eyebrow">Using MeBot</p><h2>Find a task in the complete manual.</h2><p>The manual covers modules and module selection, the AI connection, Saved, the Me screen, settings, notifications, notes, and software updates.</p></div><a class="text-link" href="user-manual.html">Read the complete manual</a></div></section>
 <section class="section wrap hairline" id="story-questions"><div class="section-heading"><div><p class="eyebrow">Story questions</p><h2>Ask your selected AI about a story.</h2><p>{experience}</p></div></div><p class="micro">Example questions for {esc(question_sample)}. Suggestions depend on that story and the AI connection you choose.</p>{question_examples}{gallery(selected('ask'))}<a class="text-link" href="guides/feed-and-ai.html#story-questions">How story questions work</a></section>
 <section class="section wrap hairline"><div class="section-heading"><div><p class="eyebrow">Language · theme · colour</p><h2>Set your language, colour, and page style.</h2><p>{appearance}</p><p lang="sw">Chagua Kiswahili au English chini ya Wewe → Binafsisha → Lugha. Kwenye Mwonekano, chagua mandhari ya mfumo, mwanga au giza, rangi kuu na mtindo wa kurasa.</p></div></div>{gallery(theme_examples())}<a class="text-link" href="guides/appearance.html">Language and appearance settings</a></section>
 <section class="section wrap hairline"><h2>Alarms, check-ins, and Focus</h2><p>Save a story, set an alarm, record a Daily Check-in, or start a Focus session. These local tools work without connecting an AI provider.</p>{gallery(selected('tools'))}</section>
 <section class="next-step wrap"><div><h2>Download the latest version.</h2><p>{hero_status}</p></div><div class="actions">{download()}<a class="button secondary" href="download.html">File details</a></div></section>''','index.html')
 groups=list(dict.fromkeys(s['group'] for s in screens)); group_titles={'feed':'For You','read':'Stories','opportunity':'Opportunities','ask':'AI questions','reads':'AI Reads and Today','about':'About You','appearance':'Languages and themes','theme':'Languages and themes','tools':'Everyday tools','start':'Getting started','organize':'Your preferences'}
 filters=''.join(f'<button type="button" data-screen-filter="{g}" aria-pressed="{str(g=="all").lower()}">{"All screens" if g=="all" else group_titles.get(g,g.title())}</button>' for g in ['all',*groups])
-release_status='Only the latest published release is available from this page.'
+release_status='The latest published release is checked directly on GitHub.'
 gallery_dir=capture_prefix.rstrip('/')
 capture_record=DOCS/gallery_dir/'README.md'
 assert capture_record.is_file(), 'A technical capture record with source/date/fixture provenance is required before rendering current pages'
 page('screenshots.html','MeBot screens','See personal reading, dated opportunities, story questions, About You, appearance controls, English and Kiswahili, and light and dark themes.',f'<section class="section wrap"><p class="eyebrow">English · Kiswahili · light · dark</p><h1>MeBot screens</h1><p class="lead">Examples show how to read a story, check its source, set preferences, and ask a follow-up question. {sample_note}</p><div class="screen-filters js-only" role="group" aria-label="Filter app screens">{filters}</div><p id="screen-count" role="status" class="micro">{len(screens)} screens</p><div class="screen-grid" id="screen-gallery">{"".join(shot(s) for s in screens)}</div></section><section class="section wrap hairline" id="image-notes"><h2>Check dates and requirements</h2><p>Dates and deadlines can change. Open the linked official source before acting.</p><p>{release_status} Screen examples do not show a signed-in provider account or live AI response.</p><a href="{gallery_dir}/README.md">Screen sources and capture notes</a></section>','screenshots.html')
-resources=[('Matching source','sourceFilename'),('Technical report · prepublication snapshot','verificationFilename'),('Release notes','releaseNotesFilename'),('SHA-256 checksums','checksumFilename'),('Release metadata','releaseMetadataFilename')]
-report_note='The verification report records release checks and their limits. The identity receipt contains the matching published artifact details.'
-resource_html=''.join(f'<div class="download-row"><div><strong>{title}</strong><p>{report_note if key=="verificationFilename" else "File from the latest published release."}</p></div><a href="{artifact_base}{official[key]}">Download <span class="sr-only">{title}</span></a></div>' for title,key in resources)
-download_lead='Download the latest public Android app. Review the matching source, release notes, checksums, and verification record below.'
-download_status='<h2>Update in the app</h2><p>On a compatible installation, open You → Software Updates to check for the latest release. Review the download, then approve Android’s installation prompt.</p><a href="guides/install.html">Read the installation guide</a>'
-release_benefit='<strong>Latest public release.</strong> This page lists only the artifacts published for the current app.'
-page('download.html','Download MeBot','Download the latest published MeBot Android app and its matching source, checksums, release notes, and verification record.',f'''<div class="release-page"><h1>Download MeBot</h1><p class="lead">{download_lead}</p><aside class="beta-note">{release_benefit}</aside><section class="release-card"><span data-release-status>Latest public Android release</span><h2>Android app</h2><div class="actions">{download()}<a class="button secondary" href="{release_url}">Release details</a></div><p>{identity}</p><p>Android {official['minimumAndroid']}+ · <span data-release-size>{size}</span>. JavaScript is not required.</p><details class="release-metadata"><summary>File identity and verification</summary><p>Package <code>{official['applicationId']}</code> · version code {official['versionCode']}.</p><p><code data-release-filename>{official['filename']}</code></p><p>Published source <code>{official['sourceCommit']}</code> · tree <code>{official['sourceTree']}</code>.</p><p>Signer SHA-256 <code>{official['certificateSha256']}</code>.</p><div class="code-block"><div class="code-toolbar"><span>APK SHA-256</span><button type="button" class="copy-button js-only" data-copy-target="apk-checksum">Copy checksum</button></div><pre id="apk-checksum" data-release-sha tabindex="0">{official['sha256']}</pre></div></details></section><section class="article-section" id="resources"><h2>Release files</h2><div class="download-list">{resource_html}</div><p><a href="{official["integrityFile"]}">Published identity and verification receipt</a></p></section><section class="article-section">{download_status}</section><section class="article-section" id="limits"><h2>What the verification covers</h2><p>Automated tests and host screenshots do not establish live provider access, physical-phone playback, biometric behavior, OEM file-picker support, or overnight alarms. Test device-specific features before relying on them.</p></section></div>''','download.html')
-page('releases.html','MeBot release files','Download the latest published MeBot Android app and inspect its matching file identity and verification record.',f'<section class="section wrap"><h1>Latest Android release</h1><p class="lead">Download the latest published app or review the identity and verification details for this file.</p><div class="actions">{download()}<a class="button secondary" href="download.html">File identity and checksums</a></div><p><a href="{release_url}">Open the latest GitHub release files</a></p></section>','releases.html')
+release_status='The latest published release is checked directly on GitHub.'
+download_body=f'''<div class="release-page"><h1>Download MeBot</h1><p class="lead">Check the current GitHub release before downloading. This page shows release information and files returned by GitHub; it does not substitute an older APK when verification fails.</p><aside class="beta-note"><strong>Current release status</strong><p data-release-status role="status" aria-live="polite">Checking GitHub for the latest published Android release…</p><div data-release-error hidden role="alert"></div><noscript><p>JavaScript is off, so this page cannot verify the APK asset. Open the latest GitHub release to review its published files.</p></noscript></aside><section class="release-card"><h2>Android app</h2><div class="actions"><a class="button" data-release-apk href="{release_url}">Open latest GitHub release</a><a class="button secondary" data-release-details-link href="{release_url}">Release details</a></div><p>When GitHub returns a published stable release with a matching uploaded APK, this page enables its direct GitHub download. It displays the APK size and any SHA-256 digest returned by GitHub. If the digest is absent, the page says so and does not claim to have checked the APK bytes.</p><p>Install a compatible update over your existing app. Do not uninstall or clear app data as an update step. If Android reports a signing conflict, check the installation guide before changing installations.</p></section><section class="article-section" data-release-info hidden><h2 data-release-name>Latest Android release</h2><p>Published <time data-release-date></time> · <span data-release-size></span></p><div class="release-metadata"><strong>GitHub SHA-256 digest</strong><p><code data-release-sha></code></p></div><h3>Release notes</h3><p class="release-note-copy" data-release-notes></p><h3>Release files</h3><div class="download-list" data-release-assets><p>Release files will appear after the latest release details load from GitHub.</p></div></section><section class="article-section"><h2>Update in the app</h2><p>On a compatible installation, open You → Software Updates and choose Check now. Review the download, then approve Android’s installation prompt.</p><a href="guides/install.html">Read the installation guide</a></section><section class="article-section" id="limits"><h2>What the verification covers</h2><p>The page validates GitHub’s published release, matching APK asset name, uploaded state, positive size, and official release and download URLs. It displays a GitHub SHA-256 digest when one is supplied; it does not hash the downloaded APK itself. In-app update checks also validate the installed package and signing certificate before installation. Automated tests and host screenshots do not establish live provider access, physical-phone playback, biometric behavior, OEM file-picker support, or overnight alarms.</p></section><p><a href="{release_url}">Open GitHub Releases</a> · <a href="user-manual.html">Read the complete user manual</a></p></div>'''
+page('download.html','Download MeBot','Check the latest published Android release on GitHub and download its matching APK from the official release.',download_body,'download.html')
+page('releases.html','MeBot release files','Open the latest GitHub release or review how MeBot verifies compatible updates.',f'<section class="section wrap"><h1>Latest Android release</h1><p class="lead">{release_status} The download page checks the published APK asset and shows current release information.</p><div class="actions"><a class="button" href="download.html">Download latest version</a><a class="button secondary" href="{release_url}">Open GitHub release files</a></div></section>','releases.html')
 steps=[('Choose topics','Select the updates you want and narrow them by interest or location.','guides/install.html',None),('Set About You',about_you,'guides/personal-context.html#after-import',None),('Read and check sources',opportunities,'guides/feed-and-ai.html', 'opportunity'),('Ask a follow-up',experience,'guides/feed-and-ai.html#story-questions','ask'),('Open an Original Read',reads,'guides/feed-and-ai.html','reads'),('Choose language and appearance',appearance,'guides/appearance.html','theme'),('Use local tools','Set an alarm or start a Focus session; local tools remain available without an AI connection.','guides/background-and-data.html','tools')]
 controls=''.join(f'<button type="button" data-tour-step="{i}" aria-pressed="{str(i==0).lower()}" aria-controls="tour-panel-{i}"><span aria-hidden="true">{i+1:02d}</span>{title}</button>' for i,(title,*_) in enumerate(steps))
 panels=''.join(f'<section class="tour-panel" id="tour-panel-{i}" aria-labelledby="tour-heading-{i}"><div class="tour-copy"><p class="eyebrow">Step {i+1} of {len(steps)}</p><h2 id="tour-heading-{i}">{title}</h2><p class="lead">{body}</p><a class="text-link" href="{guide}">Open the guide →</a></div>{shot((theme_examples()[1] if group=="theme" else selected(group,1)[0])) if group and (group=="theme" or selected(group,1)) else ""}</section>' for i,(title,body,guide,group) in enumerate(steps))
@@ -156,7 +242,7 @@ for i in range(0,len(screens),3):
     ss=screens[i:i+3]; image_rows.append('<p align="center">'+'\n'.join(f'<a href="docs/{s["file"]}"><img src="docs/{s["file"]}" width="225" alt="{esc(s["alt"],quote=True)}"></a>' for s in ss)+'</p>\n\n'+' · '.join(f'**{s["title"]}**' for s in ss))
 (ROOT/'README.md').write_text(f'''<div align="center"><img src="docs/assets/mebot.svg" width="64" height="64" alt="MeBot robot logo"><h1>MeBot</h1><p>A personal feed for stories, opportunities and everyday tools.</p><p>Android · English · Kiswahili · Apache 2.0</p></div>
 
-[Download latest version]({apk}) · [Installation guide](docs/download.html) · [App screens](docs/screenshots.html)
+[Latest published GitHub release]({release_url}) · [Installation guide](docs/download.html) · [App screens](docs/screenshots.html)
 
 ## Personal reading and story questions
 
@@ -182,10 +268,13 @@ MeBot also includes Saved reading, Focus, Daily Check-in and alarms. Local tools
 
 ## Install and verify
 
-[Download latest version]({apk}) · [Latest release files]({release_url}) · [Start here](START-HERE.md) · [User guide](docs/USER-GUIDE.md).
+[Download page](docs/download.html) · [Latest published GitHub release]({release_url}) · [Start here](START-HERE.md) · [Complete user manual](docs/user-manual.html).
 
 {identity}
 
 {tail}''')
-(ROOT/'START-HERE.md').write_text(f'# Start here\n\n[Download latest version]({apk}) · [Installation guide](docs/download.html).\n\n'+'\n\n'.join(f'## {i+1}. {title}\n\n{body}\n\n[Open the guide](docs/{guide}).' for i,(title,body,guide,_) in enumerate(steps))+f'\n\n{identity}\n\n[App screens](docs/screenshots.html) · [User guide](docs/USER-GUIDE.md).\n')
+(ROOT/'START-HERE.md').write_text(f'# Start here\n\n[Latest published GitHub release]({release_url}) · [Installation guide](docs/download.html).\n\n'+'\n\n'.join(f'## {i+1}. {title}\n\n{body}\n\n[Open the guide](docs/{guide}).' for i,(title,body,guide,_) in enumerate(steps))+f'\n\n{identity}\n\n[App screens](docs/screenshots.html) · [Complete user manual](docs/user-manual.html).\n')
+manual_source=(DOCS/'USER-GUIDE.md').read_text()
+manual_body='<div class="release-page manual-page"><h1>Complete MeBot user manual</h1><p class="lead">A task-based guide to setup, reading, personalization, AI, local tools, and recovery.</p>'+render_manual(manual_source)+'</div>'
+page('user-manual.html','Complete MeBot user manual','A task-based end-to-end manual for MeBot setup, feeds, AI connections, personal context, saved items, tools, data and updates.',manual_body,'user-manual.html')
 print(f'Rendered the latest published release presentation with {len(screens)} native captures; historical pages and release records untouched.')
