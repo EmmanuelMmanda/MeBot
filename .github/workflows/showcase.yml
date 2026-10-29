@@ -20,6 +20,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Build and validate the complete product site
         run: |
+          python3 scripts/prepare-build.py
           python3 scripts/build-showcase.py
           git diff --exit-code -- README.md START-HERE.md docs/
           python3 scripts/check-docs.py

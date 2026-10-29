@@ -1,53 +1,17 @@
-# MeBot documentation assets
+# Website assets and release data
 
-The public documentation serves Android users who want to install MeBot, connect their own AI account, choose relevant modules, and understand their data. Its visual direction follows the app: locally hosted Figtree, raspberry actions, calm neutral surfaces, generous reading margins, and a clear Feed-first hierarchy. The primary website journey is Home → Download/first launch → AI connection → reviewed context → modules. Individual guides retain a searchable directory, section anchors, and previous/next navigation.
+The public site guides Android users through installation, source checking, AI connections, About You preferences, language, appearance, and local tools. Typography uses the exact Figtree variable font bundled by the app. `figtree.ttf` is copied without modification from `app/src/main/res/font/figtree.ttf`; its SIL Open Font License is retained in `../FONT-LICENSE.txt` and attribution is in the repository `NOTICE`.
 
-`mebot.svg` reproduces the existing code-drawn `MeBotMark` geometry. `figtree.ttf` is copied from the Android resource; its SIL Open Font License is in `../FONT-LICENSE.txt`. Screenshots are linked directly from `../screenshots` and remain unaltered. They are native Android host renders with explicit test fixtures, not invented interface mockups or evidence of a live account. See `../screenshots/README.md` for provenance and third-party imagery rights.
+The site is static HTML, CSS, and JavaScript. `site.css` loads the local font for every page, including guides under `guides/`. Captures are linked directly from the current showcase directory and are not cropped or retouched. The screenshot gallery's linked capture record keeps build, source, fixture, locale, theme, and date provenance; public-facing captions stay concise and do not imply a live provider account.
 
-The site has no framework, tracker, CDN, build step, or remote font dependency. `site.js` supplies local appearance preferences, mobile navigation, directory filtering, copy actions, image enlargement, section tracking, and release metadata. Native links and guide content remain usable without JavaScript. Light/dark/system choices, visible focus, keyboard navigation, flexible layouts, and reduced-motion support are shared across pages.
+## Published download source
 
-## Publishing a clean release
+`release.json` is machine-readable publication evidence, not a customer-facing release announcement. The site and checks use the latest release only when it is confirmed published and its APK asset, checksums, source, and integrity receipt agree. If a newer candidate is pending, customer pages continue to describe the latest published release; they do not offer the candidate or an older download as an update fallback.
 
-`release.json` is the only download-availability switch. Keep `status` as `pending` until the corresponding clean public release and its assets are verified on GitHub. The pages retain their release-directory and source-build links while pending or when local metadata cannot load. The site derives standard GitHub URLs from validated version/tag values; it never infers publication from an APK stored elsewhere.
+The primary button links directly to GitHub's latest-release asset path using the exact APK filename from the verified public record. Do not guess asset case or infer an APK from a local build. Run `scripts/check-showcase.py` after metadata or site changes; it verifies release identity and asset integrity against the preserved release receipts.
 
-The top-level record describes the latest release. `releases` contains each historical directory entry. Set the top-level and matching entry statuses independently to `published` only after verifying their public availability. Artifact type and publication status are separate: `apk: true` means an APK is prepared for that release, not that it has already been published. Version 0.2.0 has `apk: false` and is source-only; 0.1.0 is history without a recovered public artifact and has no invented manifest entry.
+The top-level release record identifies the current public download, while `releases` retains the release history. Existing release manifests, checksum records, source archives, verification receipts, and dated capture records are historical evidence and should not be rewritten to match current copy. Update the gallery catalog only after capture review and keep the original screenshot bytes unchanged.
 
-```json
-{
-  "schemaVersion": 1,
-  "version": "0.6.1",
-  "tag": "v0.6.1",
-  "status": "pending",
-  "filename": "mebot-0.6.1.apk",
-  "sourceCommit": "40-character source commit",
-  "minimumAndroid": "8.0",
-  "sha256": "APK SHA-256",
-  "sizeBytes": 15774571,
-  "sourceFilename": "mebot-0.6.1-source.zip",
-  "sourceSha256": "matching source archive SHA-256",
-  "sourceSizeBytes": 7640220,
-  "releases": [
-    {
-      "version": "0.6.1",
-      "tag": "v0.6.1",
-      "status": "pending",
-      "apk": true,
-      "filename": "mebot-0.6.1.apk",
-      "sourceCommit": "40-character source commit",
-      "sha256": "APK SHA-256",
-      "sizeBytes": 15774571,
-      "sourceFilename": "mebot-0.6.1-source.zip",
-      "sourceSha256": "matching source archive SHA-256",
-      "sourceSizeBytes": 7640220
-    }
-  ]
-}
-```
-
-`filename`, APK `sha256`, and APK `sizeBytes` are null for a source-only release. URLs use `https://github.com/EmmanuelMmanda/MeBot/releases/download/vVERSION/mebot-VERSION.apk` and `mebot-VERSION-source.zip`; source downloads are the explicit matching release assets rather than an unrelated branch archive. Checksums and source commits come from the reviewed public publication manifest. No private-build checksum or personal profile data is copied into this file.
-
-The runtime also validates artifact metadata before revealing downloads: expected filenames, 64-hex SHA-256 hashes, positive safe-integer byte sizes, and a 40-hex source commit. A malformed published record retains the safe GitHub-directory fallback and shows the metadata error notice. Source-only entries require valid source metadata but do not require an APK hash or size.
-
-Guide content and navigation are plain static HTML, with no generator required for hosting or editing. Keep navigation, guide search keywords, section anchors, and previous/next links consistent when adding a page. Relative links within this site remain under `/MeBot/`; repository source/policy links use the appropriate GitHub branch instead of escaping the Pages site root.
+Guide pages are static HTML. Keep local links under the project-site root, preserve accessible navigation and headings, and make any current-facing feature description match the latest public app. Use specific actions rather than slogans. Avoid release numbers in current body copy; the version belongs in the site footer and technical release identity.
 
 Do not put personal context, owner account details, API keys, signing secrets, or a personalized APK in this directory.
