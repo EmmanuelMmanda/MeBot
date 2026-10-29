@@ -45,7 +45,7 @@ Screen images are examples. Any AI response shown uses sample content, not a liv
 
 ## Install and verify
 
-[Latest published GitHub release](https://github.com/EmmanuelMmanda/MeBot/releases/latest) · [Start here](START-HERE.md) · [Complete user manual](docs/user-manual.html).
+[Download page](docs/download.html) · [Latest published GitHub release](https://github.com/EmmanuelMmanda/MeBot/releases/latest) · [Start here](START-HERE.md) · [Complete user manual](docs/user-manual.html).
 
 Install a compatible update over your existing app. Do not uninstall or clear app data as an update step. If Android reports a signing conflict, check the installation guide before changing installations.
 
