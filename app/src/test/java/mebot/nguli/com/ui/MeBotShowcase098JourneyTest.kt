@@ -72,11 +72,15 @@ class MeBotShowcase098JourneyTest {
         setAppearance(language = "sw", theme = "light", accent = "sage", skin = "paper", capturedAt = now)
         compose.onNodeWithTag("filter-today").performScrollTo().performClick()
         val viewModel = ViewModelProvider(compose.activity)[FeedViewModel::class.java]
-        // Localising item text invalidates selection revisions. Wait for the same emitted
-        // projection used by the UI, not merely non-empty IDs from the previous language.
+        val localizedItems = runBlocking { app.feedRepository.current() }.items
+        // FeedViewModel observes DataStore on Main and FeedEdition invalidates its projection
+        // from a Compose effect. Drain that queue and require the localized revision before
+        // accepting the selection, so an earlier English record cannot satisfy this wait.
         compose.waitUntil(15_000) {
+            compose.waitForIdle()
             val renderedState = viewModel.ui.value.state ?: return@waitUntil false
-            PersonalDailySelectionLogic098.resolve(renderedState, now).isNotEmpty()
+            renderedState.items == localizedItems &&
+                PersonalDailySelectionLogic098.resolve(renderedState, now).isNotEmpty()
         }
         compose.onNodeWithTag("filter-today").assertIsSelected()
         scrollFeedTo("today-personal-selection-heading")

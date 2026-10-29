@@ -154,7 +154,11 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     ))
     val ui = _ui.asStateFlow()
     private var refreshJob: Job? = null
+    private val dailySelectionLock098 = Any()
     private var dailySelectionJob098: Job? = null
+    private var dailySelectionPending098 = false
+    /** Deterministic test barrier for the ensure/coalescing regression; production leaves it inert. */
+    internal var afterPersonalDailySelectionCommit098: (suspend () -> Unit)? = null
     private var askJob: Job? = null
     private val suggestionActionLock = Any()
     private val suggestionGenerationLock = Any()
@@ -218,7 +222,10 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     init {
         viewModelScope.launch {
             app.appLock.state.collect { protection ->
-                if (protection.locked) cancelActiveSuggestionGeneration097()
+                if (protection.locked) {
+                    cancelPersonalDailySelectionEnsure098()
+                    cancelActiveSuggestionGeneration097()
+                }
             }
         }
         viewModelScope.launch { engine.progress.collect { p -> _ui.update { it.copy(refreshProgress=p) } } }
@@ -694,9 +701,75 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     }
     /** Local projection only: no provider call, quota reservation, or source timestamp mutation. */
     fun ensurePersonalDailySelection098() {
-        if (dailySelectionJob098?.isActive == true || app.appLock.state.value.locked) return
-        dailySelectionJob098 = work {
-            repository.update { state -> PersonalDailySelectionLogic098.ensure(state, System.currentTimeMillis()) }
+        if (app.appLock.state.value.locked) return
+        synchronized(dailySelectionLock098) {
+            dailySelectionPending098 = true
+            if (dailySelectionJob098?.isActive == true) return
+            val job = viewModelScope.launch(start = CoroutineStart.LAZY) { drainPersonalDailySelectionEnsures098() }
+            dailySelectionJob098 = job
+            job.start()
+        }
+    }
+
+    /** Coalesces UI invalidations that arrive while a prior DataStore projection is finishing. */
+    private suspend fun drainPersonalDailySelectionEnsures098() {
+        val owner = kotlinx.coroutines.currentCoroutineContext()[Job]
+        try {
+            while (true) {
+                val shouldEnsure = synchronized(dailySelectionLock098) {
+                    when {
+                        dailySelectionJob098 !== owner -> false
+                        app.appLock.state.value.locked -> {
+                            dailySelectionPending098 = false
+                            dailySelectionJob098 = null
+                            false
+                        }
+                        dailySelectionPending098 -> {
+                            dailySelectionPending098 = false
+                            true
+                        }
+                        else -> {
+                            // Clear atomically with the empty-queue check so a concurrent request
+                            // either becomes pending for this worker or starts a new one.
+                            dailySelectionJob098 = null
+                            false
+                        }
+                    }
+                }
+                if (!shouldEnsure) return
+                repository.update { state ->
+                    if (app.appLock.state.value.locked) state
+                    else PersonalDailySelectionLogic098.ensure(state, System.currentTimeMillis())
+                }
+                afterPersonalDailySelectionCommit098?.invoke()
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            synchronized(dailySelectionLock098) {
+                if (dailySelectionJob098 === owner) {
+                    // Detach this failed batch atomically; a new request after this point must
+                    // start its own worker and must not be erased by the old worker's finally.
+                    dailySelectionPending098 = false
+                    dailySelectionJob098 = null
+                    _ui.update { it.copy(error = failureCode(error, "storage_error")) }
+                }
+            }
+        } finally {
+            synchronized(dailySelectionLock098) {
+                if (dailySelectionJob098 === owner) {
+                    dailySelectionPending098 = false
+                    dailySelectionJob098 = null
+                }
+            }
+        }
+    }
+
+    private fun cancelPersonalDailySelectionEnsure098() {
+        synchronized(dailySelectionLock098) {
+            dailySelectionPending098 = false
+            dailySelectionJob098?.cancel()
+            dailySelectionJob098 = null
         }
     }
     fun refresh() = refreshInternal(manual = true)
@@ -2438,6 +2511,7 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     }
     fun reset(): Job {
         // Invalidate staged objects synchronously; a later confirmation must not resurrect erased data.
+        cancelPersonalDailySelectionEnsure098()
         cancelImport()
         suggestionRollbackEpoch++
         clearAnswerInternal(suppressSuggestionRollback = true)

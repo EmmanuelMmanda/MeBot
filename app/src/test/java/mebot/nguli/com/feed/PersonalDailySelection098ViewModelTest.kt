@@ -166,13 +166,77 @@ class PersonalDailySelection098ViewModelTest {
         }
     }
 
-    @Test fun resetInvalidatesDerivedDailySelectionWithoutRefreshingOrDeletingViaSelectionLogic() = runBlocking {
+    @Test fun invalidationArrivingBeforeEnsureJobCompletesIsCoalescedAndRecomputedFromLatestFeed() = runBlocking {
+        val now = System.currentTimeMillis()
+        val firstCommit = CompletableDeferred<Unit>()
+        val latestCommitCallback = CompletableDeferred<Unit>()
+        val releaseFirstJob = CompletableDeferred<Unit>()
+        val pauseCount = AtomicInteger()
+        vm.afterPersonalDailySelectionCommit098 = {
+            if (pauseCount.getAndIncrement() == 0) {
+                firstCommit.complete(Unit)
+                releaseFirstJob.await()
+            } else latestCommitCallback.complete(Unit)
+        }
+
         vm.ensurePersonalDailySelection098()
-        val selected = withTimeout(10_000) { app.feedRepository.awaitFeedState { it.personalDailySelection098 != null } }
+        withTimeout(10_000) { firstCommit.await() }
+        val english = app.feedRepository.current()
+        val englishRecord = requireNotNull(english.personalDailySelection098)
+        assertTrue(PersonalDailySelectionLogic098.resolve(english, now).isNotEmpty())
+
+        // This models the real locale transition: FeedEdition's state.items-keyed effect fires
+        // while the first durable ensure job is still active, after its old-revision record commits.
+        val localized = app.feedRepository.update { current ->
+            current.copy(items = current.items.map { item ->
+                item.copy(title = "${item.title} · Kiswahili", summary = "Maelezo yaliyotafsiriwa: ${item.summary}")
+            })
+        }
+        assertTrue(PersonalDailySelectionLogic098.resolve(localized, now).isEmpty())
+        vm.ensurePersonalDailySelection098()
+
+        releaseFirstJob.complete(Unit)
+        val current = withTimeout(10_000) {
+            app.feedRepository.awaitFeedState { state ->
+                state.personalDailySelection098?.inputDigest != englishRecord.inputDigest &&
+                    PersonalDailySelectionLogic098.resolve(state, now).isNotEmpty()
+            }
+        }
+        val selected = requireNotNull(current.personalDailySelection098)
+        val expected = PersonalDailySelectionLogic098.ensure(localized, now).personalDailySelection098
+        assertEquals(expected?.itemIds, selected.itemIds)
+        assertEquals(expected?.itemRevisions, selected.itemRevisions)
+        // DataStore publishes the committed state before the post-commit test callback resumes.
+        // Await that callback with a bound before asserting the worker completed its second pass.
+        withTimeout(10_000) { latestCommitCallback.await() }
+        assertTrue("The latest localized invalidation is not silently dropped", pauseCount.get() >= 2)
+        assertEquals(0, app.sourceReaderCalls.get())
+        assertEquals(0, app.aiProviderCalls.get())
+        assertEquals(seed.requestsToday, current.requestsToday)
+        assertEquals(seed.usageDate, current.usageDate)
+        assertEquals(seed.lastRefreshMillis, current.lastRefreshMillis)
+        assertEquals(seed.lastAiRefreshMillis, current.lastAiRefreshMillis)
+        assertEquals(published.publishedAtMillis, current.items.single { it.id == published.id }.publishedAtMillis)
+    }
+
+    @Test fun resetInvalidatesDerivedDailySelectionWithoutRefreshingOrDeletingViaSelectionLogic() = runBlocking {
+        val firstCommit = CompletableDeferred<Unit>()
+        val holdEnsure = CompletableDeferred<Unit>()
+        vm.afterPersonalDailySelectionCommit098 = {
+            firstCommit.complete(Unit)
+            holdEnsure.await()
+        }
+        vm.ensurePersonalDailySelection098()
+        withTimeout(10_000) { firstCommit.await() }
+        val selected = app.feedRepository.current()
         assertNotNull(selected.personalDailySelection098)
         assertEquals(setOf(published.id, read.id), selected.items.map { it.id }.toSet())
 
+        // Queue a second invalidation while the first ensure is held, then prove reset cancels
+        // the drain rather than allowing a post-clear projection to repopulate erased state.
+        vm.ensurePersonalDailySelection098()
         vm.reset().join()
+        holdEnsure.complete(Unit)
         val reset = app.feedRepository.current()
         assertNull(reset.personalDailySelection098)
         assertTrue(reset.items.isEmpty())
