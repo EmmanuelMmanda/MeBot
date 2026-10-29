@@ -220,7 +220,7 @@ page('index.html','MeBot — personal reading and everyday tools','Follow topics
 <section class="next-step wrap"><div><h2>Download the latest version.</h2><p>{hero_status}</p></div><div class="actions">{download()}<a class="button secondary" href="download.html">File details</a></div></section>''','index.html')
 groups=list(dict.fromkeys(s['group'] for s in screens)); group_titles={'feed':'For You','read':'Stories','opportunity':'Opportunities','ask':'AI questions','reads':'AI Reads and Today','about':'About You','appearance':'Languages and themes','theme':'Languages and themes','tools':'Everyday tools','start':'Getting started','organize':'Your preferences'}
 filters=''.join(f'<button type="button" data-screen-filter="{g}" aria-pressed="{str(g=="all").lower()}">{"All screens" if g=="all" else group_titles.get(g,g.title())}</button>' for g in ['all',*groups])
-release_status='Only the latest published release is available from this page.'
+release_status='The latest published release is checked directly on GitHub.'
 gallery_dir=capture_prefix.rstrip('/')
 capture_record=DOCS/gallery_dir/'README.md'
 assert capture_record.is_file(), 'A technical capture record with source/date/fixture provenance is required before rendering current pages'
