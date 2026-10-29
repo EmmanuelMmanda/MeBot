@@ -1,6 +1,6 @@
 <div align="center"><img src="docs/assets/mebot.svg" width="64" height="64" alt="MeBot robot logo"><h1>MeBot</h1><p>A personal feed for stories, opportunities and everyday tools.</p><p>Android · English · Kiswahili · Apache 2.0</p></div>
 
-[Latest published GitHub release](https://github.com/EmmanuelMmanda/MeBot/releases/latest) · [Download page](docs/download.html) · [App screens](docs/screenshots.html)
+[Latest published GitHub release](https://github.com/EmmanuelMmanda/MeBot/releases/latest) · [Installation guide](docs/download.html) · [App screens](docs/screenshots.html)
 
 ## Personal reading and story questions
 
