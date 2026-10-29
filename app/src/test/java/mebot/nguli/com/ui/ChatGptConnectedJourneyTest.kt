@@ -659,6 +659,7 @@ class ChatGptConnectedJourneyTest {
         app.checkFailure = null
         compose.onNodeWithTag("chatgpt-use-${other.id}").performScrollTo().performClick()
         compose.waitUntil(15_000) { state().connection.accountId == other.id }
+        waitForText("Fixture careful model")
         compose.onNodeWithTag("chatgpt-model-picker").assertTextContains("Fixture careful model")
         assertEquals("fixture-careful", state().connection.model)
         assertEquals(3, app.checkedConnections.size)
