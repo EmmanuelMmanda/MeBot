@@ -24,4 +24,10 @@ status=0
 wait "$build_pid" || status=$?
 kill "$observer_pid" 2>/dev/null || true
 wait "$observer_pid" 2>/dev/null || true
+# Capture Software Updates with release BuildConfig so the screenshot never shows a debug suffix.
+if (( status == 0 )); then
+  gradle :app:testReleaseUnitTest --tests 'mebot.nguli.com.ui.Release082CaptureTest.softwareUpdatesExplainsAutomaticChecksAndConsent' \
+    --no-daemon --stacktrace -Pkotlin.incremental=false \
+    --init-script scripts/ci-test-observability.gradle
+fi
 exit "$status"
