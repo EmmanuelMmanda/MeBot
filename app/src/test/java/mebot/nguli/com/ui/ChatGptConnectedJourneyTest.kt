@@ -436,6 +436,7 @@ class ChatGptConnectedJourneyTest {
         assertEquals("Opening the empty-feed prompt must not reserve a request", requestsBeforeEmptyFeedPrompt, state().requestsToday)
         assertEquals("Opening the empty-feed prompt must not infer", asksBeforeEmptyFeedPrompt, app.asked.toList())
         assertEquals("Opening the empty-feed prompt must not submit a question", questionsBeforeEmptyFeedPrompt, app.askedQuestions.toList())
+        val suggestionsBeforeAnswer = app.suggestedQuestionSets.size
         compose.onNodeWithTag("workspace-question").performTextInput(text(R.string.edition_ask_today_prompt))
         compose.onNodeWithTag("workspace-send").performClick()
         compose.waitUntil(15_000) { state().conversations.any { it.turns.lastOrNull()?.role == "assistant" } }
@@ -447,13 +448,22 @@ class ChatGptConnectedJourneyTest {
         assertEquals(listOf("chatgpt:subscription-fixture-token"), app.asked)
         assertEquals(listOf(text(R.string.edition_ask_today_prompt)), app.askedQuestions)
         assertTrue(app.askedContexts.single().isEmpty())
+        // The assistant turn triggers a separate automatic suggestion prefetch. Let it settle
+        // before measuring whether Activity recreation issues any additional model requests.
+        compose.waitUntil(15_000) {
+            compose.waitForIdle()
+            app.suggestedQuestionSets.size > suggestionsBeforeAnswer && !feedViewModel.ui.value.suggestionWorking
+        }
         val requestsAfterAnswer = state().requestsToday
+        val suggestionsAfterAnswer = app.suggestedQuestionSets.size
         compose.activityRule.scenario.recreate()
         waitForTag("workspace-question")
         compose.onNodeWithTag("workspace-messages").performScrollToNode(hasText(ChatGptJourneyApplication.ANSWER))
         compose.onNodeWithText(ChatGptJourneyApplication.ANSWER).assertIsDisplayed()
         assertEquals(conversation, state().conversations.single())
-        assertEquals(requestsAfterAnswer, state().requestsToday)
+        assertEquals("Restoring the completed conversation must not issue another request", requestsAfterAnswer, state().requestsToday)
+        assertEquals("Restoring the completed conversation must not prefetch suggestions again", suggestionsAfterAnswer, app.suggestedQuestionSets.size)
+        assertEquals("Restoring the completed conversation must not repeat the user's question", 1, app.asked.size)
 
         compose.onNodeWithTag("nav-feed").performClick()
         waitForTag("feed-screen")
