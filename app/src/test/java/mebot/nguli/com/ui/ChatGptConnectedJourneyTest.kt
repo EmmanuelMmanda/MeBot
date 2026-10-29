@@ -649,6 +649,13 @@ class ChatGptConnectedJourneyTest {
         compose.onNodeWithTag("chatgpt-use-${other.id}").assertIsEnabled().performScrollTo().performClick()
         waitForCheckedConnections(2)
         waitForText(text(R.string.chatgpt_error_capability))
+        val feedViewModel = androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]
+        // The error label is set before the connection coroutine finishes its finally block.
+        // Wait until the retry is enabled so this test models a tap the UI can actually accept.
+        compose.waitUntil(15_000) {
+            compose.waitForIdle()
+            !feedViewModel.ui.value.connecting && !feedViewModel.ui.value.chatGptVerifying
+        }
         assertEquals(previous, state().connection)
         assertEquals(2, app.checkedConnections.size)
         assertEquals(other.id, app.checkedConnections.last().accountId)
@@ -657,7 +664,7 @@ class ChatGptConnectedJourneyTest {
         assertTrue(app.chatGptAuth.state.value.accounts.all { it.connected })
 
         app.checkFailure = null
-        compose.onNodeWithTag("chatgpt-use-${other.id}").performScrollTo().performClick()
+        compose.onNodeWithTag("chatgpt-use-${other.id}").assertIsEnabled().performScrollTo().performClick()
         compose.waitUntil(15_000) { state().connection.accountId == other.id }
         waitForText("Fixture careful model")
         compose.onNodeWithTag("chatgpt-model-picker").assertTextContains("Fixture careful model")
