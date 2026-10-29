@@ -50,3 +50,9 @@ Every catalog image was pixel-reviewed before integration. The retained captures
 Final local qualification passed **877 Android tests and 263 core tests**, with zero failures, errors or skips; debug/release lint and debug/release assembly passed. Service tests passed **220/220**. Earlier fixture failures were corrected without removing behavioral assertions. A previous full-run settings test stalled and was interrupted; the identical focused class and final full run passed, but the earlier stall's cause remains unresolved.
 
 Hosted exact-source checks, same-key signing, public download/updater verification and website promotion remain separate pending gates. Real-device microphone/WebRTC and paid live-provider voice acceptance were not performed; unavailable optional voice controls remain hidden.
+
+## Screen coverage still missing
+
+This 0.9.9 candidate capture set does not include current screens for module selection, Sign in with ChatGPT, Saved, Me, notifications, module notes, or software updates. The earlier v0.8.2, v0.8.5, and v0.9.2 images are not replacements for those current screens and are not shown in the active website gallery.
+
+To complete the screenshots, run the 0.9.9 app in a supported Android UI capture environment, navigate to each implemented screen, capture the rendered screen without debug or version overlays, visually review it, record locale/theme/date/source and SHA-256 metadata, then regenerate and validate the website. The currently available 0.9.9 showcase captures cover the feed, opportunities, Original Read, question sheet, About You, and appearance only.
