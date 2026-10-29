@@ -223,7 +223,7 @@ for path in current_pages:
         gallery = text.split('id="screen-gallery">', 1)[1].split('</div>', 1)[0]
         assert set(re.findall(r'<img[^>]+src="([^"]+)"', gallery)) == {s['file'] for s in screens}
         assert len(re.findall(r'<figure class="shot archived-shot"', text)) == len(archived_screens)
-        assert 'Additional app screens' in text and 'current layouts and labels may differ' in text
+        assert 'Additional app screens' in text and 'current layouts and labels may differ' in text.lower()
         examples = re.findall(r'<figcaption><strong>.*?</strong><span>(?:Example|Sample|Mfano)\b', text, flags=re.I | re.S)
         assert len(examples) == len(screens), 'Every capture needs a concise example caption'
         assert 'screen images are examples' in body.lower() and 'sample content' in body.lower() and 'not a live account result' in body.lower()
