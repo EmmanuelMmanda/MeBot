@@ -21,12 +21,6 @@ assert official.get('filename') == f"mebot-{official['version']}.apk", 'Latest A
 latest_release = f'{REPO}/releases/latest'
 release_base = f"{REPO}/releases/download/{official['tag']}/"
 latest_release = f'{REPO}/releases/latest'
-archived_screens = {
-    'screenshots/v085/modules.png', 'screenshots/v092/connection-sw.png',
-    'screenshots/v085/saved.png', 'screenshots/v082/my-mebot.png',
-    'screenshots/v082/background.png', 'screenshots/v085/notes.png',
-    'screenshots/v082/software-updates.png',
-}
 capture_version = screens[0]['version']
 capture_dir = '/'.join(Path(screens[0]['file']).parts[:2])
 capture_prefix = capture_dir + '/'
@@ -210,7 +204,7 @@ for path in current_pages:
     for image in p.images:
         if 'screenshots/' in image.get('src', ''):
             assert image.get('alt', '').strip(), (path, image)
-            assert image['src'].startswith(capture_prefix) or image['src'] in archived_screens, (path, image['src'])
+            assert image['src'].startswith(capture_prefix), (path, image['src'])
     for a in p.anchors:
         href = a['href']
         assert '/releases/latest/download/' not in href, (path, a)
@@ -222,14 +216,13 @@ for path in current_pages:
         assert 'data-screen-filter="all" aria-pressed="true"' in text
         gallery = text.split('id="screen-gallery">', 1)[1].split('</div>', 1)[0]
         assert set(re.findall(r'<img[^>]+src="([^"]+)"', gallery)) == {s['file'] for s in screens}
-        assert len(re.findall(r'<figure class="shot archived-shot"', text)) == len(archived_screens)
-        assert 'Additional app screens' in text and 'current layouts and labels may differ' in text.lower()
+        assert 'archived-shot' not in text and 'Additional app screens' not in text
+        assert not re.search(r'screenshots/v(?:082|085|092)/', text)
         examples = re.findall(r'<figcaption><strong>.*?</strong><span>(?:Example|Sample|Mfano)\b', text, flags=re.I | re.S)
         assert len(examples) == len(screens), 'Every capture needs a concise example caption'
         assert 'screen images are examples' in body.lower() and 'sample content' in body.lower() and 'not a live account result' in body.lower()
     if path.name == 'index.html':
-        for term in ('about you', 'modules', 'saved', 'ai connection', 'settings', 'notifications', 'notes', 'software updates', 'five', 'kiswahili', 'opportunities', 'theme', 'original read'):
-            assert term in body.lower(), (term, path)
+        assert 'user-manual.html' in text and 'modules and module selection' in body.lower()
         assert 'read what matters' not in body.lower()
         assert '0.9.9 is available' not in body.lower()
         for question in questions:
@@ -241,7 +234,7 @@ for path in current_pages:
         site = (ROOT / 'docs/site.js').read_text()
         assert 'api.github.com/repos/EmmanuelMmanda/MeBot/releases/latest' in site
         assert "cache: 'no-store'" in site and "credentials: 'omit'" in site
-        assert "asset.state !== 'uploaded'" in site and 'apk?.digest' in site
+        assert "asset.state !== 'uploaded'" in site and 'apk?.digest' in site and 'digestPresent' in site and 'Not provided by GitHub' in site
         assert 'data-release-manifest' not in path.read_text() and 'release.json' not in site
         manual = DOCS / 'user-manual.html'
         assert manual.is_file()

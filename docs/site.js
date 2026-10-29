@@ -195,9 +195,11 @@
         const apkName = 'mebot-' + parsed.version + '.apk';
         const apk = assets.find(item => item && item.name === apkName);
         const apkUrl = assetUrl(apk, parsed.tag);
-        const shaMatch = /^sha256:([a-f0-9]{64})$/i.exec(String(apk?.digest || ''));
+        const digestValue = apk?.digest;
+        const digestPresent = digestValue !== undefined && digestValue !== null && String(digestValue).trim() !== '';
+        const shaMatch = /^sha256:([a-f0-9]{64})$/i.exec(String(digestValue || ''));
         const releaseUrl = repo + '/releases/tag/' + parsed.tag;
-        if (!apkUrl || !shaMatch || release.html_url !== releaseUrl) throw new Error('unverified');
+        if (!apkUrl || release.html_url !== releaseUrl || (digestPresent && !shaMatch)) throw new Error('unverified');
         if (button) {
           button.href = apkUrl;
           button.textContent = 'Download latest version';
@@ -211,7 +213,7 @@
         }
         if (notes) notes.textContent = noVersion(release.body) || 'No release notes were provided.';
         if (size) size.textContent = (apk.size / 1000000).toFixed(1) + ' MB';
-        if (digest) digest.textContent = shaMatch[1].toLowerCase();
+        if (digest) digest.textContent = shaMatch ? shaMatch[1].toLowerCase() : 'Not provided by GitHub';
         if (version) version.textContent = ' ' + parsed.version;
         if (status) status.textContent = 'Latest published Android release';
         if (error) error.hidden = true;

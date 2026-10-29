@@ -10,6 +10,8 @@ import os
 import re
 import shutil
 import threading
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / 'docs'
@@ -99,6 +101,29 @@ def github_release_payload():
         ],
     }
 
+
+def fetch_live_latest_release():
+    url = 'https://api.github.com/repos/EmmanuelMmanda/MeBot/releases/latest'
+    request = Request(url, headers={
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'MeBot-website-release-check',
+    })
+    try:
+        with urlopen(request, timeout=8) as response:
+            if response.status != 200:
+                return response.status, None
+            return response.status, json.load(response)
+    except HTTPError as error:
+        return error.code, None
+    except Exception:
+        return None, None
+
+def route_live_release(context, payload):
+    context.route('https://api.github.com/repos/EmmanuelMmanda/MeBot/releases/latest',
+                  lambda route: route.fulfill(status=200, content_type='application/json',
+                                              headers={'access-control-allow-origin': '*'},
+                                              body=json.dumps(payload)))
+
 def route_release(context, scenario='valid'):
     def handler(route):
         if scenario == 'offline':
@@ -112,6 +137,10 @@ def route_release(context, scenario='valid'):
         if scenario == 'missing':
             payload=github_release_payload()
             payload['assets']=[x for x in payload['assets'] if not x['name'].endswith('.apk')]
+        elif scenario == 'missing_digest':
+            payload=github_release_payload()
+            apk=next(item for item in payload['assets'] if item['name']==official['filename'])
+            apk.pop('digest', None)
         elif scenario == 'invalid':
             payload=github_release_payload()
             apk=next(item for item in payload['assets'] if item['name']==official['filename'])
@@ -209,10 +238,13 @@ try:
                         for question in questions: assert question in page.locator('main').inner_text(),question
                         assert question_screen['sampleItem'] in page.locator('main').inner_text()
                         assert 'screen images are examples' in body and 'sample content' in body and 'not a live account result' in body
+                        assert page.locator('a[href="user-manual.html"]').count() >= 1
                     if name=='screenshots.html':
                         assert page.locator('#screen-gallery .shot').count()==len(screens)
                         assert page.locator('#screen-gallery .shot-version').count()==0
                         assert 'screen images are examples' in body and 'sample content' in body and 'not a live account result' in body
+                        assert page.locator('.archived-shot').count()==0
+                        assert 'additional app screens' not in body and 'earlier native captures' not in body
                         for capture in screens:
                             figure=page.locator(f'#screen-gallery .shot:has(img[src="{capture["file"]}"])')
                             assert figure.count()==1
@@ -298,6 +330,47 @@ try:
         context.close()
 
         # Release API error paths fail closed and never reuse the manifest APK.
+        live_status, live_payload = fetch_live_latest_release()
+        if live_payload is not None:
+            context = browser.new_context(viewport={'width':390,'height':844})
+            route_live_release(context, live_payload)
+            page = context.new_page(); load(page,'download.html')
+            tag = str(live_payload.get('tag_name') or '')
+            match = re.fullmatch(r'v(\d+\.\d+\.\d+)', tag)
+            live_apk = next((item for item in live_payload.get('assets', []) if item.get('name') == f"mebot-{match.group(1)}.apk"), None) if match else None
+            expected_url = f"https://github.com/EmmanuelMmanda/MeBot/releases/download/{tag}/{live_apk.get('name')}" if live_apk else None
+            digest_value = live_apk.get('digest') if live_apk else None
+            digest_present = digest_value is not None and str(digest_value).strip() != ''
+            digest_match = re.fullmatch(r'sha256:([a-fA-F0-9]{64})', str(digest_value or ''))
+            official_release = f'https://github.com/EmmanuelMmanda/MeBot/releases/tag/{tag}'
+            api_asset_ok = bool(match and live_payload.get('draft') is False and live_payload.get('prerelease') is False and live_payload.get('published_at') and live_payload.get('html_url') == official_release and live_apk and live_apk.get('state') == 'uploaded' and isinstance(live_apk.get('size'), int) and live_apk['size'] > 0 and live_apk.get('browser_download_url') == expected_url and (not digest_present or digest_match))
+            live_button = page.locator('[data-release-apk]')
+            if api_asset_ok:
+                assert live_button.inner_text().strip() == 'Download latest version'
+                assert live_button.get_attribute('href') == expected_url
+                assert page.locator('[data-release-info]').is_visible()
+                assert page.locator('[data-release-sha]').inner_text() == (digest_match.group(1).lower() if digest_match else 'Not provided by GitHub')
+            else:
+                assert live_button.inner_text().strip() == 'Open latest GitHub release'
+                assert live_button.get_attribute('href') == latest_release
+                assert page.locator('[data-release-info]').is_hidden()
+            context.close()
+            checks.append('Actual latest GitHub release API response rendered through the download page')
+        else:
+            checks.append(f'Live GitHub latest release probe skipped (HTTP {live_status or "network unavailable"}); API fixtures still run')
+
+        # GitHub's digest field is optional. Keep the official direct asset link and state plainly when no digest was supplied.
+        context=browser.new_context(viewport={'width':390,'height':844})
+        route_release(context,'missing_digest')
+        page=context.new_page(); load(page,'download.html')
+        assert page.locator('[data-release-error]').is_hidden()
+        assert page.locator('[data-release-info]').is_visible()
+        assert page.locator('[data-release-apk]').inner_text().strip()=='Download latest version'
+        assert page.locator('[data-release-apk]').get_attribute('href')==apk_download
+        assert page.locator('[data-release-sha]').inner_text()=='Not provided by GitHub'
+        context.close()
+        checks.append('Missing optional GitHub SHA-256 digest keeps the exact official APK link and is disclosed')
+
         for scenario,expected in (
             ('missing','does not include a verifiable Android APK'),
             ('invalid','does not include a verifiable Android APK'),

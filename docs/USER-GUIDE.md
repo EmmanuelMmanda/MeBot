@@ -6,7 +6,7 @@
 
 ## 1. Install and start
 
-1. Open [Download MeBot](download.html) and use its verified download action. If the page cannot verify an APK, follow its link to GitHub Releases and check what is actually published. Do not install a file sent through an unrelated link.
+1. Open [Download MeBot](download.html) and use its **Download latest version** action when GitHub reports a published stable release with the matching uploaded APK. The page checks the release and asset details and shows GitHub’s SHA-256 digest when available. If GitHub does not supply a digest, the page says so and has not independently checked the APK bytes. If release or asset details are invalid, follow the link to GitHub Releases and inspect its published files. Do not install a file sent through an unrelated link.
 2. Open the downloaded APK and approve Android’s installer prompt. If Android blocks installation, use the device setting it names, then return to the installer. Keep your existing installation and data when updating.
 3. Choose English or Kiswahili on first launch. Grant Android permissions only when you choose a feature that needs them, such as notifications or microphone access.
 4. The newer setup flow offers three stages: **Connect ChatGPT**, **Add context**, and **Start your feed**. You can continue with public feeds without connecting AI and can skip the context step. If you instead see the optional welcome tour, it explains Feed, Modules, Explain, Search, Tools, and Context; finish with **Connect**, choose **Open feed**, or skip it. These layouts depend on the installed build.
