@@ -132,6 +132,11 @@ def render_manual(source):
             list_kind=None
     for raw in lines:
         line=raw.rstrip()
+        anchor=re.fullmatch(r'<a id="([a-z0-9-]+)"></a>',line)
+        if anchor:
+            flush_paragraph(); flush_list()
+            out.append(f'<a id="{anchor.group(1)}"></a>')
+            continue
         if line.startswith(chr(96)*3):
             flush_paragraph(); flush_list()
             if in_code:

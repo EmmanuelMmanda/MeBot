@@ -12,7 +12,7 @@
 4. The newer setup flow offers three stages: **Connect ChatGPT**, **Add context**, and **Start your feed**. You can continue with public feeds without connecting AI and can skip the context step. If you instead see the optional welcome tour, it explains Feed, Modules, Explain, Search, Tools, and Context; finish with **Connect**, choose **Open feed**, or skip it. These layouts depend on the installed build.
 5. Choose topics that match what you want to follow. You can change them later. You do not need to create an account to read public-source feeds or use local tools.
 
-For an existing installation, use the compatible in-app update path in [Software updates](#software-updates). A signing conflict means Android sees a different signing identity; do not uninstall or clear data to work around it. See [installation recovery](guides/install.html#troubleshooting).
+For an existing installation, use the compatible in-app update path in [Software updates](#software-updates). A signing conflict means Android sees a different signing identity; do not uninstall or clear data to work around it. See [troubleshooting](guides/troubleshooting.html).
 
 ## 2. Choose interests and modules
 
@@ -115,6 +115,7 @@ MeBot may show a setup tip when a useful next step is available, such as connect
 If you are not receiving updates, open the app and use **Refresh now**, confirm the module is enabled, check the provider connection if that module uses AI, and review Android’s notification and battery settings. Do not treat a quiet feed as proof that new source content exists.
 
 ## 10. Personalize MeBot and protect access
+<a id="your-preferences"></a>
 
 Open **Me** (shown as **You** in some navigation layouts), then **Your MeBot** or **Personalization**.
 
@@ -126,6 +127,7 @@ Open **Me** (shown as **You** in some navigation layouts), then **Your MeBot** o
 To restore the system theme, choose **System**. If a biometric prompt is unavailable, use the configured PIN or Android’s device authentication route.
 
 ## 11. Export, import, and remove local data
+<a id="data-controls"></a>
 
 Open **You → Data and backups**.
 
@@ -136,7 +138,7 @@ Open **You → Data and backups**.
 
 A full backup is different from the context JSON import. Portable exports do not include provider credentials or app-lock secrets. MeBot has no cloud account deletion flow in these controls; removing an AI account from this phone is not deletion of the account at the provider.
 
-## 12. Software updates
+## Software updates
 
 Open **You → Software Updates** and choose **Check now**. If a compatible published update is available, review it and choose **Download**. If you enabled **Automatic checks** or **Download on Wi-Fi**, MeBot may check or prepare the file under those conditions. Download preparation does not spend AI requests.
 
