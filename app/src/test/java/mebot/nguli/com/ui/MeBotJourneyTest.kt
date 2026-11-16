@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.PixelCopy
 import androidx.compose.ui.test.*
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
 import mebot.nguli.com.MainActivity
@@ -31,6 +32,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowAlarmManager
+import org.robolectric.shadows.ShadowLog
 
 /**
  * Exercises the installed activity's navigation, storage and native rendering.
@@ -55,6 +57,36 @@ class MeBotJourneyTest {
         application.alarms.clearAll()
         ShadowAlarmManager.setCanScheduleExactAlarms(false)
         waitForTag("setup-099-onboarding")
+    }
+
+    @Test
+    fun actualActivityFocusOpensAfterRealGestureScrolling() {
+        explore()
+        openModuleCatalog()
+        val target = compose.onNodeWithTag("module-focus")
+        fun fullyVisible(): Boolean {
+            val bounds = target.getUnclippedBoundsInRoot()
+            val root = compose.onRoot().getUnclippedBoundsInRoot()
+            val navigation = compose.onNodeWithTag("nav-feed").getUnclippedBoundsInRoot()
+            return bounds.height > 0.dp && bounds.top >= root.top + 24.dp &&
+                bounds.bottom <= navigation.top - 24.dp
+        }
+        var swipes = 0
+        while (!fullyVisible() && swipes < 24) {
+            compose.onRoot().performTouchInput {
+                swipeUp(startY = height * .72f, endY = height * .3f, durationMillis = 500)
+            }
+            compose.waitForIdle()
+            swipes++
+        }
+        if (!fullyVisible()) screenshot("failure-activity-gesture-focus-visibility", settle = false)
+        assertTrue("Focus must be fully visible within 24 genuine swipes.\n" + compose.onRoot().printToString(), fullyVisible())
+        println("ACTIVITY_GESTURE focus swipes=$swipes clipped=${target.fetchSemanticsNode().boundsInRoot} " +
+            "unclipped=${target.getUnclippedBoundsInRoot()}")
+        target.assertIsDisplayed().assertIsEnabled().performClick()
+        waitForText(text(R.string.mb_focus_silent))
+        screenshot("activity-gesture-focus-open", settle = false)
+        println("NAVIGATION_PROBE " + ShadowLog.getLogsForTag("MeBotNavigationProbe").joinToString(" | ") { it.msg })
     }
 
     @Test
@@ -518,6 +550,9 @@ class MeBotJourneyTest {
         try {
             compose.waitUntil(15_000) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }
         } catch (failure: ComposeTimeoutException) {
+            println("NAVIGATION_PROBE " + ShadowLog.getLogsForTag("MeBotNavigationProbe").joinToString(" | ") { it.msg })
+            runCatching { screenshot("failure-destination-$tag", settle = false) }
+                .onFailure { println("FAILURE_CAPTURE $tag: $it") }
             throw AssertionError("Expected destination $tag after pointer navigation. Enabled tools: " +
                 current().settings.enabledModules + "\n" + compose.onRoot().printToString(), failure)
         }
@@ -532,6 +567,9 @@ class MeBotJourneyTest {
         try {
             compose.waitUntil(timeoutMillis = 15_000) { compose.onAllNodesWithText(value).fetchSemanticsNodes().isNotEmpty() }
         } catch (failure: ComposeTimeoutException) {
+            println("NAVIGATION_PROBE " + ShadowLog.getLogsForTag("MeBotNavigationProbe").joinToString(" | ") { it.msg })
+            runCatching { screenshot("failure-text-${value.hashCode()}", settle = false) }
+                .onFailure { println("FAILURE_CAPTURE $value: $it") }
             throw AssertionError("Expected text: " + value + "\n" + compose.onRoot().printToString(), failure)
         }
     }
@@ -541,8 +579,8 @@ class MeBotJourneyTest {
     private fun typeInto(resource: Int, value: String) {
         compose.onNode(hasText(text(resource)) and hasSetTextAction()).performScrollTo().performTextInput(value)
     }
-    private fun screenshot(name: String) {
-        waitForTransientMessages()
+    private fun screenshot(name: String, settle: Boolean = true) {
+        if (settle) waitForTransientMessages()
         compose.waitForIdle()
         val bitmap = compose.runOnIdle {
             val window = compose.activity.window

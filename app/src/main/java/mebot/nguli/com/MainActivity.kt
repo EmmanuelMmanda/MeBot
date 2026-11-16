@@ -263,6 +263,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
     val callVm: RealtimeCall099ViewModel = viewModel()
     val callUi by callVm.ui.collectAsStateWithLifecycle()
     var page by rememberSaveable { mutableStateOf("feed") }
+    LaunchedEffect(page) { if (BuildConfig.DEBUG) android.util.Log.d("MeBotNavigationProbe", "page=$page") }
     var jobsSavedRequest by rememberSaveable { mutableIntStateOf(0) }
     var jobsVisitRequested by remember { mutableStateOf(false) }
     LaunchedEffect(page, jobsUi.loading) {
@@ -796,7 +797,10 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                         }
                         "modules" -> ModulesScreen(feed, state,
                             onEdit = ::openModule, onToggle = feedVm::setModuleEnabled,
-                            onUtility = { route -> if (route == "focus") openFocus(null, null) else { if (route == "daily") visitDate = date.toString(); page = route } },
+                            onUtility = { route ->
+                                if (BuildConfig.DEBUG) android.util.Log.d("MeBotNavigationProbe", "utility=$route")
+                                if (route == "focus") openFocus(null, null) else { if (route == "daily") visitDate = date.toString(); page = route }
+                            },
                             onUtilityToggle = { id, checked -> vm.saveSettings { it.copy(enabledModules = (if (checked) it.enabledModules + id else it.enabledModules - id) + "daily") } },
                             error = feedUi.error, onDismissError = feedVm::clearMessage,
                             onReorder = feedVm::reorderModules,
