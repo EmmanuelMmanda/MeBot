@@ -1,6 +1,8 @@
 # MeBot 0.10.0: Jobs workspace
 
-**Candidate, not yet released.** Final tests, device checks and same-key signing are required before this update is offered in MeBot.
+**Released 2026-11-16.** [Official release and signed APK](https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.10.0). In MeBot 0.9.9, open You → Software updates to download the verified update. Do not uninstall to update.
+
+The released source is `63e61dd8d8e149eb16c8c9428f5598e34822be9d`. The verification record below is a documentation-only follow-up; the release tag and signed assets remain immutable.
 
 ## Find and keep useful opportunities
 
@@ -27,3 +29,9 @@ Bring a completed assistant answer into an editable application draft, review it
 Optional daily or weekly notifications use local matching, not paid background AI calls. Android notification permission and battery scheduling apply. Existing Feed, MeBot, Saved, You and all Modules remain available; Modules is reached from Feed's All modules action.
 
 English and Kiswahili copy, current themes and accent choices are preserved.
+
+## Verification
+
+279 core and 927 Android tests passed with zero failures, errors or skips. Release and debug lint passed. Actual Android checks verified no-AI reading, saved notes/drafts, reviewed PDF export, rotation, offline queue/cancel, full erase and backup restore with alerts off. The official 0.9.9 package upgraded in place with synthetic data retained. A separate official 0.9.9 installation discovered the public release and downloaded it to **Verified and ready to install**. Installer completion was tested separately through the in-place upgrade, not by changing unknown-app security settings.
+
+AI transports were tested with fixtures, not a live paid account. There is no durable background AI generation queue.
