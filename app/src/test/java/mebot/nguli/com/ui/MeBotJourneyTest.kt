@@ -68,7 +68,7 @@ class MeBotJourneyTest {
             val bounds = target.getUnclippedBoundsInRoot()
             val root = compose.onRoot().getUnclippedBoundsInRoot()
             val navigation = compose.onNodeWithTag("nav-feed").getUnclippedBoundsInRoot()
-            return bounds.height > 0.dp && bounds.top >= root.top + 24.dp &&
+            return (bounds.bottom - bounds.top) > 0.dp && bounds.top >= root.top + 24.dp &&
                 bounds.bottom <= navigation.top - 24.dp
         }
         var swipes = 0

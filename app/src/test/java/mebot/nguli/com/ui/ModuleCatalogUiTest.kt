@@ -150,7 +150,7 @@ class ModuleCatalogUiTest {
             fun fullyVisible(): Boolean {
                 val bounds = target.getUnclippedBoundsInRoot()
                 val visible = viewport.getUnclippedBoundsInRoot()
-                return bounds.height > 0.dp && bounds.top >= visible.top + 8.dp &&
+                return (bounds.bottom - bounds.top) > 0.dp && bounds.top >= visible.top + 8.dp &&
                     bounds.bottom <= visible.bottom - 8.dp && bounds.left >= visible.left && bounds.right <= visible.right
             }
             var swipes = 0
