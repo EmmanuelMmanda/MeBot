@@ -284,3 +284,7 @@ manual_source=(DOCS/'USER-GUIDE.md').read_text()
 manual_body='<div class="release-page manual-page"><h1>Complete MeBot user manual</h1><p class="lead">A task-based guide to setup, reading, personalization, AI, local tools, and recovery.</p>'+render_manual(manual_source)+'</div>'
 page('user-manual.html','Complete MeBot user manual','A task-based end-to-end manual for MeBot setup, feeds, AI connections, personal context, saved items, tools, data and updates.',manual_body+jobs_manual,'user-manual.html')
 print(f'Rendered the latest published release presentation with {len(screens)} native captures; historical pages and release records untouched.')
+
+# Jobs uses its own provenance manifest, independent of the historical global tour.
+import runpy
+runpy.run_path(str(ROOT / "scripts/build-jobs-gallery.py"), run_name="__main__")

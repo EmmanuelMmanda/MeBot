@@ -38,6 +38,15 @@ try:
                 assert metrics['loaded'] and all('Figtree' in f for f in metrics['families']), metrics
                 assert metrics['weights'] == ['400', '600', '600', '600'], metrics
                 assert metrics['content'] <= width, metrics
+                # Scroll each lazy native capture into view and verify decoded source dimensions.
+                captures = page.locator('.jobs-native-shot img')
+                assert captures.count() == 6
+                for capture in captures.all():
+                    capture.scroll_into_view_if_needed()
+                    capture.evaluate('(img) => img.decode()')
+                    assert capture.evaluate('(img) => img.naturalWidth === Number(img.getAttribute("width")) && img.naturalHeight === Number(img.getAttribute("height"))')
+                assert page.evaluate('document.documentElement.scrollWidth') <= width
+                page.evaluate('window.scrollTo(0, 0)')
                 page.screenshot(path=str(OUT / f'jobs-{width}-{theme}.png'), full_page=True)
                 # Real keyboard action toggles native disclosure, not a synthetic DOM event.
                 summary = page.get_by_text('Can I use Jobs without AI?', exact=True)
