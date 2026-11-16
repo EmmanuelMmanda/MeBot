@@ -257,6 +257,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
     onVoicePrivacyHandler: ((() -> Unit)?) -> Unit) {
     val jobsVm: JobsViewModel = viewModel()
     val jobsUi by jobsVm.ui.collectAsStateWithLifecycle()
+    val jobsEditingScope = jobsUi.state.editingScope
     val voiceVm: Realtime099ViewModel = viewModel()
     val voiceSetupUi by voiceVm.ui.collectAsStateWithLifecycle()
     val callVm: RealtimeCall099ViewModel = viewModel()
@@ -758,7 +759,10 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                         "jobs" -> if (!jobsUi.ready) ScreenContainer {
                             if (jobsUi.error != null) ScreenTitle(stringResource(R.string.data_error_title), stringResource(R.string.data_error_body))
                             else CircularProgressIndicator()
-                        } else JobsScreen(jobsUi.state, jobsUi.loading, jobsUi.error, jobsVm::refresh, jobsVm::preferences, jobsVm::save, jobsVm::application,
+                        } else key(jobsEditingScope) { JobsScreen(jobsUi.state, jobsUi.loading, jobsUi.error, jobsVm::refresh,
+                            { value -> jobsVm.preferences(value, jobsEditingScope) },
+                            { id -> jobsVm.save(id, jobsEditingScope) },
+                            { value -> jobsVm.application(value, jobsEditingScope) },
                             onAsk = { job, request ->
                                 aiReturn = "jobs"
                                 feedVm.openJobsConversation(job, request)
@@ -768,7 +772,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                             } }, lastAiDraft = { job ->
                                 feed.conversations.find { it.id == JobsAssistant.conversation(job).id }?.turns?.lastOrNull { it.role == "assistant" }?.text.orEmpty()
                             }, onExport = jobsVm::exportPdf, exportBusy = jobsUi.exportBusy, exportResult = jobsUi.exportResult,
-                            onClearExportResult = jobsVm::clearExportResult, initialTab = "saved", tabRequest = jobsSavedRequest, saving = jobsUi.saving, refreshPhase = jobsUi.refreshPhase, onCancelRefresh = jobsVm::cancelRefresh)
+                            onClearExportResult = jobsVm::clearExportResult, initialTab = "saved", tabRequest = jobsSavedRequest, saving = jobsUi.saving, refreshPhase = jobsUi.refreshPhase, onCancelRefresh = jobsVm::cancelRefresh) }
                         "feed" -> {
                             val now = ZonedDateTime.now()
                             val nextAlarm = if ("alarms" in state.settings.enabledModules) state.alarms.filter { it.enabled }.minByOrNull { nextAlarmOccurrence(it, now).toInstant() } else null

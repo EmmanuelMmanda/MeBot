@@ -90,7 +90,7 @@
     <string name="jobs_error_provider">Chanzo cha kazi hakipatikani kwa sasa. Kazi na maelezo uliyohifadhi bado zipo.</string>
     <string name="jobs_error_cached">Unaona matokeo yaliyohifadhiwa. Angalia muda wa mwisho kusasishwa kabla ya kuomba.</string>
     <string name="jobs_browse_latest">Angalia kazi mpya</string>
-    <string name="jobs_count">Nafasi %1$d</string>
+    <string name="jobs_count">Nafasi: %1$d</string>
     <string name="jobs_notes_retained">Hifadhi mabadiliko kabla ya kuondoka, au yaondoe. Maendeleo yaliyohifadhiwa awali hayatabadilika mpaka uhifadhi.</string>
     <string name="jobs_document_title">Rasimu ya ombi</string>
     <string name="jobs_document_help">Andika nyaraka zako au tumia jibu la mwisho lililokamilika la AI kuhusu kazi hii. Hakiki taarifa zote kabla ya kuhifadhi PDF.</string>

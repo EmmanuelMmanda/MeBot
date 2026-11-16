@@ -28,6 +28,7 @@ class JobsRefreshWorker(context: Context, parameters: WorkerParameters) : Corout
                 Result.success(workDataOf(KEY_OUTCOME to outcome, KEY_NEXT_ALLOWED_AT to latest.lastAttemptAt + SOURCE_INTERVAL_MS))
             }
         } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: JobsStateChangedException) { Result.success(workDataOf(KEY_OUTCOME to "superseded")) }
         catch (failure: Exception) {
             val code = (failure as? FeedFailure)?.code ?: if (failure is IOException) "provider_error" else "storage_error"
             if (shouldRetry(code, runAttemptCount) && !isStopped) Result.retry()

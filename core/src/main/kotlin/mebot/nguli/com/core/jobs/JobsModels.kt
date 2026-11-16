@@ -32,6 +32,7 @@ data class JobsState(
     val preferences: JobPreferences = JobPreferences(), val jobs: List<JobPosting> = emptyList(),
     val applications: List<JobApplication> = emptyList(), val lastRefreshAt: Long = 0, val lastAttemptAt: Long = 0,
     val failedSources: List<String> = emptyList(),
+    val editingScope: String = "",
 )
 
 /** Deterministic relevance, not hiring likelihood or proof of eligibility. */

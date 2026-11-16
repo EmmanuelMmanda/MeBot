@@ -76,4 +76,23 @@ class JobsRepositoryTest {
         assertEquals("Keep my work", repository.current().applications.single().notes)
         assertEquals("Reviewed draft", repository.current().applications.single().draft)
     }
+    @Test fun resetAndImportRejectPreviouslyQueuedWrites() = runBlocking {
+        val repository = JobsRepository(ApplicationProvider.getApplicationContext(), isOnline = { false })
+        repository.erase()
+        val old = repository.generation()
+        val oldScope = repository.current().editingScope
+        repository.erase()
+        var schedules = 0
+        assertTrue(runCatching { repository.preferences(mebot.nguli.com.core.jobs.JobPreferences(roles = "Obsolete"), old) { schedules++ } }.exceptionOrNull() is JobsStateChangedException)
+        assertEquals(0, schedules)
+        assertEquals("", repository.current().preferences.roles)
+        assertTrue(runCatching { repository.preferences(mebot.nguli.com.core.jobs.JobPreferences(roles = "Stale frame"), repository.generation(), oldScope) }.exceptionOrNull() is JobsStateChangedException)
+        val beforeImport = repository.generation()
+        val beforeImportScope = repository.current().editingScope
+        repository.restoreFromJournal(mebot.nguli.com.core.jobs.JobsState(preferences = mebot.nguli.com.core.jobs.JobPreferences(roles = "Restored")))
+        assertTrue(runCatching { repository.application(mebot.nguli.com.core.jobs.JobApplication("old", draft = "Obsolete"), beforeImport) }.exceptionOrNull() is JobsStateChangedException)
+        assertTrue(runCatching { repository.application(mebot.nguli.com.core.jobs.JobApplication("old", draft = "Stale frame"), repository.generation(), beforeImportScope) }.exceptionOrNull() is JobsStateChangedException)
+        assertEquals("Restored", repository.current().preferences.roles)
+        assertTrue(repository.current().applications.isEmpty())
+    }
 }

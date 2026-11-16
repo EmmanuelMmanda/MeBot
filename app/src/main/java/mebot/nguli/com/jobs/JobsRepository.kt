@@ -21,6 +21,8 @@ import java.io.OutputStream
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 
+class JobsStateChangedException : IllegalStateException("Jobs state changed before save")
+
 /** Independent on-device store; no CV, location or search terms are sent to the public source. */
 class JobsRepository(context: Context, private val http: FeedHttp = SecureFeedHttp(maxBytes = 8 * 1024 * 1024),
     private val consistencyRepository: (() -> mebot.nguli.com.feed.FeedRepository)? = null,
@@ -44,24 +46,33 @@ class JobsRepository(context: Context, private val http: FeedHttp = SecureFeedHt
     suspend fun current() = consistent { store.data.first() }
     suspend fun erase(): JobsState = consistent { mutationMutex.withLock {
         epoch.incrementAndGet()
-        store.updateData { JobsState() }
+        store.updateData { JobsState(editingScope = java.util.UUID.randomUUID().toString()) }
     } }
-    suspend fun update(transform: (JobsState) -> JobsState) = consistent { mutationMutex.withLock { store.updateData(transform) } }
+    fun generation(): Long = epoch.get()
+    suspend fun update(transform: (JobsState) -> JobsState) = mutate(null, transform = transform)
+    private suspend fun mutate(expectedGeneration: Long?, expectedScope: String? = null, onCommitted: ((JobsState) -> Unit)? = null, transform: (JobsState) -> JobsState) = consistent { mutationMutex.withLock {
+        if (expectedGeneration != null && epoch.get() != expectedGeneration) throw JobsStateChangedException()
+        store.updateData { current ->
+            if (expectedScope != null && current.editingScope != expectedScope) throw JobsStateChangedException()
+            transform(current)
+        }.also { onCommitted?.invoke(it) }
+    } }
     /** Called only while FeedRepository owns its consistency gate. Never acquire it again. */
     suspend fun restoreFromJournal(value: JobsState): JobsState = mutationMutex.withLock {
         epoch.incrementAndGet()
-        store.updateData { JobsBackup.restore(value) }
+        store.updateData { JobsBackup.restore(value).copy(editingScope = java.util.UUID.randomUUID().toString()) }
     }
-    suspend fun preferences(value: JobPreferences) = update { it.copy(preferences = value) }
+    suspend fun preferences(value: JobPreferences, expectedGeneration: Long? = null, expectedScope: String? = null, onCommitted: (JobPreferences) -> Unit = {}) =
+        mutate(expectedGeneration, expectedScope, onCommitted = { onCommitted(it.preferences) }) { it.copy(preferences = value) }
     suspend fun save(id: String) = setSaved(id, current().applications.none { it.jobId == id })
-    suspend fun setSaved(id: String, desired: Boolean) = update { s ->
+    suspend fun setSaved(id: String, desired: Boolean, expectedGeneration: Long? = null, expectedScope: String? = null) = mutate(expectedGeneration, expectedScope) { s ->
         val existing = s.applications.find { it.jobId == id }
         if (!desired && existing != null && existing.status == "saved" && existing.notes.isBlank() && existing.draft.isBlank())
             s.copy(applications = s.applications.filterNot { it.jobId == id })
         else if (!desired || existing != null) s
         else s.copy(applications = s.applications + JobApplication(id, snapshot = s.jobs.find { it.id == id }, updatedAt = System.currentTimeMillis()))
     }
-    suspend fun application(value: JobApplication) = update { s ->
+    suspend fun application(value: JobApplication, expectedGeneration: Long? = null, expectedScope: String? = null) = mutate(expectedGeneration, expectedScope) { s ->
         val old = s.applications.find { it.jobId == value.jobId }
         val now = System.currentTimeMillis()
         val next = value.copy(updatedAt = now, draftUpdatedAt = if (value.draft != old?.draft) now else old?.draftUpdatedAt ?: now, snapshot = value.snapshot ?: old?.snapshot ?: s.jobs.find { it.id == value.jobId })
@@ -74,7 +85,7 @@ class JobsRepository(context: Context, private val http: FeedHttp = SecureFeedHt
         if (before.lastAttemptAt > 0 && now - before.lastAttemptAt < 6 * 60 * 60 * 1000L) return@withLock false
         // A disconnected device has not contacted a provider and must not consume its refresh window.
         if (!isOnline()) throw mebot.nguli.com.feed.FeedFailure("offline")
-        update { it.copy(lastAttemptAt = now) }
+        mutate(token) { it.copy(lastAttemptAt = now) }
         val failed = mutableListOf<String>()
         val fetched = mutableListOf<JobPosting>()
         suspend fun source(name: String, fetch: suspend () -> List<JobPosting>) {

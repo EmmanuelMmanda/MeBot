@@ -90,7 +90,7 @@
     <string name="jobs_error_provider">The job source could not be reached. Your saved jobs and notes are safe.</string>
     <string name="jobs_error_cached">Showing saved results. Check the last-updated time before applying.</string>
     <string name="jobs_browse_latest">Browse latest jobs</string>
-    <string name="jobs_count">%1$d opportunities</string>
+    <string name="jobs_count">Opportunities: %1$d</string>
     <string name="jobs_notes_retained">Save your changes before leaving, or discard them. Your existing saved progress is not changed until you save.</string>
     <string name="jobs_document_title">Application draft</string>
     <string name="jobs_document_help">Write your own document or bring in the last completed AI response for this job. Check all facts before exporting.</string>

@@ -30,7 +30,7 @@ object JobsBackup {
         fun period(value: String) { require(value in setOf("", "hour", "day", "week", "month", "year")) }
         currency(p.salaryCurrency); period(p.salaryPeriod)
         // A backup is never a channel for injecting supposedly fresh provider listings.
-        require(value.jobs.isEmpty() && value.lastRefreshAt == 0L && value.lastAttemptAt == 0L && value.failedSources.isEmpty())
+        require(value.jobs.isEmpty() && value.lastRefreshAt == 0L && value.lastAttemptAt == 0L && value.failedSources.isEmpty() && value.editingScope.isEmpty())
         require(value.applications.size <= 500)
         require(value.applications.map { it.jobId }.distinct().size == value.applications.size)
         var total = 0L

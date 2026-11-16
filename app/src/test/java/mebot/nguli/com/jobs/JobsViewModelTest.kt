@@ -98,4 +98,14 @@ class JobsViewModelTest {
         assertEquals("Reviewed application", stored.applications.single().draft)
         assertNull(vm.ui.value.error)
     }
+    @Test fun freshSubmissionFromPreResetEditorIsRejectedAfterNewStateArrives(): Unit = runBlocking {
+        val vm = model()
+        val displayedScope = vm.ui.value.state.editingScope
+        app.jobsRepository.erase()
+        withTimeout(5_000) { vm.ui.first { it.state.editingScope != displayedScope } }
+        vm.application(JobApplication(jobId = "old", draft = "Pre-reset draft"), displayedScope)
+        withTimeout(5_000) { vm.ui.first { !it.saving && it.error == "state_changed" } }
+        assertTrue(app.jobsRepository.current().applications.isEmpty())
+        assertEquals("", app.jobsRepository.current().preferences.roles)
+    }
 }

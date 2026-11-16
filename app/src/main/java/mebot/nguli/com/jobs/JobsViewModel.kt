@@ -36,7 +36,7 @@ class JobsViewModel(application: Application, private val savedStateHandle: Save
                     mutable.update { it.copy(state = committed, ready = true) }
                 }
                 catch (cancelled: CancellationException) { throw cancelled }
-                catch (_: Exception) { mutable.update { it.copy(error = "storage_error") } }
+                catch (failure: Exception) { mutable.update { it.copy(error = if (failure is JobsStateChangedException) "state_changed" else "storage_error") } }
                 finally {
                     queuedChanges--
                     mutable.update { it.copy(saving = queuedChanges > 0) }
@@ -91,16 +91,22 @@ class JobsViewModel(application: Application, private val savedStateHandle: Save
         }
     }
     fun clearExportResult() { mutable.update { it.copy(exportResult = "") } }
-    fun preferences(value: JobPreferences) = mutate {
-        repository.preferences(value)
-        JobsAlertScheduler.schedule(getApplication(), value)
+    fun preferences(value: JobPreferences, expectedScope: String = mutable.value.state.editingScope) {
+        val generation = repository.generation()
+        mutate {
+            repository.preferences(value, generation, expectedScope) { committed -> JobsAlertScheduler.schedule(getApplication(), committed) }
+        }
     }
-    fun save(id: String) {
+    fun save(id: String, expectedScope: String = mutable.value.state.editingScope) {
         if (!pendingBookmarks.add(id)) return
         val desired = mutable.value.state.applications.none { it.jobId == id }
-        mutate { try { repository.setSaved(id, desired) } finally { pendingBookmarks.remove(id) } }
+        val generation = repository.generation()
+        mutate { try { repository.setSaved(id, desired, generation, expectedScope) } finally { pendingBookmarks.remove(id) } }
     }
-    fun application(value: JobApplication) = mutate { repository.application(value) }
+    fun application(value: JobApplication, expectedScope: String = mutable.value.state.editingScope) {
+        val generation = repository.generation()
+        mutate { repository.application(value, generation, expectedScope) }
+    }
     private fun mutate(action: suspend () -> Unit) {
         queuedChanges++
         mutable.update { it.copy(error = null, saving = true) }

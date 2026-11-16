@@ -105,7 +105,8 @@ fun JobsScreen(
     var restoredPending by remember { mutableStateOf(pendingSaving) }
     var saveUnconfirmed by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.applications, state.preferences, pendingId, pendingPreferences, error, saving) {
-        if (error == "storage_error") {
+        if (error == "storage_error" || error == "state_changed") {
+            if (error == "state_changed") saveUnconfirmed = true
             pendingId = ""; pendingPreferences = ""
         } else if (pendingId.isNotBlank()) {
             val persisted = state.applications.firstOrNull { it.jobId == pendingId }
@@ -319,7 +320,7 @@ fun JobsScreen(
                         }
                     }
                     if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()); SupportingText(stringResource(R.string.jobs_loading)) }
-                    if (error != null && error != "storage_error") item {
+                    if (error != null && error != "storage_error" && error != "state_changed") item {
                         AppCard(color = MaterialTheme.colorScheme.surfaceVariant) {
                             SupportingText(stringResource(when (error) { "offline" -> R.string.jobs_error_offline; "cached" -> R.string.jobs_error_cached; "partial" -> R.string.jobs_error_partial; else -> R.string.jobs_error_provider }))
                         }

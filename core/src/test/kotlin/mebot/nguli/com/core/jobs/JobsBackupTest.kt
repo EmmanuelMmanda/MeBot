@@ -50,4 +50,9 @@ class JobsBackupTest {
     private fun reject(value: JobsState) {
         try { JobsBackup.validate(value); fail("Expected invalid backup rejection") } catch (_: IllegalArgumentException) { }
     }
+    @Test fun deviceEditingScopeNeverTravelsInBackup() {
+        val backup = JobsBackup.export(JobsState(editingScope = "device-local-scope"))
+        assertEquals("", backup.editingScope)
+        assertThrows(IllegalArgumentException::class.java) { JobsBackup.validate(backup.copy(editingScope = "injected")) }
+    }
 }
