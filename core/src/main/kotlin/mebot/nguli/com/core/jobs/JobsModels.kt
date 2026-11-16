@@ -19,6 +19,7 @@ data class JobPreferences(
     val salaryMinimum: String = "", val onboarded: Boolean = false,
     val alertsEnabled: Boolean = false, val alertFrequencyHours: Int = 24,
     val salaryCurrency: String = "", val salaryPeriod: String = "",
+    val onboardingStep: Int = 0,
 )
 
 @Serializable

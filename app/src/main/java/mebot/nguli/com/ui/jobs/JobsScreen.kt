@@ -43,6 +43,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import mebot.nguli.com.R
 import mebot.nguli.com.core.jobs.*
+import mebot.nguli.com.jobs.JobsAssistantIntent
+import mebot.nguli.com.jobs.JobsAssistantRequest
 import mebot.nguli.com.ui.*
 import java.text.DateFormat
 import java.util.Date
@@ -58,6 +60,9 @@ fun JobsScreen(
     exportResult: String = "", onClearExportResult: () -> Unit = {},
     initialTab: String = "for_you", tabRequest: Int = 0,
     saving: Boolean = false, refreshPhase: String = "", onCancelRefresh: () -> Unit = {},
+    contextSnapshot: JobsContextSnapshot = JobsContextSnapshot(), onOpenRelated: (String) -> Unit = {},
+    onAssistant: ((JobPosting, JobsAssistantRequest) -> Unit)? = null, aiProviderLabel: String = "",
+    aiConnected: Boolean = true, onConnectAi: (JobApplication) -> Unit = {},
 ) {
     var route by rememberSaveable { mutableStateOf(if (state.preferences.onboarded) "browse" else "onboard") }
     LaunchedEffect(state.preferences.onboarded) {
@@ -91,6 +96,11 @@ fun JobsScreen(
     var exportText by rememberSaveable { mutableStateOf("") }
     var exportForJob by rememberSaveable { mutableStateOf("") }
     var confirmReplace by rememberSaveable { mutableStateOf(false) }
+    var assistantIntent by rememberSaveable { mutableStateOf("") }
+    var assistantQuestion by rememberSaveable { mutableStateOf("") }
+    fun reviewAssistant(intent: JobsAssistantIntent, question: String) {
+        assistantIntent = intent.name; assistantQuestion = question
+    }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
         if (uri != null && exportText.isNotBlank()) onExport(uri, exportText)
         exportText = ""
@@ -144,72 +154,44 @@ fun JobsScreen(
         if (saveUnconfirmed) Surface(color = MaterialTheme.colorScheme.errorContainer) {
             Text(stringResource(R.string.jobs_save_unconfirmed), Modifier.fillMaxWidth().padding(16.dp).testTag("jobs-save-unconfirmed"))
         }
+        if (error == "context_changed") Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.jobs_error_context_changed), Modifier.padding(16.dp))
+        }
         if (error == "storage_error") Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.jobs_error_storage), color = MaterialTheme.colorScheme.onErrorContainer,
                 style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(16.dp).testTag("jobs-storage-error"))
         }
         Box(Modifier.weight(1f)) {
     when (route) {
-        "onboard", "preferences" -> PreferencesScreen(state.preferences, route == "onboard", pendingSaving,
-            onBack = { route = "browse" }, onDraft = onPreferences,
-            onSave = { requestPreferences(it.copy(onboarded = true)) },
-            onSkip = { requestPreferences(state.preferences.copy(onboarded = true)) })
+        "onboard", "preferences" -> JobsGuidedSetup(state.preferences, route == "onboard", pendingSaving,
+            contextSnapshot, state.jobs, onDraft = onPreferences,
+            onBack = { route = "browse" }, onSave = { requestPreferences(it.copy(onboarded = true)) },
+            onSkip = { requestPreferences(it.copy(onboarded = true)) },
+            onAdvanced = { onPreferences(it); route = "advanced" })
+        "advanced" -> PreferencesScreen(state.preferences, false, pendingSaving,
+            onBack = { route = "preferences" }, onDraft = onPreferences,
+            onSave = { requestPreferences(it.copy(onboarded = true)) }, onSkip = {})
         "detail", "workspace", "document" -> {
             if (selected == null) ScreenContainer(scrollKey = "job-missing") {
                 BackButton { route = "browse" }
                 ScreenTitle(stringResource(R.string.jobs_unavailable), stringResource(R.string.jobs_unavailable_body))
             } else if (route == "detail") {
                 val ask = stringResource(R.string.jobs_ask_prompt)
-                ScreenContainer(scrollKey = "job-$selectedId") {
-                    BackButton { route = "browse" }
-                    ScreenTitle(selected.title, selected.company, stringResource(R.string.jobs_details))
-                    AppCard {
-                        MetaRow(Icons.Outlined.LocationOn, selected.location.ifBlank { stringResource(R.string.jobs_location_unknown) })
-                        if (selected.remote) MetaRow(Icons.Outlined.Language, stringResource(R.string.jobs_remote))
-                        if (selected.employmentType.isNotBlank()) MetaRow(Icons.Outlined.WorkOutline, employmentLabel(selected.employmentType))
-                        if (selected.postedAt > 0) SupportingText(stringResource(R.string.jobs_posted, date(selected.postedAt)))
-                        HorizontalDivider()
-                        Text(stringResource(R.string.jobs_salary), style = MaterialTheme.typography.labelLarge)
-                        Text(selected.salary.ifBlank { stringResource(R.string.jobs_not_disclosed) })
-                        Text(stringResource(R.string.jobs_source), style = MaterialTheme.typography.labelLarge)
-                        Text(selected.source)
-                        if (selected.fetchedAt > 0) SupportingText(stringResource(R.string.jobs_last_refresh, date(selected.fetchedAt)))
-                    }
-                    AppCard(color = MaterialTheme.colorScheme.primaryContainer) {
-                        Text(stringResource(R.string.jobs_match), style = MaterialTheme.typography.titleMedium)
-                        JobsMatcher.reasons(selected, state.preferences).forEach { SupportingText(reasonLabel(it)) }
-                    }
-                    if (state.jobs.none { it.id == selectedId }) AppCard(color = MaterialTheme.colorScheme.surfaceVariant) {
-                        SupportingText(stringResource(R.string.jobs_snapshot_warning))
-                    }
-                    Button(onClick = { route = "workspace" }, modifier = Modifier.fillMaxWidth().testTag("jobs-prepare")) {
-                        Text(stringResource(R.string.jobs_prepare))
-                    }
-                    if (application == null || (application.status == "saved" && application.notes.isBlank() && application.draft.isBlank())) {
-                        OutlinedButton(onClick = { onSave(selected.id) }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
-                            Text(stringResource(if (application != null) R.string.jobs_unsave else R.string.jobs_save))
-                        }
-                    } else SupportingText(statusLabel(application.status))
-                    OutlinedButton(onClick = { onOpen(selected.url) }, enabled = selected.url.startsWith("https://"), modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Outlined.OpenInNew, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.jobs_view_source))
-                    }
-                    AppCard {
-                        Text(stringResource(R.string.jobs_requirements), style = MaterialTheme.typography.titleMedium)
-                        val description = remember(selected.description) { Html.fromHtml(selected.description, Html.FROM_HTML_MODE_LEGACY).toString().trim() }
-                        Text(description.ifBlank { stringResource(R.string.jobs_no_description) }, style = MaterialTheme.typography.bodyMedium)
-                    }
-                    AppCard {
-                        Text(stringResource(R.string.jobs_assistant_hint), style = MaterialTheme.typography.bodyMedium)
-                        TextButton(onClick = { onAsk(selected, ask) }) { Text(stringResource(R.string.jobs_assistant)) }
-                    }
-                    SupportingText(stringResource(R.string.jobs_source_note))
-                }
+                JobDetails(selected, state.preferences, application, saving, state.jobs.none { it.id == selectedId },
+                    onBack = { route = "browse" }, onSave = { onSave(selected.id) },
+                    onPrepare = { route = "workspace" }, onOpen = { onOpen(selected.url) },
+                    onAsk = { reviewAssistant(JobsAssistantIntent.REQUIREMENTS, ask) },
+                    related = { RelatedJobsModules(contextSnapshot, onOpenRelated) })
             } else if (route == "document") {
                 val latest = lastAiDraft(selected)
+                val outline = stringResource(R.string.jobs_draft_outline, selected.title, selected.company)
                 ScreenContainer(scrollKey = "job-document-$selectedId") {
                     BackButton { back() }
                     ScreenTitle(stringResource(R.string.jobs_document_title), selected.title)
                     SupportingText(stringResource(R.string.jobs_document_help))
+                    if (document.isBlank()) OutlinedButton(onClick = {
+                        documentTouched = true; document = outline; reviewed = false; onClearExportResult()
+                    }, enabled = !exportBusy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.jobs_start_outline)) }
                     if (latest.isNotBlank()) OutlinedButton(onClick = {
                         if (document.isNotBlank()) confirmReplace = true else { documentTouched = true; document = latest.take(24000); reviewed = false; onClearExportResult() }
                     }, enabled = !exportBusy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.jobs_import_answer)) }
@@ -242,26 +224,33 @@ fun JobsScreen(
                     }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.jobs_save_draft)) }
                 }
             } else {
-                val documentPrompt = stringResource(R.string.jobs_document_prompt)
+                val documentPrompt = stringResource(R.string.jobs_ai_cover_prompt)
+                val cvPrompt = stringResource(R.string.jobs_ai_cv_prompt)
+                val interviewPrompt = stringResource(R.string.jobs_ai_interview_prompt)
                 ScreenContainer(scrollKey = "job-workspace-$selectedId") {
                     BackButton { if (dirty) confirmLeave = true else back() }
-                    ScreenTitle(stringResource(R.string.jobs_workspace), selected.title)
+                    ScreenTitle(stringResource(R.string.jobs_prepare_heading), selected.title)
+                    SupportingText(stringResource(R.string.jobs_prepare_body))
+                    Text(stringResource(R.string.jobs_prepare_step_one), style = MaterialTheme.typography.titleMedium)
                     AppCard {
-                        Text(stringResource(R.string.jobs_status), style = MaterialTheme.typography.titleMedium)
-                        StatusPicker(status) { statusTouched = true; status = it }
                         OutlinedTextField(notes, { notesTouched = true; notes = it.take(10000) }, label = { Text(stringResource(R.string.jobs_notes)) },
                             placeholder = { Text(stringResource(R.string.jobs_notes_hint)) }, minLines = 5,
                             modifier = Modifier.fillMaxWidth().testTag("jobs-notes"), shape = RoundedCornerShape(MeBotTokens.ControlRadius))
-                        Button(onClick = { if (status == "applied" && application?.status != "applied") confirmApplied = true else saveProgress() },
-                            modifier = Modifier.fillMaxWidth().testTag("jobs-save-progress")) { Text(stringResource(R.string.jobs_save_progress)) }
                     }
+                    Text(stringResource(R.string.jobs_prepare_step_two), style = MaterialTheme.typography.titleMedium)
                     AppCard {
                         Text(stringResource(R.string.jobs_manual_note), style = MaterialTheme.typography.bodyMedium)
                         Button(onClick = { route = "document" }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.jobs_document_title)) }
-                        OutlinedButton(onClick = { onAsk(selected, documentPrompt) }, modifier = Modifier.fillMaxWidth()) {
-                            Text(stringResource(R.string.jobs_ai_documents))
+                        OutlinedButton(onClick = { reviewAssistant(JobsAssistantIntent.COVER_LETTER, documentPrompt) }, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(R.string.jobs_ai_cover_letter))
                         }
+                        TextButton(onClick = { reviewAssistant(JobsAssistantIntent.CV_IMPROVEMENTS, cvPrompt) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.jobs_ai_cv)) }
+                        TextButton(onClick = { reviewAssistant(JobsAssistantIntent.INTERVIEW, interviewPrompt) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.jobs_ai_interview)) }
                     }
+                    Text(stringResource(R.string.jobs_prepare_step_three), style = MaterialTheme.typography.titleMedium)
+                    StatusPicker(status) { statusTouched = true; status = it }
+                    Button(onClick = { if (status == "applied" && application?.status != "applied") confirmApplied = true else saveProgress() },
+                        enabled = !saving && !pendingSaving, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp).testTag("jobs-save-progress")) { Text(stringResource(R.string.jobs_save_progress)) }
                     OutlinedButton(onClick = { onOpen(selected.url) }, enabled = selected.url.startsWith("https://"), modifier = Modifier.fillMaxWidth()) {
                         Text(stringResource(R.string.jobs_view_source))
                     }
@@ -293,6 +282,11 @@ fun JobsScreen(
                         }
                     }
                     item {
+                        Text(stringResource(R.string.jobs_browse_headline), style = MaterialTheme.typography.titleLarge)
+                        SupportingText(stringResource(R.string.jobs_search_summary))
+                        if (state.preferences.roles.isNotBlank()) Text(state.preferences.roles, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    }
+                    item {
                         OutlinedTextField(query, { query = it.take(200) }, singleLine = true, placeholder = { Text(stringResource(R.string.jobs_search)) },
                             leadingIcon = { Icon(Icons.Outlined.Search, null) },
                             trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Outlined.Close, stringResource(R.string.jobs_clear_filters)) } },
@@ -320,9 +314,9 @@ fun JobsScreen(
                         }
                     }
                     if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()); SupportingText(stringResource(R.string.jobs_loading)) }
-                    if (error != null && error != "storage_error" && error != "state_changed") item {
+                    if (error != null && error != "storage_error" && error != "state_changed" && error != "context_changed") item {
                         AppCard(color = MaterialTheme.colorScheme.surfaceVariant) {
-                            SupportingText(stringResource(when (error) { "offline" -> R.string.jobs_error_offline; "cached" -> R.string.jobs_error_cached; "partial" -> R.string.jobs_error_partial; else -> R.string.jobs_error_provider }))
+                            SupportingText(stringResource(when (error) { "offline" -> R.string.jobs_error_offline; "cached" -> R.string.jobs_error_cached; "partial" -> R.string.jobs_error_partial; "context_changed" -> R.string.jobs_error_context_changed; else -> R.string.jobs_error_provider }))
                         }
                     }
                     item {
@@ -343,6 +337,7 @@ fun JobsScreen(
                         JobCard(job, state.preferences, state.applications.firstOrNull { it.jobId == job.id },
                             onSelect = { selectedId = job.id; route = "detail" }, onSave = { onSave(job.id) }, saving = saving)
                     }
+                    if (contextSnapshot.modules.isNotEmpty()) item { RelatedJobsModules(contextSnapshot, onOpenRelated) }
                     item { SupportingText(stringResource(R.string.jobs_source_note)) }
                     if (state.preferences.country.trim().lowercase(Locale.ROOT) in setOf("tanzania", "tz")) item {
                         AppCard {
@@ -390,31 +385,19 @@ fun JobsScreen(
             if (status == "applied" && application?.status != "applied") confirmApplied = true else saveProgress()
         }) { Text(stringResource(R.string.jobs_save_progress)) } },
         dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text(stringResource(R.string.jobs_cancel)) } })
+    if (assistantIntent.isNotBlank() && selected != null) JobsAiReview(
+        intent = JobsAssistantIntent.valueOf(assistantIntent), question = assistantQuestion, snapshot = contextSnapshot,
+        application = JobApplication(selected.id, if (status == "applied" && application?.status != "applied") application?.status ?: "preparing" else status, notes, System.currentTimeMillis(), selected, document),
+        provider = aiProviderLabel, supportsContext = onAssistant != null, connected = aiConnected,
+        onConnect = { value -> assistantIntent = ""; onConnectAi(value) },
+        onDismiss = { assistantIntent = "" }, onSend = { request ->
+            assistantIntent = ""
+            if (onAssistant != null) onAssistant(selected, request) else onAsk(selected, request.question)
+        })
     if (confirmReplace && selected != null) AlertDialog(onDismissRequest = { confirmReplace = false },
         title = { Text(stringResource(R.string.jobs_replace_title)) }, text = { Text(stringResource(R.string.jobs_replace_body)) },
         confirmButton = { TextButton(onClick = { documentTouched = true; document = lastAiDraft(selected).take(24000); reviewed = false; onClearExportResult(); confirmReplace = false }) { Text(stringResource(R.string.jobs_replace)) } },
         dismissButton = { TextButton(onClick = { confirmReplace = false }) { Text(stringResource(R.string.jobs_cancel)) } })
-}
-
-@Composable
-private fun JobCard(job: JobPosting, preferences: JobPreferences, application: JobApplication?, onSelect: () -> Unit, onSave: () -> Unit, saving: Boolean = false) {
-    AppCard {
-        Row(verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f).clickable(onClick = onSelect).padding(vertical = 4.dp)) {
-                Text(job.company, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(job.title, style = MaterialTheme.typography.titleLarge, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            }
-            if (application == null || (application.status == "saved" && application.notes.isBlank() && application.draft.isBlank())) IconButton(onClick = onSave, enabled = !saving) { Icon(if (application == null) Icons.Outlined.BookmarkBorder else Icons.Outlined.Bookmark,
-                stringResource(if (application == null) R.string.jobs_save else R.string.jobs_unsave), tint = MaterialTheme.colorScheme.primary) }
-        }
-        MetaRow(Icons.Outlined.LocationOn, job.location.ifBlank { stringResource(R.string.jobs_location_unknown) })
-        if (job.employmentType.isNotBlank()) SupportingText(employmentLabel(job.employmentType))
-        Text(job.salary.ifBlank { stringResource(R.string.jobs_not_disclosed) }, style = MaterialTheme.typography.bodyMedium)
-        Text(job.source, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (application != null) SuggestionChip(onClick = onSelect, label = { Text(statusLabel(application.status)) })
-        JobsMatcher.reasons(job, preferences).take(2).forEach { SupportingText(reasonLabel(it)) }
-        TextButton(onClick = onSelect, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.jobs_details)) }
-    }
 }
 
 @Composable
@@ -458,20 +441,8 @@ private fun PreferencesScreen(preferences: JobPreferences, onboarding: Boolean, 
     }
     ScreenContainer(scrollKey = "jobs-preferences") {
         if (!onboarding) BackButton(onBack)
-        ScreenTitle(stringResource(if (onboarding) R.string.jobs_intro else R.string.jobs_preferences), stringResource(R.string.jobs_intro_body))
+        ScreenTitle(stringResource(R.string.jobs_advanced_preferences), stringResource(R.string.jobs_advanced_body))
         AppCard {
-            PreferenceField(roles, { touched = true; roles = it.take(500) }, R.string.jobs_roles, R.string.jobs_roles_hint)
-            PreferenceField(skills, { touched = true; skills = it.take(1000) }, R.string.jobs_skills, R.string.jobs_skills_hint)
-            PreferenceField(country, { touched = true; country = it.take(100) }, R.string.jobs_country, R.string.jobs_country_hint)
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.jobs_remote_only), modifier = Modifier.weight(1f))
-                val remoteLabel = stringResource(R.string.jobs_remote_only)
-                Switch(remote, { touched = true; remote = it }, modifier = Modifier.semantics { contentDescription = remoteLabel })
-            }
-        }
-        AppCard {
-            Text(stringResource(R.string.jobs_employment), style = MaterialTheme.typography.titleMedium)
-            DropdownChoice(employment, listOf("", "full_time", "part_time", "contract"), { employmentLabel(it) }) { touched = true; employment = it }
             OutlinedTextField(salary, { touched = true; salary = it.take(40) },
                 label = { Text(stringResource(R.string.jobs_salary_pref)) },
                 supportingText = { Text(stringResource(if (minimumValid) R.string.jobs_salary_hint else R.string.jobs_salary_invalid)) },
@@ -554,7 +525,7 @@ private fun BackButton(onBack: () -> Unit) = TextButton(onClick = onBack) {
 }
 
 @Composable
-private fun employmentLabel(value: String): String = when (value.lowercase().replace('-', '_').replace(' ', '_')) {
+internal fun employmentLabel(value: String): String = when (value.lowercase().replace('-', '_').replace(' ', '_')) {
     "" -> stringResource(R.string.jobs_any)
     "full_time", "fulltime" -> stringResource(R.string.jobs_full_time)
     "part_time", "parttime" -> stringResource(R.string.jobs_part_time)
@@ -563,21 +534,21 @@ private fun employmentLabel(value: String): String = when (value.lowercase().rep
 }
 
 @Composable
-private fun statusLabel(value: String): String = stringResource(when (value) {
+internal fun statusLabel(value: String): String = stringResource(when (value) {
     "preparing" -> R.string.jobs_status_preparing; "applied" -> R.string.jobs_status_applied
     "interview" -> R.string.jobs_status_interview; "offer" -> R.string.jobs_status_offer; "closed" -> R.string.jobs_status_closed
     else -> R.string.jobs_status_saved
 })
 
 @Composable
-private fun reasonLabel(value: String): String = stringResource(when (value) {
+internal fun reasonLabel(value: String): String = stringResource(when (value) {
     "role_match" -> R.string.jobs_role_match; "skills_match" -> R.string.jobs_skills_match
     "remote_match" -> R.string.jobs_remote_match; "employment_match" -> R.string.jobs_employment_match
     "location_match" -> R.string.jobs_location_match; "salary_match" -> R.string.jobs_salary_match; "salary_unverified" -> R.string.jobs_salary_unverified
     else -> R.string.jobs_eligibility_unknown
 })
 
-private fun date(timestamp: Long): String = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(timestamp))
+internal fun date(timestamp: Long): String = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(timestamp))
 
 private fun notificationsAvailable(context: android.content.Context): Boolean {
     val channel = context.getSystemService(NotificationManager::class.java).getNotificationChannel("mebot_jobs")

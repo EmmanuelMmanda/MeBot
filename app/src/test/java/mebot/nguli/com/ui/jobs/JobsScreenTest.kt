@@ -5,6 +5,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import mebot.nguli.com.core.jobs.*
+import mebot.nguli.com.jobs.JobsAssistantRequest
 import mebot.nguli.com.ui.MeBotTheme
 import org.junit.Assert.*
 import org.junit.Rule
@@ -25,10 +26,11 @@ class JobsScreenTest {
     private var state by mutableStateOf(JobsState(preferences = JobPreferences(onboarded = true), jobs = listOf(job)))
     private val opened = mutableListOf<String>()
     private val asked = mutableListOf<String>()
+    private val assistantRequests = mutableListOf<JobsAssistantRequest>()
     private var pendingApplication by mutableStateOf<JobApplication?>(null)
     private var pendingPreferences by mutableStateOf<JobPreferences?>(null)
     private var screenError by mutableStateOf<String?>(null)
-    private fun render(error: String? = null, draft: String = "", acknowledge: Boolean = true) {
+    private fun render(error: String? = null, draft: String = "", acknowledge: Boolean = true, context: JobsContextSnapshot = JobsContextSnapshot()) {
         screenError = error
         compose.setContent {
             LaunchedEffect(pendingApplication, pendingPreferences) {
@@ -49,7 +51,7 @@ class JobsScreenTest {
                     state = state.copy(applications = state.applications + JobApplication(id, snapshot = job))
                 }, { application ->
                     pendingApplication = application
-                }, { _, prompt -> asked += prompt }, { opened += it }, { draft })
+                }, { _, prompt -> asked += prompt }, { opened += it }, { draft }, contextSnapshot = context, onAssistant = { _, request -> assistantRequests += request })
             }
         }
     }
@@ -59,7 +61,7 @@ class JobsScreenTest {
     }
     private fun prepare() {
         openJob()
-        compose.onNodeWithTag("jobs-prepare").performScrollTo().performClick()
+        compose.onNodeWithTag("jobs-prepare").assertIsDisplayed().performClick()
     }
 
     @Test fun browsingAndSavingNeverRequiresAi() {
@@ -76,7 +78,7 @@ class JobsScreenTest {
 
     @Test fun openOriginalDoesNotMarkApplied() {
         render(); openJob()
-        compose.onNodeWithText("View original listing").performScrollTo().performClick()
+        compose.onNodeWithTag("jobs-apply-source").assertIsDisplayed().performClick()
         assertEquals(listOf(job.url), opened)
         assertTrue(state.applications.isEmpty())
     }
@@ -113,7 +115,7 @@ class JobsScreenTest {
     @Test fun latePersistedOnboardingStateShowsBrowse() {
         state = JobsState()
         render()
-        compose.onNodeWithText("Find work that fits").assertIsDisplayed()
+        compose.onNodeWithTag("jobs-setup-step-0").assertIsDisplayed()
         compose.runOnIdle { state = state.copy(preferences = JobPreferences(onboarded = true), jobs = listOf(job)) }
         compose.waitForIdle()
         compose.onNodeWithTag("jobs-screen").assertIsDisplayed()
@@ -146,6 +148,8 @@ class JobsScreenTest {
     @Test fun salaryFilterRequiresExplicitCurrencyAndPeriod() {
         render()
         compose.onNodeWithTag("jobs-preferences").performClick()
+        repeat(3) { compose.onNodeWithTag("jobs-setup-next").performClick() }
+        compose.onNodeWithTag("jobs-advanced-preferences").performScrollTo().performClick()
         compose.onNodeWithTag("jobs-salary-minimum").performScrollTo().performTextInput("2000")
         compose.onNodeWithTag("jobs-preferences-save").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithTag("jobs-salary-currency").performScrollTo().performTextInput("USD")
@@ -174,6 +178,53 @@ class JobsScreenTest {
         compose.onNodeWithTag("jobs-notes").performScrollTo().assertTextContains("Retain this interrupted draft")
         assertEquals(1, writes)
         assertTrue(state.applications.isEmpty())
+    }
+
+    @Test fun guidedSetupUsesChoicesAndPersistsEachStepWithoutAi() {
+        state = JobsState(jobs = listOf(job))
+        render()
+        compose.onNodeWithTag("jobs-role-engineer").performScrollTo().performClick()
+        compose.onNodeWithTag("jobs-setup-next").performClick()
+        compose.onNodeWithTag("jobs-setup-step-1").assertIsDisplayed()
+        compose.onNodeWithText("Python").performScrollTo().performClick()
+        compose.onNodeWithTag("jobs-setup-next").performClick()
+        compose.onNodeWithTag("jobs-country-search").performScrollTo().performTextInput("Tanzania")
+        compose.onNode(hasText("Tanzania") and !hasSetTextAction()).performScrollTo().performClick()
+        compose.onNodeWithTag("jobs-setup-next").performClick()
+        compose.onNodeWithTag("jobs-setup-step-3").assertIsDisplayed()
+        compose.onNodeWithTag("jobs-preferences-save").performClick()
+        compose.waitUntil(5_000) { state.preferences.onboarded }
+        assertTrue(state.preferences.roles.contains("engineer"))
+        assertTrue(state.preferences.skills.contains("Python"))
+        assertEquals("Tanzania", state.preferences.country)
+        assertEquals(3, state.preferences.onboardingStep)
+        assertTrue(assistantRequests.isEmpty())
+    }
+
+    @Test fun aiReviewNeverSelectsPersonalContextByDefault() {
+        val snapshot = JobsContextSnapshot("revision-one", listOf(JobsContextCandidate("skill", "profile", "About you", "Skills: Kotlin",
+            JobsContextField.SKILL_TO_CONFIRM, "Kotlin", "self_reported_skill_review")))
+        render(context = snapshot); prepare()
+        compose.onNodeWithTag("jobs-notes").performScrollTo().performTextInput("My unpublished evidence")
+        compose.onNodeWithText("Draft a cover letter").performScrollTo().performClick()
+        compose.onNodeWithTag("jobs-ai-context-preview").performScrollTo().assertTextContains("No personal information selected")
+        compose.onNodeWithTag("jobs-ai-send").performClick()
+        assertEquals("", assistantRequests.single().sharedContext)
+        assertEquals("My unpublished evidence", assistantRequests.single().application?.notes)
+        assertEquals("preparing", assistantRequests.single().application?.status)
+        assertTrue(opened.isEmpty())
+    }
+
+    @Test fun aiReviewSharesOnlyExplicitlySelectedExactEvidence() {
+        val snapshot = JobsContextSnapshot("revision-two", listOf(JobsContextCandidate("skill", "profile", "About you", "Skills: Kotlin",
+            JobsContextField.SKILL_TO_CONFIRM, "Kotlin", "self_reported_skill_review")))
+        render(context = snapshot); prepare()
+        compose.onNodeWithText("Draft a cover letter").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("About you\nSkills: Kotlin").performScrollTo().performClick()
+        compose.onNodeWithTag("jobs-ai-context-preview").performScrollTo().assertTextEquals("Skills: Kotlin")
+        compose.onNodeWithTag("jobs-ai-send").performClick()
+        assertEquals("Skills: Kotlin", assistantRequests.single().sharedContext)
+        assertEquals("revision-two", assistantRequests.single().contextRevision)
     }
 
 }

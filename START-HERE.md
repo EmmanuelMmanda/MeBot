@@ -1,6 +1,6 @@
 # Start here
 
-[Download latest version](https://github.com/EmmanuelMmanda/MeBot/releases/latest/download/mebot-0.9.8.apk) · [Installation guide](docs/download.html).
+[Latest published GitHub release](https://github.com/EmmanuelMmanda/MeBot/releases/latest) · [Installation guide](docs/download.html).
 
 ## 1. Choose topics
 
@@ -46,4 +46,4 @@ Set an alarm or start a Focus session; local tools remain available without an A
 
 Install a compatible update over your existing app. Do not uninstall or clear app data as an update step. If Android reports a signing conflict, check the installation guide before changing installations.
 
-[App screens](docs/screenshots.html) · [User guide](docs/USER-GUIDE.md).
+[App screens](docs/screenshots.html) · [Complete user manual](docs/user-manual.html).

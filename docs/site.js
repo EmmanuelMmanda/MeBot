@@ -126,67 +126,142 @@
     sections.forEach(section => observer.observe(section));
   }
 
-  const releaseNodes = document.querySelectorAll('[data-release-status]');
-  const archiveNodes = document.querySelectorAll('[data-release-entry]');
-  if (releaseNodes.length || archiveNodes.length || document.querySelector('[data-release-apk]')) {
-    const source = document.body.dataset.releaseManifest || 'assets/release.json';
-    fetch(source, {cache: 'no-cache'}).then(response => {
-      if (!response.ok) throw new Error('Unavailable release metadata');
-      return response.json();
-    }).then(catalog => {
-      const repository = 'https://github.com/EmmanuelMmanda/MeBot';
-      const valid = item => item && /^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?$/.test(item.version) && item.tag === `v${item.version}`;
-      const validApk = item => item.filename === `mebot-${item.version}.apk`
-        && /^[a-f0-9]{64}$/i.test(item.sha256 || '')
-        && Number.isSafeInteger(item.sizeBytes) && item.sizeBytes > 0;
-      const validSource = item => [`mebot-${item.version}-source.zip`, `MeBot-${item.version}-source.zip`].includes(item.sourceFilename)
-        && ((/^[a-f0-9]{64}$/i.test(item.sourceSha256 || '') && Number.isSafeInteger(item.sourceSizeBytes) && item.sourceSizeBytes > 0) || item.sourceIntegrityFile === 'SHA256SUMS.txt')
-        && /^[a-f0-9]{40}$/i.test(item.sourceCommit || '');
-      const unavailable = () => document.querySelectorAll('[data-release-load-error]').forEach(item => { item.hidden = false; });
-      const releases = Array.isArray(catalog.releases) ? catalog.releases : [];
-      const release = valid(catalog) && catalog.status === 'published' && catalog.apk === true
-        ? catalog
-        : [...releases].reverse().find(item => valid(item) && item.status === 'published' && item.apk === true);
-      if (!release || !valid(release)) throw new Error('No published Android release is available');
-      if (archiveNodes.length) archiveNodes.forEach(node => {
-        const entry = releases.find(item => item && item.version === node.dataset.releaseEntry);
-        if (!valid(entry) || entry.status !== 'published') return;
-        if (!validSource(entry) || (entry.apk !== false && (entry.apk !== true || !validApk(entry)))) {
-          unavailable(); return;
-        }
-        const sourceLink = node.querySelector('[data-archive-source]');
-        if (sourceLink) { sourceLink.href = `${repository}/releases/download/${entry.tag}/${entry.sourceFilename}`; sourceLink.hidden = false; }
-        const notesLink = node.querySelector('[data-archive-notes]');
-        if (notesLink) { notesLink.href = `${repository}/releases/tag/${entry.tag}`; notesLink.hidden = false; }
-        const apkLink = node.querySelector('[data-archive-apk]');
-        if (apkLink && entry.apk === true) { apkLink.href = `${repository}/releases/download/${entry.tag}/${entry.filename}`; apkLink.hidden = false; }
-        const status = node.querySelector('[data-archive-status]');
-        if (status) status.textContent = entry.apk === true ? 'Public APK and source' : 'Source only · no APK';
-        node.querySelectorAll('[data-archive-pending]').forEach(item => { item.hidden = true; });
-        if (/^[a-f0-9]{64}$/i.test(entry.sha256 || '')) {
-          const checksum = node.querySelector('[data-archive-sha]');
-          if (checksum) { checksum.textContent = entry.sha256; checksum.parentElement.hidden = false; }
-        }
-      });
-      if (release.status !== 'published') throw new Error('Latest published release is not verified');
-      if (!validApk(release) || !validSource(release)) throw new Error('Incomplete public release metadata');
-      const file = release.filename;
-      const apk = `${repository}/releases/latest/download/${file}`;
-      document.querySelectorAll('[data-release-apk]').forEach(link => { link.href = apk; link.hidden = false; });
-      document.querySelectorAll('[data-release-pending]').forEach(item => { item.hidden = true; });
-      document.querySelectorAll('[data-release-source]').forEach(link => {
-        link.href = `${repository}/releases/download/v${release.version}/${release.sourceFilename}`; link.hidden = false;
-      });
-      releaseNodes.forEach(item => { item.textContent = 'Latest public Android release'; });
-      document.querySelectorAll('[data-release-filename]').forEach(item => { item.textContent = file; });
-      if (/^[a-f0-9]{64}$/i.test(release.sha256 || '')) {
-        document.querySelectorAll('[data-release-sha]').forEach(item => { item.textContent = release.sha256; });
-        document.querySelectorAll('[data-release-integrity]').forEach(item => { item.hidden = false; });
+  const releasePage = document.querySelector('[data-release-page]');
+  if (releasePage) {
+    const api = 'https://api.github.com/repos/EmmanuelMmanda/MeBot/releases/latest';
+    const repo = 'https://github.com/EmmanuelMmanda/MeBot';
+    const status = document.querySelector('[data-release-status]');
+    const button = document.querySelector('[data-release-apk]');
+    const detailsLink = document.querySelector('[data-release-details-link]');
+    const name = document.querySelector('[data-release-name]');
+    const date = document.querySelector('[data-release-date]');
+    const notes = document.querySelector('[data-release-notes]');
+    const size = document.querySelector('[data-release-size]');
+    const digest = document.querySelector('[data-release-sha]');
+    const version = document.querySelector('[data-release-version]');
+    const resources = document.querySelector('[data-release-assets]');
+    const info = document.querySelector('[data-release-info]');
+    const error = document.querySelector('[data-release-error]');
+    const showError = message => {
+      if (status) status.textContent = 'Could not verify the latest APK.';
+      if (error) { error.textContent = message; error.hidden = false; }
+      if (button) {
+        button.href = repo + '/releases/latest';
+        button.textContent = 'Open latest GitHub release';
+        button.setAttribute('aria-label', 'Open the latest GitHub release page');
       }
-      if (Number.isSafeInteger(release.sizeBytes) && release.sizeBytes > 0)
-        document.querySelectorAll('[data-release-size]').forEach(item => { item.textContent = `${(release.sizeBytes / 1000000).toFixed(1)} MB`; });
-    }).catch(() => {
-      document.querySelectorAll('[data-release-load-error]').forEach(item => { item.hidden = false; });
-    });
+      if (detailsLink) detailsLink.href = repo + '/releases/latest';
+      if (version) version.textContent = '';
+      if (info) info.hidden = true;
+    };
+    const noVersion = value => String(value || '')
+      .replace(/\bv?\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?\b/g, '')
+      .replace(/[ \t]{2,}/g, ' ').trim();
+    const assetUrl = (asset, tag) => {
+      if (!asset || asset.state !== 'uploaded' || !Number.isSafeInteger(asset.size) || asset.size <= 0) return null;
+      try {
+        const expected = repo + '/releases/download/' + tag + '/' + asset.name;
+        const parsed = new URL(asset.browser_download_url);
+        return parsed.href === expected ? parsed.href : null;
+      } catch (_) { return null; }
+    };
+    const releaseVersion = release => {
+      if (!release || release.draft !== false || release.prerelease !== false) return null;
+      const match = /^v(\d+\.\d+\.\d+)$/.exec(String(release.tag_name || ''));
+      const published = Date.parse(release.published_at || '');
+      if (!match || !Number.isFinite(published)) return null;
+      return {tag: release.tag_name, version: match[1], published};
+    };
+    const loadRelease = async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      try {
+        const response = await fetch(api, {
+          cache: 'no-store',
+          credentials: 'omit',
+          headers: {Accept: 'application/vnd.github+json'},
+          referrerPolicy: 'no-referrer',
+          signal: controller.signal
+        });
+        if (!response.ok) {
+          if (response.status === 403 || response.status === 429) throw new Error('rate');
+          if (response.status === 404) throw new Error('missing');
+          throw new Error('http');
+        }
+        const release = await response.json();
+        const parsed = releaseVersion(release);
+        if (!parsed) throw new Error('invalid');
+        const assets = Array.isArray(release.assets) ? release.assets : [];
+        const apkName = 'mebot-' + parsed.version + '.apk';
+        const apk = assets.find(item => item && item.name === apkName);
+        const apkUrl = assetUrl(apk, parsed.tag);
+        const digestValue = apk?.digest;
+        const digestPresent = digestValue !== undefined && digestValue !== null && String(digestValue).trim() !== '';
+        const shaMatch = /^sha256:([a-f0-9]{64})$/i.exec(String(digestValue || ''));
+        const releaseUrl = repo + '/releases/tag/' + parsed.tag;
+        if (!apkUrl || release.html_url !== releaseUrl || (digestPresent && !shaMatch)) throw new Error('unverified');
+        if (button) {
+          button.href = apkUrl;
+          button.textContent = 'Download latest version';
+          button.removeAttribute('aria-label');
+        }
+        if (detailsLink) detailsLink.href = releaseUrl;
+        if (name) name.textContent = noVersion(release.name) || 'Latest Android release';
+        if (date) {
+          date.dateTime = new Date(parsed.published).toISOString();
+          date.textContent = new Date(parsed.published).toLocaleDateString(undefined, {year: 'numeric', month: 'long', day: 'numeric'});
+        }
+        if (notes) notes.textContent = noVersion(release.body) || 'No release notes were provided.';
+        if (size) size.textContent = (apk.size / 1000000).toFixed(1) + ' MB';
+        if (digest) digest.textContent = shaMatch ? shaMatch[1].toLowerCase() : 'Not provided by GitHub';
+        if (version) version.textContent = ' ' + parsed.version;
+        if (status) status.textContent = 'Latest published Android release';
+        if (error) error.hidden = true;
+        const allowed = [
+          ['source', /(?:^|-)source\.zip$/i],
+          ['verification report', /verification\.md$/i],
+          ['release notes', /^RELEASE-NOTES\.md$/i],
+          ['SHA-256 checksums', /^SHA256SUMS\.txt$/i],
+          ['release identity metadata', /^release-metadata\.json$/i]
+        ];
+        if (resources) {
+          resources.replaceChildren();
+          for (const [label, pattern] of allowed) {
+            const item = assets.find(entry => entry && pattern.test(entry.name) && assetUrl(entry, parsed.tag));
+            const href = assetUrl(item, parsed.tag);
+            if (!href) continue;
+            const row = document.createElement('div');
+            row.className = 'download-row';
+            const text = document.createElement('div');
+            const strong = document.createElement('strong');
+            strong.textContent = label;
+            text.appendChild(strong);
+            const link = document.createElement('a');
+            link.href = href;
+            link.textContent = 'Open';
+            link.rel = 'noopener';
+            row.append(text, link);
+            resources.appendChild(row);
+          }
+          if (!resources.children.length) {
+            const paragraph = document.createElement('p');
+            paragraph.textContent = 'No additional release files are available.';
+            resources.appendChild(paragraph);
+          }
+        }
+        if (info) info.hidden = false;
+      } catch (cause) {
+        if (cause?.name === 'AbortError') showError('GitHub did not respond in time. The latest APK could not be verified.');
+        else if (cause?.message === 'rate') showError('GitHub is limiting release checks right now. Open Releases to see what is published.');
+        else if (cause?.message === 'missing') showError('GitHub did not find a published Android release. Open Releases to check availability.');
+        else if (cause?.message === 'unverified') showError('The latest release does not include a verifiable Android APK. Open Releases to review its files.');
+        else if (cause?.message === 'invalid') showError('GitHub returned release information that could not be verified. Open Releases to review it.');
+        else showError('The latest release could not be checked. Check your connection or open Releases.');
+      } finally {
+        clearTimeout(timeout);
+      }
+    };
+    if (status) status.textContent = 'Checking GitHub for the latest published Android release…';
+    loadRelease();
   }
 })();

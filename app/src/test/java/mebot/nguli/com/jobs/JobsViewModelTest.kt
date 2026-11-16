@@ -108,4 +108,72 @@ class JobsViewModelTest {
         assertTrue(app.jobsRepository.current().applications.isEmpty())
         assertEquals("", app.jobsRepository.current().preferences.roles)
     }
+    @Test fun assistantHandoffAcknowledgesUnsavedApplicationBeforeCallback(): Unit = runBlocking {
+        val vm = model()
+        val application = JobApplication("test:1", status = "preparing", notes = "New notes", draft = "Unsaved reviewed draft")
+        val observed = CompletableDeferred<JobApplication>()
+        vm.prepareAssistant(application, vm.ui.value.state.editingScope) {
+            observed.complete(vm.ui.value.state.applications.single())
+        }
+        val acknowledged = withTimeout(5_000) { observed.await() }
+        assertEquals(application.notes, acknowledged.notes)
+        assertEquals(application.draft, acknowledged.draft)
+        assertEquals(application.status, acknowledged.status)
+        assertEquals(acknowledged, app.jobsRepository.current().applications.single())
+        withTimeout(5_000) { vm.ui.first { !it.saving } }
+        assertNull(vm.ui.value.error)
+    }
+
+    @Test fun duplicatePendingAssistantHandoffInvokesCallbackOnlyOnce(): Unit = runBlocking {
+        val vm = model()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val gate = launch(Dispatchers.IO) {
+            app.feedRepository.withJobsConsistency { entered.complete(Unit); release.await() }
+        }
+        withTimeout(5_000) { entered.await() }
+        val count = java.util.concurrent.atomic.AtomicInteger()
+        try {
+            val scope = vm.ui.value.state.editingScope
+            vm.prepareAssistant(JobApplication("test:1", draft = "First reviewed draft"), scope) { count.incrementAndGet() }
+            vm.prepareAssistant(JobApplication("test:1", draft = "Duplicate must not replace first"), scope) { count.incrementAndGet() }
+            assertEquals(0, count.get())
+        } finally { release.complete(Unit) }
+        gate.join()
+        withTimeout(5_000) { vm.ui.first { !it.saving } }
+        assertEquals(1, count.get())
+        assertEquals("First reviewed draft", app.jobsRepository.current().applications.single().draft)
+    }
+
+    @Test fun staleScopeRejectsAssistantHandoffEvenWithoutApplicationWrite(): Unit = runBlocking {
+        val vm = model()
+        val oldScope = vm.ui.value.state.editingScope
+        app.jobsRepository.erase()
+        withTimeout(5_000) { vm.ui.first { it.state.editingScope != oldScope } }
+        val count = java.util.concurrent.atomic.AtomicInteger()
+        vm.prepareAssistant(null, oldScope) { count.incrementAndGet() }
+        withTimeout(5_000) { vm.ui.first { !it.saving && it.error == "state_changed" } }
+        assertEquals(0, count.get())
+        vm.prepareAssistant(JobApplication("test:1", draft = "Old draft"), oldScope) { count.incrementAndGet() }
+        withTimeout(5_000) { vm.ui.first { !it.saving && it.error == "state_changed" } }
+        assertEquals(0, count.get())
+        assertTrue(app.jobsRepository.current().applications.isEmpty())
+    }
+
+    @Test fun failedDurableWriteNeverHandsOffAndCanRetry(): Unit = runBlocking {
+        val vm = model()
+        val before = app.jobsRepository.current()
+        val count = java.util.concurrent.atomic.AtomicInteger()
+        // The real serializer refuses files over 16 MiB, without replacing the previous file.
+        vm.prepareAssistant(JobApplication("test:1", draft = "x".repeat(17 * 1024 * 1024)), before.editingScope) {
+            count.incrementAndGet()
+        }
+        withTimeout(10_000) { vm.ui.first { !it.saving && it.error == "storage_error" } }
+        assertEquals(0, count.get())
+        assertEquals(before, app.jobsRepository.current())
+        vm.prepareAssistant(JobApplication("test:1", draft = "Bounded retry"), before.editingScope) { count.incrementAndGet() }
+        withTimeout(5_000) { vm.ui.first { !it.saving && it.state.applications.singleOrNull()?.draft == "Bounded retry" } }
+        assertEquals(1, count.get())
+    }
+
 }

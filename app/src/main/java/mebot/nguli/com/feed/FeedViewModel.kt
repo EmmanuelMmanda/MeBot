@@ -1255,22 +1255,40 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         }
     }
 
-    /** Explicit Jobs AI action, reusing the standard cancellation and streaming lifecycle. */
-    fun openJobsConversation(job: mebot.nguli.com.core.jobs.JobPosting, request: String): Job {
+    /** Compatibility for a listing-only question; personal context is never inferred. */
+    fun openJobsConversation(job: mebot.nguli.com.core.jobs.JobPosting, request: String): Job =
+        openJobsConversation(job, mebot.nguli.com.jobs.JobsAssistantRequest(question = request))
+
+    /** Explicit reviewed Jobs action, using the established cancellation/streaming lifecycle. */
+    fun openJobsConversation(job: mebot.nguli.com.core.jobs.JobPosting, request: mebot.nguli.com.jobs.JobsAssistantRequest, expectedJobsScope: String? = null): Job {
         clearAnswer()
         val generation = beginConversationSelection(null)
         return viewModelScope.launch {
             try {
-                val candidate = mebot.nguli.com.jobs.JobsAssistant.conversation(job)
+                val candidate = mebot.nguli.com.jobs.JobsAssistant.conversation(job, request.sharedContext)
+                val prompt = mebot.nguli.com.jobs.JobsAssistant.requestText(request.intent, request.question)
+                val jobsRepository = getApplication<MeBotApplication>().jobsRepository
+                val jobsEpoch = jobsRepository.generation()
+                val jobsAtOpen = jobsRepository.current()
+                if (expectedJobsScope != null && jobsAtOpen.editingScope != expectedJobsScope) throw FeedFailure("context_changed")
+                if (request.sharedContext.isNotEmpty() && request.contextRevision.isBlank()) throw FeedFailure("context_changed")
+                val preferences = jobsAtOpen.preferences
                 var selected: AiConversation? = null
                 repository.update { state ->
                     if (generation != conversationSelectionGeneration) return@update state
+                    if (request.sharedContext.isNotEmpty() && request.contextRevision.isNotEmpty() &&
+                        mebot.nguli.com.core.jobs.JobsContextSuggestions.build(state, preferences).revision != request.contextRevision)
+                        throw FeedFailure("context_changed")
                     val existing = state.conversations.find { it.id == candidate.id }
                     if (existing == null && state.conversations.size >= ConversationLogic.maxConversations)
                         throw FeedFailure("conversation_limit")
-                    val listing = candidate.attachments.single()
-                    val refreshed = existing?.copy(attachments = existing.attachments.filterNot { it.id == listing.id } + listing,
+                    val managed = mebot.nguli.com.jobs.JobsAssistant.managedAttachmentIds(job)
+                    val refreshed = existing?.copy(
+                        attachments = existing.attachments.filterNot { it.id in managed } + candidate.attachments,
                         contextScope = "jobs", updatedAtMillis = System.currentTimeMillis()) ?: candidate
+                    // Keep user attachments, or fail explicitly. Never silently discard evidence.
+                    try { ConversationLogic.validate(listOf(refreshed)) }
+                    catch (_: IllegalArgumentException) { throw FeedFailure("invalid_input") }
                     selected = refreshed
                     state.copy(conversations = state.conversations.filterNot { it.id == candidate.id } + refreshed,
                         suggestionSets097 = if (existing?.attachments != refreshed.attachments) emptyList() else state.suggestionSets097)
@@ -1278,7 +1296,17 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                 if (generation != conversationSelectionGeneration) return@launch
                 val thread = selected ?: return@launch
                 finishConversationSelection(generation, thread)
-                if (request.isNotBlank()) sendConversation(mebot.nguli.com.jobs.JobsAssistant.scopedPrompt(request))
+                launchConversationSend(prompt, thread.id, null, generation, fromSuggestion = false,
+                    expectedRequestCurrent = { latest ->
+                        jobsRepository.generation() == jobsEpoch &&
+                            (request.sharedContext.isEmpty() || mebot.nguli.com.core.jobs.JobsContextSuggestions.build(latest, preferences).revision == request.contextRevision)
+                    },
+                    beforeSend = { latest ->
+                        val jobsNow = getApplication<MeBotApplication>().jobsRepository.current()
+                        if (jobsNow.editingScope != jobsAtOpen.editingScope ||
+                            (request.sharedContext.isNotEmpty() && mebot.nguli.com.core.jobs.JobsContextSuggestions.build(latest, jobsNow.preferences).revision != request.contextRevision))
+                            throw FeedFailure("context_changed")
+                    })
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (e: Exception) { failConversationSelection(generation, e) }
         }
@@ -2084,6 +2112,8 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         suggestionTarget: SuggestionTargetSnapshot097? = null,
         suggestionLanguage: String = "en",
         suggestionOptionId: String? = null,
+        beforeSend: suspend (FeedState) -> Unit = {},
+        expectedRequestCurrent: ((FeedState) -> Boolean)? = null,
     ): Job? {
         val selectedUi = _ui.value
         val suggestionInFlight = synchronized(suggestionActionLock) { suggestionActionJob?.isActive == true }
@@ -2095,6 +2125,7 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             _ui.update { it.copy(asking = true, answer = null, answerCitations = emptyList(), question = question, error = null) }
             try {
                 val state = repository.current()
+                beforeSend(state)
                 if (selectionGeneration != conversationSelectionGeneration) return@launch
                 val selected = if (targetConversationId != null) {
                     state.conversations.find { it.id == targetConversationId } ?: throw FeedFailure("invalid_input")
@@ -2124,7 +2155,7 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                     val actionActive = if (target == null) true else synchronized(suggestionActionLock) {
                         suggestionActionJob?.isActive == true
                     }
-                    if (!unlocked || !actionActive) false else if (target == null) true else {
+                    if (!unlocked || !actionActive || expectedRequestCurrent?.invoke(latest) == false) false else if (target == null) true else {
                         val optionId = suggestionOptionId
                         if (optionId == null) false
                         else if (target.kind != SuggestionTargetKind097.CONVERSATION) {
@@ -2166,9 +2197,13 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                 if (selectionGeneration != conversationSelectionGeneration) return@launch
                 if (!targetStillCurrent(requestState)) throw FeedFailure(if (suggestionTarget != null) "suggestion_changed" else "invalid_input")
                 val result = withContext(Dispatchers.IO) {
-                    if (suggestionTarget == null) engine.askConversation(thread.id, question) { text ->
+                    if (suggestionTarget == null && expectedRequestCurrent == null) engine.askConversation(thread.id, question) { text ->
                         if (generation == askGeneration && selectionGeneration == conversationSelectionGeneration) _ui.update { it.copy(answer = text) }
-                    } else engine.askConversation(
+                    } else if (suggestionTarget == null) engine.askConversation(thread.id, question,
+                        onText = { text ->
+                            if (generation == askGeneration && selectionGeneration == conversationSelectionGeneration) _ui.update { it.copy(answer = text) }
+                        }, expectedCurrent = targetStillCurrent, expectedLanguage = _ui.value.appLanguage,
+                        staleFailureCode = "context_changed", onRequestDispatch = {}) else engine.askConversation(
                         conversationId = thread.id,
                         question = question,
                         onText = { text ->

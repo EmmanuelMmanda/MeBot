@@ -1,6 +1,6 @@
 <div align="center"><img src="docs/assets/mebot.svg" width="64" height="64" alt="MeBot robot logo"><h1>MeBot</h1><p>A personal feed for stories, opportunities and everyday tools.</p><p>Android · English · Kiswahili · Apache 2.0</p></div>
 
-[Download latest version](https://github.com/EmmanuelMmanda/MeBot/releases/latest/download/mebot-0.9.8.apk) · [Installation guide](docs/download.html) · [App screens](docs/screenshots.html)
+[Latest published GitHub release](https://github.com/EmmanuelMmanda/MeBot/releases/latest) · [Installation guide](docs/download.html) · [App screens](docs/screenshots.html)
 
 ## Personal reading and story questions
 
@@ -45,7 +45,7 @@ Screen images are examples. Any AI response shown uses sample content, not a liv
 
 ## Install and verify
 
-[Download latest version](https://github.com/EmmanuelMmanda/MeBot/releases/latest/download/mebot-0.9.8.apk) · [Latest release files](https://github.com/EmmanuelMmanda/MeBot/releases/latest) · [Start here](START-HERE.md) · [User guide](docs/USER-GUIDE.md).
+[Download page](docs/download.html) · [Latest published GitHub release](https://github.com/EmmanuelMmanda/MeBot/releases/latest) · [Start here](START-HERE.md) · [Complete user manual](docs/user-manual.html).
 
 Install a compatible update over your existing app. Do not uninstall or clear app data as an update step. If Android reports a signing conflict, check the installation guide before changing installations.
 

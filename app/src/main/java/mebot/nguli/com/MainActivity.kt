@@ -59,6 +59,7 @@ import mebot.nguli.com.core.*
 import mebot.nguli.com.ui.*
 import mebot.nguli.com.ui.jobs.JobsScreen
 import mebot.nguli.com.jobs.JobsViewModel
+import mebot.nguli.com.core.jobs.JobsContextSuggestions
 import mebot.nguli.com.jobs.JobsAssistant
 import mebot.nguli.com.ui.feed.*
 import mebot.nguli.com.feed.RealtimeCall099ViewModel
@@ -286,6 +287,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
     var itemId by rememberSaveable { mutableStateOf<String?>(null) }
     var detailReturn by rememberSaveable { mutableStateOf("feed") }
     var aiReturn by rememberSaveable { mutableStateOf("feed") }
+    var moduleReturn by rememberSaveable { mutableStateOf("modules") }
     var connectionReturn by rememberSaveable { mutableStateOf("you") }
     var contextReturn by rememberSaveable { mutableStateOf("you") }
     var interestsReturn by rememberSaveable { mutableStateOf("you") }
@@ -597,6 +599,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
         itemId = id; feedVm.clearAnswerForNavigation(); feedVm.markViewed(id); page = "item"
     }
     fun openModule(id: String?) {
+        moduleReturn = if (page == "jobs") "jobs" else "modules"
         val selected = feed?.modules?.find { it.id == id } ?: FeedModule()
         moduleDraft = Json.encodeToString(selected); moduleIsNew = id == null
         feedVm.clearMessage(); screenStates.removeState("module-edit"); page = "module-edit"
@@ -645,7 +648,8 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
         page = when (page) {
             "checkpoint" -> checkpointReturn
             "alarm-edit" -> "alarms"
-            "alarms", "focus", "history", "daily", "module-edit" -> "modules"
+            "module-edit" -> moduleReturn
+            "alarms", "focus", "history", "daily" -> "modules"
             "item" -> detailReturn
             "ai" -> if (aiReturn == "jobs") "jobs" else if (aiReturn == "item" && feedUi.state?.items?.any { it.id == itemId } == true) "item" else "feed"
             "ask" -> if (itemId != null) "item" else "feed"
@@ -770,9 +774,38 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                             }, onOpen = { url -> if (FeedLogic.safeUrl(url, true)) {
                                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
                             } }, lastAiDraft = { job ->
-                                feed.conversations.find { it.id == JobsAssistant.conversation(job).id }?.turns?.lastOrNull { it.role == "assistant" }?.text.orEmpty()
+                                feed.conversations.filter { thread -> thread.contextScope == "jobs" &&
+                                    thread.attachments.any { it.id in JobsAssistant.managedAttachmentIds(job) } &&
+                                    thread.turns.any { it.role == "assistant" } }
+                                    .maxByOrNull { it.updatedAtMillis }?.turns?.lastOrNull { it.role == "assistant" }?.text.orEmpty()
                             }, onExport = jobsVm::exportPdf, exportBusy = jobsUi.exportBusy, exportResult = jobsUi.exportResult,
-                            onClearExportResult = jobsVm::clearExportResult, initialTab = "saved", tabRequest = jobsSavedRequest, saving = jobsUi.saving, refreshPhase = jobsUi.refreshPhase, onCancelRefresh = jobsVm::cancelRefresh) }
+                            onClearExportResult = jobsVm::clearExportResult, initialTab = "saved", tabRequest = jobsSavedRequest, saving = jobsUi.saving, refreshPhase = jobsUi.refreshPhase, onCancelRefresh = jobsVm::cancelRefresh,
+                            contextSnapshot = JobsContextSuggestions.build(feed, jobsUi.state.preferences),
+                            onOpenRelated = { id ->
+                                if (JobsContextSuggestions.build(feed, jobsUi.state.preferences).modules.any { it.id == id }) openModule(id)
+                            },
+                            aiProviderLabel = when (feed.connection.mode) {
+                                "chatgpt" -> "ChatGPT"
+                                "direct" -> "OpenAI"
+                                "service", "compatible" -> runCatching { Uri.parse(feed.connection.serviceUrl).host.orEmpty() }.getOrDefault("")
+                                else -> feed.connection.mode.replaceFirstChar { it.uppercase() }
+                            },
+                            aiConnected = feedUi.connected,
+                            onConnectAi = { application ->
+                                jobsVm.prepareAssistant(application, jobsEditingScope) {
+                                    if (page == "jobs" && jobsVm.ui.value.state.editingScope == jobsEditingScope) openConnection()
+                                }
+                            },
+                            onAssistant = { job, request ->
+                                jobsVm.prepareAssistant(request.application, jobsEditingScope) {
+                                    // Leaving the editor while disk is pending cancels the one-shot handoff.
+                                    if (page == "jobs" && jobsVm.ui.value.state.editingScope == jobsEditingScope) {
+                                        aiReturn = "jobs"
+                                        feedVm.openJobsConversation(job, request, jobsEditingScope)
+                                        page = "ai"
+                                    }
+                                }
+                            }) }
                         "feed" -> {
                             val now = ZonedDateTime.now()
                             val nextAlarm = if ("alarms" in state.settings.enabledModules) state.alarms.filter { it.enabled }.minByOrNull { nextAlarmOccurrence(it, now).toInstant() } else null
@@ -805,7 +838,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                             initialFilter = moduleCatalogFilter,
                         )
                         "module-edit" -> moduleDraft?.let { draft -> ModuleEditor(Json.decodeFromString(draft), feedUi, moduleIsNew,
-                            { module -> feedVm.clearMessage(); feedVm.saveModule(module) }, feedVm::removeModule, { page = "modules" },
+                            { module -> feedVm.clearMessage(); feedVm.saveModule(module) }, feedVm::removeModule, { page = moduleReturn },
                             onSavePersonalized = { module, notes -> feedVm.clearMessage(); feedVm.saveModule(module, notes) }, onOpenItem = ::openItem) }
                         "saved" -> SavedFeed(feed, ::openItem, feedVm::toggleSaved, { page = "feed" }, onJobs = { jobsSavedRequest++; page = "jobs" })
                         "you" -> YouScreen(feedUi,
