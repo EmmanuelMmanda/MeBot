@@ -515,7 +515,12 @@ class MeBotJourneyTest {
         }
     }
     private fun waitForTag(tag: String) {
-        compose.waitUntil(15_000) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }
+        try {
+            compose.waitUntil(15_000) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }
+        } catch (failure: ComposeTimeoutException) {
+            throw AssertionError("Expected destination $tag after pointer navigation. Enabled tools: " +
+                current().settings.enabledModules + "\n" + compose.onRoot().printToString(), failure)
+        }
     }
     private fun waitForState(predicate: (AppState) -> Boolean) {
         try { compose.waitUntil(15_000) { predicate(current()) } }

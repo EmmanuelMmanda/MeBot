@@ -535,7 +535,19 @@ class MeBotFeedJourneyTest {
             listOf(syntheticStory), persisted.items)
         assertEquals(AiConnection(), persisted.connection)
         waitForState { it.items.singleOrNull()?.id == syntheticStory.id }
-        compose.waitUntil(15_000) { viewModel.ui.value.state?.items?.singleOrNull()?.id == syntheticStory.id }
+        try {
+            compose.waitUntil(15_000) {
+                // The IO fixture commit can finish just after the helper's last UI drain.
+                compose.waitForIdle()
+                viewModel.ui.value.state?.items?.singleOrNull()?.id == syntheticStory.id
+            }
+        } catch (failure: ComposeTimeoutException) {
+            val observed = viewModel.ui.value
+            throw AssertionError("Persisted fixture did not reach the FeedViewModel: error=${observed.error}, " +
+                "sameActivityVm=${viewModel === androidx.lifecycle.ViewModelProvider(compose.activity)[FeedViewModel::class.java]}, " +
+                "loading=${observed.loading}, vmIds=${observed.state?.items?.map { it.id }}, " +
+                "diskIds=${state().items.map { it.id }}", failure)
+        }
         assertFalse("The disconnected fixture remains local/RSS usable", viewModel.ui.value.connected)
 
         val currentState = state()

@@ -506,9 +506,11 @@ class SuggestionActions097ViewModelTest {
     @Test fun staleTargetCannotStartSuggestionGeneration() = runBlocking {
         val before = app.feedRepository.current()
         val target = requireNotNull(SuggestionTargets097.module(before, module.id, "en"))
-        app.feedRepository.update { current -> current.copy(modules = current.modules.map {
+        val changed = app.feedRepository.update { current -> current.copy(modules = current.modules.map {
             if (it.id == module.id) it.copy(query = "Changed goal after the sheet opened") else it
         }) }
+        // A repository commit and its UI collector emission are separate operations.
+        withTimeout(10_000) { vm.ui.first { it.state == changed } }
         assertEquals(SuggestionSheetStatus097.STALE_TARGET, vm.suggestionSheet097(target, "en").status)
         assertNull(vm.generateSuggestions097(target, "en"))
         assertTrue(app.suggestedQuestionSets.isEmpty())

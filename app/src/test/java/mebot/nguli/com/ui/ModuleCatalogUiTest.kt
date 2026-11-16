@@ -6,6 +6,8 @@ import android.os.Looper
 import android.view.PixelCopy
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
@@ -98,6 +100,34 @@ class ModuleCatalogUiTest {
         assertEquals(saves.first(), saves.last())
     }
 
+    @Test fun everydayToolsOpenThroughRealPointerAfterScrollingFullCatalog() {
+        val opened = mutableListOf<String>()
+        compose.setContent {
+            MeBotTheme {
+                Scaffold(bottomBar = { MeBotNavigation("modules") {} }) { padding ->
+                    Surface(Modifier.fillMaxSize().padding(padding)) {
+                        ModulesScreen(FeedState(onboardingComplete = true), AppState(),
+                            onEdit = {}, onToggle = { _, _ -> },
+                            onUtility = { opened += it }, onUtilityToggle = { _, _ -> })
+                    }
+                }
+            }
+        }
+        listOf("module-focus" to "focus", "module-checkin" to "daily", "module-alarm" to "alarms").forEach { (tag, route) ->
+            val before = opened.size
+            compose.onNodeWithTag(tag).performScrollTo()
+            compose.waitForIdle()
+            val target = compose.onNodeWithTag(tag)
+            println("UTILITY_POINTER $tag clipped=${target.fetchSemanticsNode().boundsInRoot} " +
+                "unclipped=${target.getUnclippedBoundsInRoot()} root=${compose.onRoot().fetchSemanticsNode().boundsInRoot}")
+            target.assertIsDisplayed().assertIsEnabled().performClick()
+            compose.waitForIdle()
+            screenshot("utility-pointer-$route-after", advanceClock = false)
+            assertEquals("Pointer on $tag must invoke its destination exactly once.\n" + compose.onRoot().printToString(),
+                listOf(route), opened.drop(before))
+        }
+    }
+
     @Test fun categoryBrowsingAndTogglesReflectCommittedConfiguration() {
         val state = mutableStateOf(FeedState(onboardingComplete = true))
         val toggles = mutableListOf<Pair<String, Boolean>>()
@@ -151,8 +181,8 @@ class ModuleCatalogUiTest {
 
     private fun text(id: Int) = compose.activity.getString(id)
 
-    private fun screenshot(name: String) {
-        compose.mainClock.advanceTimeBy(5_000)
+    private fun screenshot(name: String, advanceClock: Boolean = true) {
+        if (advanceClock) compose.mainClock.advanceTimeBy(5_000)
         compose.waitForIdle()
         val image = compose.runOnIdle {
             val window = compose.activity.window
