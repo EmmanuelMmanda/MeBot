@@ -10,9 +10,9 @@ open class MeBotApplication : Application() {
     // Lazy: Direct Boot receivers must not open credential-protected personal data.
     open val appLock by lazy { mebot.nguli.com.security.AppLockController(this) }
     val repository by lazy { AppRepository(this) }
-    open val jobsRepository by lazy { mebot.nguli.com.jobs.JobsRepository(this, consistencyRepository = { feedRepository }) }
+    open val jobsRepository: mebot.nguli.com.jobs.JobsRepository by lazy { mebot.nguli.com.jobs.JobsRepository(this, consistencyRepository = { feedRepository }) }
     val alarms by lazy { AlarmController(this) }
-    open val feedRepository by lazy { FeedRepository(this, restoreJobs = {
+    open val feedRepository: FeedRepository by lazy { FeedRepository(this, restoreJobs = {
         jobsRepository.restoreFromJournal(it)
         mebot.nguli.com.jobs.JobsAlertScheduler.cancel(this)
     }) }

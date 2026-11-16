@@ -30,7 +30,11 @@ class JobsViewModel(application: Application, private val savedStateHandle: Save
         viewModelScope.launch {
             for (action in changes) {
                 mutable.update { it.copy(error = null) }
-                try { action() }
+                try {
+                    action()
+                    val committed = repository.current()
+                    mutable.update { it.copy(state = committed, ready = true) }
+                }
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: Exception) { mutable.update { it.copy(error = "storage_error") } }
                 finally {
