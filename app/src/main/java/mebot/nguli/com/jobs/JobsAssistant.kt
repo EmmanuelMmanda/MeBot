@@ -1,5 +1,6 @@
 package mebot.nguli.com.jobs
 
+import android.annotation.SuppressLint
 import android.content.Context
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
@@ -12,6 +13,7 @@ import mebot.nguli.com.core.AiAttachment
 import mebot.nguli.com.core.AiConversation
 import mebot.nguli.com.core.jobs.JobPosting
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.security.MessageDigest
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -95,7 +97,7 @@ object JobsAssistant {
         require(reviewedText.none { it.code < 32 && it !in "\n\r\t" }) { "Unsupported document control character" }
         PDFBoxResourceLoader.init(context.applicationContext)
         return PDDocument().use { document ->
-            val font = context.resources.openRawResource(R.font.figtree).use {
+            val font = openBundledFontBytes(context).use {
                 PDType0Font.load(document, it, true)
             }
             val fontSize = 11f
@@ -147,6 +149,15 @@ object JobsAssistant {
             ByteArrayOutputStream().use { output -> document.save(output); output.toByteArray() }
         }
     }
+
+    /** Resources.openRawResource supports file-backed resources, not only res/raw.
+     * Figtree is a packaged TTF (not a font-family XML); embed the same bytes used by
+     * the UI without duplicating the font. Keep the lint exception on this one read.
+     * See Resources.openRawResource(int): resources whose value is a file name.
+     */
+    @SuppressLint("ResourceType")
+    private fun openBundledFontBytes(context: Context): InputStream =
+        context.resources.openRawResource(R.font.figtree)
 
     private fun clean(value: String): String = value.replace("\u0000", "")
 }

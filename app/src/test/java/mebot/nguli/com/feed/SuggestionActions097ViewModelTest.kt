@@ -564,6 +564,9 @@ class SuggestionActions097ViewModelTest {
         app.checkFailure = "unauthorized"
         vm.connect("synthetic-suggestion-provider-key", mode = "direct")
         withTimeout(10_000) { vm.ui.first { !it.connecting && it.error == "unauthorized" } }
+        // The unconfined observer resumes inside connectJob's final UI emission.
+        // Wait for that operation to finish before simulating a separate retry tap.
+        withTimeout(10_000) { requireNotNull(privateField("connectJob") as? kotlinx.coroutines.Job).join() }
         assertEquals("A failed provider check cannot mark a setup preference", Setup099ConnectionEntry.UNKNOWN,
             app.feedRepository.current().setup099.preferredConnectionEntry099)
 
@@ -688,7 +691,9 @@ class SuggestionActions097ViewModelTest {
         val moduleTarget = requireNotNull(SuggestionTargets097.module(before, module.id, "en"))
         val moduleState = withPreparedSet(before, moduleTarget)
         app.feedRepository.update { moduleState }
-        withTimeout(10_000) { vm.ui.first { it.state?.suggestionSets097?.isNotEmpty() == true } }
+        // The fixture already contains an item set. Await the committed module set,
+        // not any nonempty cache, before capturing the option we intentionally stale.
+        withTimeout(10_000) { vm.ui.first { it.state == moduleState } }
         val moduleOption = vm.suggestionOptions097(moduleTarget, "en").first()
         assertEquals(5, vm.suggestionOptions097(moduleTarget, "en").size)
         app.feedRepository.update { state -> state.copy(modules = state.modules.map {

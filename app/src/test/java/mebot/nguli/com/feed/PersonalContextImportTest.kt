@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ApplicationProvider
 import mebot.nguli.com.alarm.AlarmStore
 import mebot.nguli.com.core.*
+import mebot.nguli.com.core.jobs.*
 import mebot.nguli.com.ui.ChatGptJourneyApplication
 import mebot.nguli.com.ui.UiFixtureChatGptAuth
 import java.io.File
@@ -272,6 +273,22 @@ class PersonalContextImportTest {
 
     @Test fun bothFeedExportsWriteReadableJsonWithoutChangingStateOrIncludingCredentials() = runBlocking {
         val before = app.feedRepository.current()
+        val savedJob = JobPosting(id = "saved-fixture", title = "Saved role", url = "https://example.com/jobs/saved")
+        val cachedOnly = JobPosting(id = "cache-only-fixture", title = "Transient catalog role", url = "https://example.com/jobs/cache")
+        app.jobsRepository.update { JobsState(
+            preferences = JobPreferences(roles = "Engineer", onboarded = true, alertsEnabled = true),
+            jobs = listOf(savedJob, cachedOnly),
+            applications = listOf(JobApplication(savedJob.id, notes = "My note", draft = "Reviewed document")),
+            lastRefreshAt = 123L, lastAttemptAt = 124L, failedSources = listOf("Fixture source"),
+            editingScope = "device-local-editing-scope",
+        ) }
+        val jobsBefore = app.jobsRepository.current()
+        val portableJobs = JobsBackup.export(jobsBefore)
+        val ledger = app.getSharedPreferences("mebot.jobs-alerts.v1", android.content.Context.MODE_PRIVATE)
+        ledger.edit().putStringSet("seen", setOf("device-local-alert-ledger")).commit()
+        val ledgerBefore = ledger.all.toMap()
+        val credentialBefore = app.feedSecrets.read()
+        val authBefore = app.chatGptAuth.state.value
         val contextFile = File(app.cacheDir, "synthetic-export-context.json")
         viewModel.clearMessage()
         viewModel.exportContext(Uri.fromFile(contextFile)).join()
@@ -289,9 +306,31 @@ class PersonalContextImportTest {
             connection = before.connection.copy(accountId = ""),
             aiPauseCode = "",
             setup099 = Setup099State(stage = Setup099Stage.COMPLETE),
+            jobsBackup = portableJobs,
         ), backup)
         assertFalse(backupFile.readText().contains("existing-synthetic-api-credential"))
         assertEquals(before, app.feedRepository.current())
+        assertEquals(jobsBefore, app.jobsRepository.current())
+        assertEquals(ledgerBefore, ledger.all)
+        assertEquals(credentialBefore, app.feedSecrets.read())
+        assertEquals(authBefore, app.chatGptAuth.state.value)
+        val exportedJobs = requireNotNull(backup.jobsBackup)
+        assertEquals(portableJobs, exportedJobs)
+        assertEquals(savedJob, exportedJobs.applications.single().snapshot)
+        assertEquals("Reviewed document", exportedJobs.applications.single().draft)
+        assertEquals("", exportedJobs.editingScope)
+        assertTrue(exportedJobs.jobs.isEmpty())
+        assertTrue(exportedJobs.failedSources.isEmpty())
+        assertEquals(0L, exportedJobs.lastRefreshAt)
+        assertEquals(0L, exportedJobs.lastAttemptAt)
+        assertFalse(JobsBackup.restore(exportedJobs).preferences.alertsEnabled)
+        for (text in listOf(contextFile.readText(), backupFile.readText())) {
+            assertFalse(text.contains("device-local-editing-scope"))
+            assertFalse(text.contains("cache-only-fixture"))
+            assertFalse(text.contains("device-local-alert-ledger"))
+            assertFalse(text.contains("existing-synthetic-api-credential"))
+            assertFalse(text.contains("subscription-fixture-token"))
+        }
     }
 
     @Test fun unreadableImportAndUnwritableExportsReportErrorsAndRetainExistingData() = runBlocking {
