@@ -8,6 +8,8 @@ import mebot.nguli.com.core.*
 import mebot.nguli.com.core.jobs.*
 import kotlinx.coroutines.flow.first
 import java.io.File
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -171,6 +173,55 @@ class FeedRepositoryTest {
             jobsStore.preferences(backup.preferences.copy(skills = "Restored skill"))
             assertEquals("Restored skill", jobsStore.current().preferences.skills)
             assertNull(feed.current().jobsBackup)
+        }
+    }
+
+    @Test fun consistencyGateCanReleaseWhileItsCallingThreadIsBlocked() {
+        assertGateDoesNotDependOnCallerDispatcher(importing = false)
+    }
+
+    @Test fun importJournalCanFinishWhileItsCallingThreadIsBlocked() {
+        assertGateDoesNotDependOnCallerDispatcher(importing = true)
+    }
+
+    private fun assertGateDoesNotDependOnCallerDispatcher(importing: Boolean) {
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+        val dispatcher = executor.asCoroutineDispatcher()
+        val ownerScope = SupervisorJob()
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val readerStarted = java.util.concurrent.CountDownLatch(1)
+        val release = CompletableDeferred<Unit>()
+        val storeJob = SupervisorJob().also { jobs += it }
+        val store = FeedRepository(storageContext, CoroutineScope(Dispatchers.IO + storeJob), restoreJobs = {
+            entered.countDown()
+            release.await()
+        })
+        val owner = CoroutineScope(dispatcher + ownerScope).launch {
+            if (importing) store.importBackup { sampleState().copy(jobsBackup = JobsState()) }
+            else store.withJobsConsistency { entered.countDown(); release.await() }
+        }
+        var reader: java.util.concurrent.Future<FeedState>? = null
+        try {
+            assertTrue("First caller must own the gate", entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            reader = executor.submit<FeedState> {
+                readerStarted.countDown()
+                // Models a UI test blocking the very dispatcher the first caller came from.
+                runBlocking { store.current() }
+            }
+            assertTrue(readerStarted.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            release.complete(Unit)
+            val result = reader.get(5, java.util.concurrent.TimeUnit.SECONDS)
+            assertNull(result.jobsBackup)
+            if (importing) assertEquals("Test reader", result.name)
+        } finally {
+            // Interrupt runBlocking before closing the dispatcher, even on regression failure.
+            reader?.cancel(true)
+            release.complete(Unit)
+            owner.cancel()
+            ownerScope.cancel()
+            dispatcher.close()
+            executor.shutdownNow()
+            executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)
         }
     }
 

@@ -7,6 +7,7 @@ import mebot.nguli.com.core.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -35,9 +36,13 @@ class FeedRepository(
     suspend fun current(): FeedState = withJobsConsistency { store.data.first() }
 
     /** Jobs reads/mutations use this gate too, so neither store exposes a half-restored backup. */
-    suspend fun <T> withJobsConsistency(action: suspend () -> T): T = consistency.withLock {
-        recoverLocked()
-        action()
+    suspend fun <T> withJobsConsistency(action: suspend () -> T): T = withContext(Dispatchers.IO) {
+        // The lock owner must not need a UI dispatcher to resume and release this gate.
+        // Keeping only the DataStore on IO leaves suspended Main collectors holding the lock.
+        consistency.withLock {
+            recoverLocked()
+            action()
+        }
     }
 
     private suspend fun recoverLocked() {
@@ -57,13 +62,15 @@ class FeedRepository(
     }
 
     /** The durable marker is the commit point. Failures after it remain pending for recovery. */
-    suspend fun importBackup(transform: (FeedState) -> FeedState): FeedState = consistency.withLock {
-        recoverLocked()
-        store.updateData { current ->
-            FeedLogic.validate(transform(current)).also { next -> next.jobsBackup?.let(JobsBackup::validate) }
+    suspend fun importBackup(transform: (FeedState) -> FeedState): FeedState = withContext(Dispatchers.IO) {
+        consistency.withLock {
+            recoverLocked()
+            store.updateData { current ->
+                FeedLogic.validate(transform(current)).also { next -> next.jobsBackup?.let(JobsBackup::validate) }
+            }
+            recoverLocked()
+            store.data.first()
         }
-        recoverLocked()
-        store.data.first()
     }
 
     suspend fun erase(): FeedState = withJobsConsistency {
