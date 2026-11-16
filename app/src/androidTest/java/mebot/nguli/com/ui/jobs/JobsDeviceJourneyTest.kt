@@ -38,7 +38,7 @@ class JobsDeviceJourneyTest {
         description = "Synthetic verification listing, not an open vacancy. Build reliable software, review code and document integrations. Location and employment eligibility still need confirmation.",
         url = "https://example.com/jobs/device-fixture", tags = listOf("Kotlin", "SQL"))
 
-    @Before fun seedFreshSyntheticState() = runBlocking {
+    @Before fun seedFreshSyntheticState(): Unit = runBlocking {
         JobsAlertScheduler.cancel(app)
         JobsRefreshScheduler.cancel(app)
         app.feedEngine.disconnect()
