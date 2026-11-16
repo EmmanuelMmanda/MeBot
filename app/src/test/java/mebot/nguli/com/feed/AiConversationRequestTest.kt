@@ -88,6 +88,36 @@ class AiConversationRequestTest {
         assertTrue(request["instructions"]!!.jsonPrimitive.content.contains("in en,"))
     }
 
+    @Test fun jobsConversationNeverReceivesAmbientProfileModulesOrFeedSources() = runBlocking {
+        val transport = RecordingTransport()
+        val provider = OpenAiFeedProvider(chatGpt = transport)
+        val connected = state.copy(region = "Private place", connection = AiConnection(mode = "chatgpt", model = "owner-model", accountId = "owner-account"))
+        val jobThread = AiConversation(contextScope = "jobs", attachments = listOf(AiAttachment(name = "job.txt", text = "Public listing")))
+        provider.streamConversation(connected, null, jobThread, "Help with a technology job", "synthetic-token", "en") { }
+        val request = transport.requests.single()
+        val input = Json.parseToJsonElement(request["input"]!!.jsonArray.single().jsonObject["content"]!!.jsonPrimitive.content).jsonObject
+        assertTrue(input["context"]!!.jsonArray.isEmpty())
+        listOf("region", "enabledModules", "groundingSources", "contextKinds").forEach { assertFalse(it, input.containsKey(it)) }
+        assertFalse(input.toString().contains("Approved technical priority"))
+        assertEquals("Public listing", input["attachments"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun jobsServiceConversationNeverInfersContextKinds() = runBlocking {
+        var captured: JsonObject? = null
+        val http = object : FeedHttp {
+            override suspend fun request(url: String, method: String, body: String?, bearer: String?): String {
+                captured = Json.parseToJsonElement(body!!).jsonObject
+                return """{"answer":"A completed answer.","citations":[]}"""
+            }
+        }
+        val connected = state.copy(connection = AiConnection(mode = "service", model = "server", serviceUrl = "https://service.example"))
+        OpenAiFeedProvider(http).converse(connected, null, AiConversation(contextScope = "jobs"), "A technology job", "synthetic-token", "en")
+        val input = captured!!
+        assertTrue(input["context"]!!.jsonArray.isEmpty())
+        assertFalse(input.containsKey("contextKinds"))
+        assertFalse(input.containsKey("module"))
+    }
+
     private class RecordingTransport : ChatGptResponses {
         val requests = mutableListOf<JsonObject>()
         val tokens = mutableListOf<String>()

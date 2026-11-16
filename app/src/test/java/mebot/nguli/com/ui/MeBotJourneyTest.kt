@@ -71,7 +71,7 @@ class MeBotJourneyTest {
         screenshot("03-mebot-check-in")
         val suggestion = text(R.string.mb_suggestion_focus)
         clickContent(text(R.string.mb_use_plan))
-        waitForTag("nav-modules")
+        waitForTag("nav-jobs")
         val visit = current().visits.single()
         assertEquals(suggestion, visit.nextStep)
         assertEquals("", visit.arrival)
@@ -82,7 +82,7 @@ class MeBotJourneyTest {
         assertNotNull(visit.completedAtMillis)
 
         compose.activityRule.scenario.recreate()
-        waitForTag("nav-modules")
+        waitForTag("nav-jobs")
         assertEquals(visit, current().visits.single())
 
         // Explicit synthetic records demonstrate a populated dashboard. No
@@ -146,7 +146,7 @@ class MeBotJourneyTest {
         compose.onNode(hasText(text(R.string.next_step)) and hasSetTextAction())
             .performScrollTo().assertTextContains("Open the document and write one paragraph")
         clickContent(text(R.string.mb_use_plan))
-        waitForTag("nav-modules")
+        waitForTag("nav-jobs")
         val saved = current().visits.single()
         assertEquals("scattered", saved.arrival)
         assertEquals("", saved.departure)
@@ -168,7 +168,7 @@ class MeBotJourneyTest {
         compose.onNode(hasText(text(R.string.next_step)) and hasSetTextAction())
             .performScrollTo().assertTextContains("Review the opening paragraph")
         clickContent(text(R.string.mb_use_plan))
-        waitForTag("nav-modules")
+        waitForTag("nav-jobs")
         assertEquals("Review the opening paragraph", current().visits.single().nextStep)
         assertEquals(saved.completedAtMillis, current().visits.single().completedAtMillis)
         assertEquals(1, current().visits.size)
@@ -455,7 +455,7 @@ class MeBotJourneyTest {
         openCheckIn()
         waitForText(localizedText(R.string.mb_check_in_title, "sw"))
         clickContent(localizedText(R.string.mb_use_plan, "sw"))
-        waitForTag("nav-modules")
+        waitForTag("nav-jobs")
         assertEquals(localizedText(R.string.mb_suggestion_focus, "sw"), current().visits.single().nextStep)
         assertEquals("", current().visits.single().arrival)
         compose.onNodeWithTag("module-alarm").performScrollTo().assertIsNotEnabled()
@@ -485,16 +485,21 @@ class MeBotJourneyTest {
         compose.onNodeWithTag("quick-guide").assertDoesNotExist() // Completed tour goes straight to useful content.
         waitForTransientMessages()
     }
+    private fun openModuleCatalog() {
+        compose.onNodeWithTag("nav-feed").performClick()
+        waitForTag("feed-screen")
+        compose.onNodeWithTag("feed-all-modules").performScrollTo().performClick()
+    }
     private fun openCheckIn() {
         waitForTransientMessages()
-        compose.onNodeWithTag("nav-modules").performClick()
+        openModuleCatalog()
         compose.onNodeWithTag("module-checkin").performScrollTo().performClick()
         waitForTag("daily-screen")
     }
     private fun navigation(resource: Int) {
         val utility = when (resource) { R.string.alarms -> "module-alarm"; R.string.focus_tab -> "module-focus"; else -> null }
         val tab = when (resource) { R.string.today -> "feed"; R.string.you -> "you"; else -> "modules" }
-        compose.onNodeWithTag("nav-$tab").performClick()
+        if (tab == "modules") openModuleCatalog() else compose.onNodeWithTag("nav-$tab").performClick()
         utility?.let {
             waitForTag(it)
             compose.onNodeWithTag(it).performScrollTo().performClick()

@@ -13,6 +13,7 @@ data class AiConversation(
     val attachments: List<AiAttachment> = emptyList(),
     val createdAtMillis: Long = System.currentTimeMillis(),
     val updatedAtMillis: Long = createdAtMillis,
+    val contextScope: String = "",
 )
 
 @Serializable
@@ -50,6 +51,8 @@ object ConversationLogic {
         require(conversations.size <= maxConversations && conversations.map { it.id }.distinct().size == conversations.size)
         var characters = 0L
         conversations.forEach { thread ->
+            require(thread.contextScope in setOf("", "jobs"))
+            require(thread.contextScope != "jobs" || (thread.moduleId == null && thread.itemId == null))
             require(thread.id.length in 1..100 && thread.title.length <= 160)
             require(thread.itemId == null || thread.itemId.length in 1..100)
             require(thread.moduleId == null || thread.moduleId.length in 1..100)
@@ -76,6 +79,7 @@ object ConversationLogic {
     }
 
     fun context(state: FeedState, thread: AiConversation): List<ContextEntry> {
+        if (thread.contextScope == "jobs") return emptyList()
         val kind = thread.moduleId?.let { id -> state.modules.find { it.id == id }?.kind }
             ?: thread.itemId?.let { id -> state.items.find { it.id == id }?.kind }
         return FeedLogic.contextForKinds(state, setOfNotNull(kind))

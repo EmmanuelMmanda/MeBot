@@ -1255,6 +1255,35 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         }
     }
 
+    /** Explicit Jobs AI action, reusing the standard cancellation and streaming lifecycle. */
+    fun openJobsConversation(job: mebot.nguli.com.core.jobs.JobPosting, request: String): Job {
+        clearAnswer()
+        val generation = beginConversationSelection(null)
+        return viewModelScope.launch {
+            try {
+                val candidate = mebot.nguli.com.jobs.JobsAssistant.conversation(job)
+                var selected: AiConversation? = null
+                repository.update { state ->
+                    if (generation != conversationSelectionGeneration) return@update state
+                    val existing = state.conversations.find { it.id == candidate.id }
+                    if (existing == null && state.conversations.size >= ConversationLogic.maxConversations)
+                        throw FeedFailure("conversation_limit")
+                    val listing = candidate.attachments.single()
+                    val refreshed = existing?.copy(attachments = existing.attachments.filterNot { it.id == listing.id } + listing,
+                        contextScope = "jobs", updatedAtMillis = System.currentTimeMillis()) ?: candidate
+                    selected = refreshed
+                    state.copy(conversations = state.conversations.filterNot { it.id == candidate.id } + refreshed,
+                        suggestionSets097 = if (existing?.attachments != refreshed.attachments) emptyList() else state.suggestionSets097)
+                }
+                if (generation != conversationSelectionGeneration) return@launch
+                val thread = selected ?: return@launch
+                finishConversationSelection(generation, thread)
+                if (request.isNotBlank()) sendConversation(mebot.nguli.com.jobs.JobsAssistant.scopedPrompt(request))
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (e: Exception) { failConversationSelection(generation, e) }
+        }
+    }
+
     fun openConversation(itemId: String?, question: String? = null): Job {
         clearAnswer()
         val generation = beginConversationSelection(itemId)
@@ -2523,6 +2552,7 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             withContext(Dispatchers.IO) { engine.clearAllCredentials() }
             apiPresence.definitive(false)
             repository.erase(); FeedWorker.cancel(app)
+            app.jobsRepository.erase(); mebot.nguli.com.jobs.JobsAlertScheduler.cancel(app)
             clearSavedConversationSelection()
             _ui.update { it.copy(connected = false, activeConversationId = null, conversationOpening = false,
                 conversationReady = true, error = null, notice = null) }
