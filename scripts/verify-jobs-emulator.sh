@@ -49,8 +49,19 @@ done
 [[ "$booted" == true ]] || { echo 'Emulator boot timeout.' >&2; exit 3; }
 adb -s "$ANDROID_SERIAL" shell input keyevent 82
 # Disable connectivity only inside this disposable emulator; all fixture data is local.
-adb -s "$ANDROID_SERIAL" shell svc wifi disable
-adb -s "$ANDROID_SERIAL" shell svc data disable
+# sys.boot_completed can precede telephony registration on the software CPU.
+# Wait for both offline commands to succeed before installing/running test code.
+offline_ready=false
+for _ in $(seq 1 36); do
+  if timeout 15s adb -s "$ANDROID_SERIAL" shell svc wifi disable >> "$evidence/offline-setup.log" 2>&1 &&
+      timeout 15s adb -s "$ANDROID_SERIAL" shell svc data disable >> "$evidence/offline-setup.log" 2>&1; then
+    offline_ready=true
+    break
+  fi
+  kill -0 "$emulator_pid" 2>/dev/null || { echo 'Emulator exited during service readiness.' >&2; exit 3; }
+  sleep 5
+done
+[[ "$offline_ready" == true ]] || { echo 'Android network services did not become ready; no tests were run.' >&2; exit 3; }
 adb -s "$ANDROID_SERIAL" shell wm size 720x1440
 adb -s "$ANDROID_SERIAL" shell wm density 320
 # This fixed disposable serial is the only device passed to the Gradle connected test runner.
