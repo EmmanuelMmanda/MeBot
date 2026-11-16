@@ -22,12 +22,13 @@ import mebot.nguli.com.jobs.JobsAssistantRequest
 import mebot.nguli.com.ui.SupportingText
 
 @Composable
-internal fun RelatedJobsModules(snapshot: JobsContextSnapshot, onOpen: (String) -> Unit) {
-    if (snapshot.modules.isEmpty()) return
+internal fun RelatedJobsModules(snapshot: JobsContextSnapshot, onOpen: (String) -> Unit, job: JobPosting? = null) {
+    val modules = if (job == null) snapshot.modules.take(3) else JobsContextSuggestions.relevantModules(snapshot, job)
+    if (modules.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.jobs_connected_modules), style = MaterialTheme.typography.titleMedium)
         SupportingText(stringResource(R.string.jobs_connected_modules_body))
-        snapshot.modules.take(3).forEach { module ->
+        modules.forEach { module ->
             OutlinedButton(onClick = { onOpen(module.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                 Icon(Icons.Outlined.Link, null, Modifier.size(20.dp)); Spacer(Modifier.width(10.dp))
                 Text(module.title, Modifier.weight(1f)); Icon(Icons.Outlined.ArrowForward, null, Modifier.size(18.dp))

@@ -32,6 +32,18 @@ object JobsContextSuggestions {
         return Locale.Builder().setRegion(code).build().getDisplayCountry(Locale.ENGLISH)
     }
 
+    /** Links are reading interests, not evidence that the candidate has any skill. */
+    fun relevantModules(snapshot: JobsContextSnapshot, job: JobPosting, limit: Int = 3): List<JobsModuleLink> {
+        val ignored = setOf("the", "and", "for", "with", "jobs", "job", "remote", "senior", "junior")
+        fun words(text: String) = text.lowercase(Locale.ROOT).split(Regex("[^\\p{L}\\p{N}+#.]+"))
+            .filter { it.length >= 3 && it !in ignored }.toSet()
+        val jobWords = words(job.title + " " + job.tags.joinToString(" "))
+        return snapshot.modules.map { module -> module to words(module.title).intersect(jobWords).size }
+            .filter { (module, overlap) -> overlap > 0 || module.kind == "opportunities" }
+            .sortedWith(compareByDescending<Pair<JobsModuleLink, Int>> { it.second }.thenBy { it.first.id })
+            .take(limit.coerceIn(0, 20)).map { it.first }
+    }
+
     fun build(feed: FeedState, @Suppress("UNUSED_PARAMETER") preferences: JobPreferences): JobsContextSnapshot {
         val entries = feed.context.filter {
             it.confirmed && it.id.isNotBlank() && it.id.length <= 200 && '\u0000' !in it.id && it.text.isNotBlank() &&
@@ -53,8 +65,27 @@ object JobsContextSuggestions {
         }
         entries.forEach { entry ->
             val label = if (PersonalProfile085.isGlobal(entry)) "About you" else entry.category
-            // Only explicit labelled facts are offered. Interest prose never becomes a skill claim.
+            // Explicit labels and narrow first-person declarations are offered for review only.
             entry.text.take(1000).lineSequence().take(30).forEach line@{ line ->
+                // Conservative first-person declarations only; no extraction from aspirations,
+                // third-person statements, module interests or arbitrary narrative inference.
+                val statement = line.trim().trimEnd('.', '!')
+                val declarations = listOf(
+                    Triple(Regex("^I (?:am looking for|am seeking|want) (?:a |an )?(.+?) (?:role|job)$", RegexOption.IGNORE_CASE), JobsContextField.ROLE_INTEREST, "explicit_role_review"),
+                    Triple(Regex("^My (?:target|desired) role is (.+)$", RegexOption.IGNORE_CASE), JobsContextField.ROLE_INTEREST, "explicit_role_review"),
+                    Triple(Regex("^My skills (?:are|include) (.+)$", RegexOption.IGNORE_CASE), JobsContextField.SKILL_TO_CONFIRM, "self_reported_skill_review"),
+                    Triple(Regex("^I (?:am skilled in|have experience (?:with|in)) (.+)$", RegexOption.IGNORE_CASE), JobsContextField.SKILL_TO_CONFIRM, "self_reported_skill_review"),
+                )
+                declarations.forEach { (pattern, field, reason) ->
+                    pattern.matchEntire(statement)?.groupValues?.get(1)?.takeIf {
+                        it.length <= 200 && !it.contains(Regex("[.!?;:\\n]")) &&
+                            !it.contains(Regex("\\b(?:not|never|no|wish|hope)\\b", RegexOption.IGNORE_CASE))
+                    }?.let { add(entry.id, label, line, field, it, reason) }
+                }
+                Regex("^I (?:live in|am based in) (.+)$", RegexOption.IGNORE_CASE)
+                    .matchEntire(statement)?.groupValues?.get(1)?.let(::country)?.let {
+                        add(entry.id, label, line, JobsContextField.COUNTRY, it, "country_not_work_authorization")
+                    }
                 val split = line.indexOf(':')
                 if (split <= 0) return@line
                 val key = line.substring(0, split).trim().lowercase(Locale.ROOT)

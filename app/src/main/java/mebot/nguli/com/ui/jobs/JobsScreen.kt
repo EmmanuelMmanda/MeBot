@@ -50,6 +50,7 @@ import java.text.DateFormat
 import java.util.Date
 
 /** Jobs remains usable without a model connection. The host owns persistence, fetching and AI. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun JobsScreen(
     state: JobsState, loading: Boolean, error: String?, onRefresh: () -> Unit,
@@ -181,7 +182,7 @@ fun JobsScreen(
                     onBack = { route = "browse" }, onSave = { onSave(selected.id) },
                     onPrepare = { route = "workspace" }, onOpen = { onOpen(selected.url) },
                     onAsk = { reviewAssistant(JobsAssistantIntent.REQUIREMENTS, ask) },
-                    related = { RelatedJobsModules(contextSnapshot, onOpenRelated) })
+                    related = { RelatedJobsModules(contextSnapshot, onOpenRelated, selected) })
             } else if (route == "document") {
                 val latest = lastAiDraft(selected)
                 val outline = stringResource(R.string.jobs_draft_outline, selected.title, selected.company)
@@ -227,12 +228,58 @@ fun JobsScreen(
                 val documentPrompt = stringResource(R.string.jobs_ai_cover_prompt)
                 val cvPrompt = stringResource(R.string.jobs_ai_cv_prompt)
                 val interviewPrompt = stringResource(R.string.jobs_ai_interview_prompt)
+                val outline = stringResource(R.string.jobs_draft_outline, selected.title, selected.company)
+                val listingTagsLabel = stringResource(R.string.jobs_listing_tags)
+                val skillsLabel = stringResource(R.string.jobs_skills)
+                val evidenceSuggestions = contextSnapshot.candidates
+                    .filter { it.field == JobsContextField.SKILL_TO_CONFIRM }.distinctBy { it.value }.take(5)
+                fun addNote(value: String) {
+                    if (value !in notes.lines() && notes.length + value.length + 1 <= 10000) {
+                        notesTouched = true
+                        notes = listOf(notes.trimEnd(), value).filter { it.isNotBlank() }.joinToString("\n")
+                    }
+                }
                 ScreenContainer(scrollKey = "job-workspace-$selectedId") {
                     BackButton { if (dirty) confirmLeave = true else back() }
                     ScreenTitle(stringResource(R.string.jobs_prepare_heading), selected.title)
                     SupportingText(stringResource(R.string.jobs_prepare_body))
                     Text(stringResource(R.string.jobs_prepare_step_one), style = MaterialTheme.typography.titleMedium)
                     AppCard {
+                        Text(selected.company, style = MaterialTheme.typography.titleMedium)
+                        Text(selected.location.ifBlank { stringResource(R.string.jobs_location_unknown) }, style = MaterialTheme.typography.bodyMedium)
+                        SupportingText(stringResource(R.string.jobs_eligibility_unknown))
+                        if (selected.tags.isNotEmpty()) {
+                            Text(listingTagsLabel, style = MaterialTheme.typography.labelLarge)
+                            SupportingText(stringResource(R.string.jobs_listing_tags_help))
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                selected.tags.distinct().take(8).forEach { tag ->
+                                    val entry = "$listingTagsLabel: $tag"
+                                    FilterChip(selected = entry in notes.lines(), onClick = {
+                                        if (entry in notes.lines()) {
+                                            notesTouched = true; notes = notes.lines().filterNot { it == entry }.joinToString("\n")
+                                        } else addNote(entry)
+                                    },
+                                        label = { Text(tag) }, leadingIcon = { Icon(Icons.Outlined.Add, null, Modifier.size(16.dp)) })
+                                }
+                            }
+                        }
+                        OutlinedButton(onClick = { onOpen(selected.url) }, enabled = selected.url.startsWith("https://"), modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(R.string.jobs_view_source))
+                        }
+                        if (evidenceSuggestions.isNotEmpty()) {
+                            Text(stringResource(R.string.jobs_from_mebot), style = MaterialTheme.typography.titleSmall)
+                            SupportingText(stringResource(R.string.jobs_context_suggestion_help))
+                            evidenceSuggestions.forEach { candidate ->
+                                val entry = "$skillsLabel: ${candidate.value}"
+                                OutlinedButton(onClick = { addNote(entry) }, enabled = entry !in notes.lines(), modifier = Modifier.fillMaxWidth()) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(candidate.value)
+                                        Text(stringResource(R.string.jobs_confirm_skill_source, candidate.sourceLabel), style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    Icon(if (entry in notes.lines()) Icons.Outlined.Check else Icons.Outlined.Add, null)
+                                }
+                            }
+                        }
                         OutlinedTextField(notes, { notesTouched = true; notes = it.take(10000) }, label = { Text(stringResource(R.string.jobs_notes)) },
                             placeholder = { Text(stringResource(R.string.jobs_notes_hint)) }, minLines = 5,
                             modifier = Modifier.fillMaxWidth().testTag("jobs-notes"), shape = RoundedCornerShape(MeBotTokens.ControlRadius))
@@ -240,7 +287,16 @@ fun JobsScreen(
                     Text(stringResource(R.string.jobs_prepare_step_two), style = MaterialTheme.typography.titleMedium)
                     AppCard {
                         Text(stringResource(R.string.jobs_manual_note), style = MaterialTheme.typography.bodyMedium)
-                        Button(onClick = { route = "document" }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.jobs_document_title)) }
+                        // Opening a new document is an explicit editing action. Seed only an untouched,
+                        // empty draft; placeholders are prompts, never invented candidate qualifications.
+                        Button(onClick = {
+                            if (document.isBlank() && !documentTouched && application?.draft.isNullOrBlank()) {
+                                documentTouched = true; document = outline; reviewed = false; onClearExportResult()
+                            }
+                            route = "document"
+                        }, modifier = Modifier.fillMaxWidth().testTag("jobs-open-document")) {
+                            Text(stringResource(if (document.isBlank()) R.string.jobs_start_outline else R.string.jobs_document_title))
+                        }
                         OutlinedButton(onClick = { reviewAssistant(JobsAssistantIntent.COVER_LETTER, documentPrompt) }, modifier = Modifier.fillMaxWidth()) {
                             Text(stringResource(R.string.jobs_ai_cover_letter))
                         }
@@ -265,7 +321,7 @@ fun JobsScreen(
                 "saved" -> all.filter { it.id in savedIds && JobsMatcher.matches(it, JobPreferences(), query) }
                 "applications" -> all.filter { job -> state.applications.any { it.jobId == job.id && it.status != "saved" } && JobsMatcher.matches(job, JobPreferences(), query) }
                 "recent" -> state.jobs.filter { JobsMatcher.matches(it, JobPreferences(), query) }.sortedByDescending { it.postedAt }
-                else -> state.jobs.filter { JobsMatcher.matches(it, state.preferences, query) }
+                else -> JobsMatcher.ranked(state.jobs, state.preferences, query)
             }
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                 LazyColumn(modifier = Modifier.widthIn(max = MeBotTokens.ContentWidth).fillMaxWidth().testTag("jobs-screen"),
@@ -330,7 +386,11 @@ fun JobsScreen(
                             Icon(Icons.Outlined.WorkOutline, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                             Text(stringResource(title), style = MaterialTheme.typography.titleLarge)
                             SupportingText(stringResource(body))
-                            TextButton(onClick = { tab = "recent"; query = "" }) { Text(stringResource(R.string.jobs_browse_latest)) }
+                            TextButton(onClick = { tab = "recent"; query = "" }, modifier = Modifier.testTag("jobs-empty-browse-all")) {
+                                Text(stringResource(R.string.jobs_browse_latest))
+                            }
+                            if (tab == "for_you" && state.jobs.isNotEmpty()) TextButton(onClick = { route = "preferences" },
+                                modifier = Modifier.testTag("jobs-empty-edit-preferences")) { Text(stringResource(R.string.jobs_preferences)) }
                         }
                     }
                     items(visible, key = { it.id }) { job ->

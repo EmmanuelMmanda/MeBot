@@ -112,7 +112,7 @@ class JobsAssistantFlowTest {
     }
 
     @Test fun revokedContextWhileQueuedForProviderSlotCannotBeTransmitted(): Unit = runBlocking {
-        val note = ContextEntry(id = "chosen-jobs", text = "Skills: Kotlin", scopes = setOf("jobs"))
+        val note = ContextEntry(id = "chosen-jobs", text = "Skills: Kotlin", scopes = setOf("opportunities"))
         app.feedRepository.update { it.copy(context = it.context + note) }
         val reviewedRevision = currentRevision()
         val entered = List(2) { CompletableDeferred<Unit>() }

@@ -79,4 +79,23 @@ class JobsContextSuggestionsTest {
         assertTrue(result.candidates.any { it.value == "Tanzania" })
         assertTrue(result.candidates.all { it.sourceText.length <= 1000 && it.value.length <= 1000 })
     }
+    @Test fun explicitFirstPersonStatementsAreSuggestionsNotInferredQualifications() {
+        val result = build(FeedState(context = listOf(profile("I am looking for an Android developer role.\nMy skills include Kotlin, SQL.\nI live in Tanzania."))))
+        assertEquals(listOf("Android developer", "Kotlin, SQL", "Tanzania"), result.candidates.map { it.value })
+        assertEquals("self_reported_skill_review", result.candidates[1].reasonKey)
+        assertTrue(build(FeedState(context = listOf(profile("I hope to learn Kotlin\nI have no experience with SQL\nMy skills are not Kotlin\nShe is an engineer\nI live in Dar es Salaam")))).candidates.isEmpty())
+    }
+
+    @Test fun moduleLinksFollowExplicitTitleTopicsWithoutReadingPrivateQueries() {
+        val snapshot = JobsContextSnapshot(modules = listOf(
+            JobsModuleLink("business", "Business", "business", "module_interest_not_qualification"),
+            JobsModuleLink("kotlin", "Learn Kotlin", "learning", "module_interest_not_qualification"),
+            JobsModuleLink("opportunities", "Opportunities", "opportunities", "module_interest_not_qualification"),
+        ))
+        val job = JobPosting(title = "Android developer", tags = listOf("Kotlin"), description = "Business")
+        assertEquals(listOf("kotlin", "opportunities"), JobsContextSuggestions.relevantModules(snapshot, job).map { it.id })
+        assertEquals(listOf("opportunities"), JobsContextSuggestions.relevantModules(snapshot, job.copy(tags = emptyList())).map { it.id })
+        assertTrue(JobsContextSuggestions.relevantModules(snapshot, job, -1).isEmpty())
+    }
+
 }

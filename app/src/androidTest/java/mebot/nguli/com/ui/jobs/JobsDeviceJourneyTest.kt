@@ -10,6 +10,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import mebot.nguli.com.MainActivity
 import mebot.nguli.com.MeBotApplication
 import mebot.nguli.com.R
@@ -125,9 +126,11 @@ class JobsDeviceJourneyTest {
         scenario!!.recreate()
         waitFor("jobs-notes")
         compose.onNodeWithTag("jobs-notes").performScrollTo().assertTextContains("Synthetic note: confirm location eligibility.")
-        compose.onNodeWithText(app.getString(R.string.jobs_document_title)).performScrollTo().performClick()
+        compose.onNodeWithTag("jobs-open-document").performScrollTo().performClick()
         waitFor("jobs-document-text")
-        compose.onNodeWithTag("jobs-document-text").performTextInput("Synthetic application draft for device verification only.")
+        compose.onNodeWithTag("jobs-document-text").performScrollTo()
+            .assertTextContains(app.getString(R.string.jobs_draft_outline, fixture.title, fixture.company))
+        compose.onNodeWithTag("jobs-document-text").performTextReplacement("Synthetic application draft for device verification only.")
         compose.onNodeWithTag("jobs-export-pdf").performScrollTo().assertIsNotEnabled()
         compose.onNode(isToggleable()).performScrollTo().performClick()
         capture("09-document-reviewed")
@@ -136,12 +139,42 @@ class JobsDeviceJourneyTest {
         capture("10-system-file-picker")
         android.os.ParcelFileDescriptor.AutoCloseInputStream(InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("input keyevent 4")).use { it.readBytes() }
         waitFor("jobs-document-text")
-        compose.onNodeWithTag("jobs-document-text").performScrollTo().assertTextContains("Synthetic application draft")
+        compose.onNodeWithTag("jobs-document-text").performScrollTo().assertTextContains("Synthetic application draft for device verification only.")
         capture("11-picker-cancel-restored")
         scenario!!.recreate()
         waitFor("jobs-document-text")
-        compose.onNodeWithTag("jobs-document-text").performScrollTo().assertTextContains("Synthetic application draft")
+        compose.onNodeWithTag("jobs-document-text").performScrollTo().assertTextContains("Synthetic application draft for device verification only.")
         assertFalse(runBlocking { app.jobsRepository.current().applications.any { it.status == "applied" } })
+
+        // Recreation above verifies Android saved-instance state. Explicitly save and then
+        // finish/relaunch as well, so rememberSaveable cannot masquerade as durable storage.
+        compose.onNodeWithText(app.getString(R.string.jobs_save_draft)).performScrollTo().performClick()
+        waitFor("jobs-notes") // Save acknowledgement returns to the workspace only after persistence.
+        val expectedNote = "Synthetic note: confirm location eligibility."
+        val expectedDraft = "Synthetic application draft for device verification only."
+        val saved = runBlocking { app.jobsRepository.current() }.applications.single { it.jobId == fixture.id }
+        assertEquals(expectedNote, saved.notes)
+        assertEquals(expectedDraft, saved.draft)
+        assertEquals("preparing", saved.status)
+        // Inspect the actual DataStore file without opening a second DataStore on that file.
+        val persisted = Json { ignoreUnknownKeys = true }.decodeFromString<JobsState>(
+            app.filesDir.resolve("mebot/jobs.json").readText()
+        ).applications.single { it.jobId == fixture.id }
+        assertEquals(expectedNote, persisted.notes)
+        assertEquals(expectedDraft, persisted.draft)
+        assertEquals("preparing", persisted.status)
+
+        scenario!!.close()
+        scenario = null
+        launch()
+        openFixture()
+        compose.onNodeWithTag("jobs-prepare").performClick()
+        waitFor("jobs-notes")
+        compose.onNodeWithTag("jobs-notes").performScrollTo().assertTextContains(expectedNote)
+        compose.onNodeWithTag("jobs-open-document").performScrollTo().performClick()
+        waitFor("jobs-document-text")
+        compose.onNodeWithTag("jobs-document-text").performScrollTo().assertTextContains(expectedDraft)
+        capture("13-durable-draft-fresh-launch")
     }
 
     @Test fun aiConsentShowsNoPersonalDataSelectedAndCancelSendsNothing() {

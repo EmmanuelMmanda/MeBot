@@ -29,6 +29,7 @@ class JobsScreenTest {
     private val assistantRequests = mutableListOf<JobsAssistantRequest>()
     private var pendingApplication by mutableStateOf<JobApplication?>(null)
     private var pendingPreferences by mutableStateOf<JobPreferences?>(null)
+    private var preferencesWrites = 0
     private var screenError by mutableStateOf<String?>(null)
     private fun render(error: String? = null, draft: String = "", acknowledge: Boolean = true, context: JobsContextSnapshot = JobsContextSnapshot()) {
         screenError = error
@@ -47,7 +48,7 @@ class JobsScreenTest {
                 }
             }
             MeBotTheme {
-                JobsScreen(state, false, screenError, {}, { pendingPreferences = it }, { id ->
+                JobsScreen(state, false, screenError, {}, { preferencesWrites++; pendingPreferences = it }, { id ->
                     state = state.copy(applications = state.applications + JobApplication(id, snapshot = job))
                 }, { application ->
                     pendingApplication = application
@@ -83,6 +84,25 @@ class JobsScreenTest {
         assertTrue(state.applications.isEmpty())
     }
 
+    @Test fun noMatchesBrowseLatestClearsQueryWithoutChangingSavedPreferences() {
+        val preferences = JobPreferences(roles = "accountant", skills = "Excel", country = "Tanzania", onboarded = true)
+        state = state.copy(preferences = preferences)
+        render()
+        compose.onNodeWithTag("jobs-search").performScrollTo().performTextInput("unmatched-search-text")
+        compose.onNodeWithTag("jobs-screen").performScrollToNode(hasTestTag("jobs-empty-edit-preferences"))
+        compose.onNodeWithTag("jobs-empty-edit-preferences").assertIsDisplayed().assertHasClickAction()
+        compose.onNodeWithTag("jobs-empty-browse-all").performClick()
+        compose.onNodeWithTag("jobs-screen").performScrollToNode(hasTestTag("jobs-search"))
+        compose.onNodeWithTag("jobs-search").assert(SemanticsMatcher.expectValue(
+            androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
+        compose.onNodeWithTag("jobs-tab-recent").assertIsSelected()
+        compose.onNodeWithTag("jobs-screen").performScrollToNode(hasTestTag("job-card-${job.id}"))
+        compose.onNodeWithTag("job-card-${job.id}").assertIsDisplayed()
+        assertEquals(preferences, state.preferences)
+        assertEquals(0, preferencesWrites)
+        assertTrue(asked.isEmpty())
+    }
+
     @Test fun sourceFailureKeepsCachedJobVisible() {
         render(error = "offline")
         compose.onNodeWithTag("jobs-screen").performScrollToNode(hasText(job.title))
@@ -102,14 +122,29 @@ class JobsScreenTest {
 
     @Test fun documentExportNeedsReviewAndEditsClearReview() {
         render(draft = "Verified candidate details only."); prepare()
-        compose.onNodeWithText("Application draft").performScrollTo().performClick()
+        compose.onNodeWithTag("jobs-open-document").performScrollTo().performClick()
         compose.onNodeWithTag("jobs-export-pdf").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithTag("jobs-document-text").performScrollTo().assertTextContains("Application for ${job.title} at ${job.company}", substring = true)
         compose.onNodeWithText("Use last completed AI answer").performScrollTo().performClick()
+        compose.onNodeWithText("Replace your current draft?").assertIsDisplayed()
+        compose.onNodeWithText("Replace draft").performClick()
+        compose.onNodeWithTag("jobs-document-text").performScrollTo().assertTextContains("Verified candidate details only.")
         compose.onNodeWithTag("jobs-export-pdf").performScrollTo().assertIsNotEnabled()
         compose.onNode(isToggleable()).performScrollTo().performClick()
         compose.onNodeWithTag("jobs-export-pdf").assertIsEnabled()
         compose.onNodeWithTag("jobs-document-text").performScrollTo().performTextInput(" Updated.")
         compose.onNodeWithTag("jobs-export-pdf").performScrollTo().assertIsNotEnabled()
+    }
+
+    @Test fun openingDocumentPreservesExistingDraftInsteadOfReseedingOutline() {
+        val original = "My reviewed factual application draft."
+        state = state.copy(applications = listOf(JobApplication(job.id, status = "preparing", snapshot = job, draft = original)))
+        render(); prepare()
+        compose.onNodeWithTag("jobs-open-document").performScrollTo().performClick()
+        compose.onNodeWithTag("jobs-document-text").performScrollTo().assertTextContains(original)
+        compose.onNodeWithTag("jobs-export-pdf").performScrollTo().assertIsNotEnabled()
+        assertEquals(original, state.applications.single().draft)
+        assertTrue(asked.isEmpty())
     }
 
     @Test fun latePersistedOnboardingStateShowsBrowse() {
@@ -207,7 +242,9 @@ class JobsScreenTest {
         render(context = snapshot); prepare()
         compose.onNodeWithTag("jobs-notes").performScrollTo().performTextInput("My unpublished evidence")
         compose.onNodeWithText("Draft a cover letter").performScrollTo().performClick()
-        compose.onNodeWithTag("jobs-ai-context-preview").performScrollTo().assertTextContains("No personal information selected")
+        compose.onNodeWithTag("jobs-ai-context-preview").performScrollTo().assertTextEquals(
+            androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+                .getString(mebot.nguli.com.R.string.jobs_ai_nothing_shared))
         compose.onNodeWithTag("jobs-ai-send").performClick()
         assertEquals("", assistantRequests.single().sharedContext)
         assertEquals("My unpublished evidence", assistantRequests.single().application?.notes)

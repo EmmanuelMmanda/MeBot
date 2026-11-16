@@ -42,6 +42,27 @@ object JobsMatcher {
     private fun terms(value: String) = value.split(',', ';', '\n').map(::normalized).filter(String::isNotEmpty).distinct()
     private fun contains(haystack: String, needle: String): Boolean =
         Regex("(?<![\\p{L}\\p{N}])" + Regex.escape(needle) + "(?![\\p{L}\\p{N}])", RegexOption.IGNORE_CASE).containsMatchIn(haystack)
+    // Bounded occupation aliases only. Never equate generic "engineer" and "developer":
+    // those words also describe civil engineering, property and business development.
+    private val roleAliasGroups = listOf(
+        listOf("software engineer", "software developer"),
+        listOf("backend engineer", "backend developer", "back-end engineer", "back-end developer", "back end engineer", "back end developer"),
+        listOf("frontend engineer", "frontend developer", "front-end engineer", "front-end developer", "front end engineer", "front end developer"),
+        listOf("full stack engineer", "full stack developer", "full-stack engineer", "full-stack developer", "fullstack engineer", "fullstack developer"),
+        listOf("android engineer", "android developer"),
+        listOf("ios engineer", "ios developer"),
+    )
+    private val roleAliasPatterns = roleAliasGroups.flatMap { aliases ->
+        aliases.drop(1).map { alias ->
+            Regex("(?<![\\p{L}\\p{N}])" + Regex.escape(alias) + "(?![\\p{L}\\p{N}])") to aliases.first()
+        }
+    }
+    private fun canonicalRole(value: String): String {
+        var result = normalized(value).replace(Regex("\\s+"), " ")
+        roleAliasPatterns.forEach { (pattern, canonical) -> result = result.replace(pattern, canonical) }
+        return result
+    }
+    private fun roleMatches(title: String, role: String) = contains(canonicalRole(title), canonicalRole(role))
     private fun content(job: JobPosting) = listOf(job.title, job.company, job.location, job.description, job.tags.joinToString(" ")).joinToString(" ")
     private fun type(value: String) = normalized(value).replace(Regex("[ _-]+"), "")
     private val aliasesByCountry: Map<String, Set<String>> by lazy {
@@ -94,13 +115,45 @@ object JobsMatcher {
         if (query.trim().split(Regex("\\s+")).filter(String::isNotBlank).any { !contains(searchable, it) }) return false
         val roles = terms(preferences.roles)
         val skills = terms(preferences.skills)
-        return (roles.isEmpty() && skills.isEmpty()) || roles.any { contains(job.title, it) } || skills.any { contains(searchable, it) }
+        // Skills refine the chosen occupation; generic description words must not override it.
+        return when {
+            roles.isNotEmpty() -> roles.any { roleMatches(job.title, it) }
+            skills.isNotEmpty() -> skills.any { contains(skillContent(job), it) }
+            else -> true
+        }
+    }
+
+    private fun skillContent(job: JobPosting) = listOf(job.title, job.tags.joinToString(" "), job.description).joinToString(" ")
+
+    /** Lexical ordering only, never a percentage, qualification or hiring prediction. */
+    fun ranked(jobs: List<JobPosting>, preferences: JobPreferences, query: String = ""): List<JobPosting> {
+        val roles = terms(preferences.roles)
+        val skills = terms(preferences.skills)
+        fun score(job: JobPosting): Int {
+            val title = canonicalRole(job.title)
+            val roleScore = when {
+                roles.any { title == canonicalRole(it) } -> 100
+                roles.any { roleMatches(title, it) } -> 80
+                else -> 0
+            }
+            // Cap skill influence so verbosity/long skill lists cannot outrank explicit role intent.
+            val skillScore = skills.fold(0) { total, skill -> total + when {
+                contains(job.title, skill) || job.tags.any { contains(it, skill) } -> 4
+                contains(job.description, skill) -> 1
+                else -> 0
+            } }.coerceAtMost(16)
+            return roleScore + skillScore
+        }
+        return jobs.filter { matches(it, preferences, query) }.map { it to score(it) }
+            .sortedWith(compareByDescending<Pair<JobPosting, Int>> { it.second }
+                .thenByDescending { it.first.postedAt }.thenBy { it.first.id }.thenBy { it.first.title })
+            .map { it.first }
     }
 
     /** Stable resource keys. The Android UI supplies localized text. No key asserts employer eligibility. */
     fun reasons(job: JobPosting, preferences: JobPreferences): List<String> = buildList {
-        if (terms(preferences.roles).any { contains(job.title, it) }) add("role_match")
-        if (terms(preferences.skills).any { contains(content(job), it) }) add("skills_match")
+        if (terms(preferences.roles).any { roleMatches(job.title, it) }) add("role_match")
+        if (terms(preferences.skills).any { contains(skillContent(job), it) }) add("skills_match")
         if (preferences.remoteOnly && job.remote) add("remote_match")
         if (preferences.employmentType.isNotBlank() && job.employmentType.isNotBlank() &&
             type(preferences.employmentType) == type(job.employmentType)) add("employment_match")

@@ -54,3 +54,11 @@ No new Jobs screenshots or completed production release are claimed by the histo
 - Scope limits remain explicit: remote feeds are not comprehensive local coverage; external Tanzania sources are not ingested; no PDF CV parsing, automatic application submission or durable background AI queue. Live paid-provider acceptance and overnight notification/alarm delivery are not claimed.
 
 This final section is a documentation-only follow-up. It does not change the immutable release source, tag or APK.
+
+## Jobs redesign candidate 0.10.1 (in progress)
+
+- Recovery published local candidate tree `c0ccf666460f9c993cfd1f77928460cd6c8acec1` byte-for-byte as `5e60463f7e3cb0bb29a0e85a980bc3c71c6ede61` in draft PR #31. This is not a signed release.
+- Candidate documentation, service and website browser CI passed. Jobs website screenshots were inspected at 360px/light and 1440px/dark. Eight width/theme checks reported loaded Figtree, no horizontal overflow and no browser console errors. These are website renders, not Android evidence.
+- Initial native-device CI failed before compilation because hosted acceleration was unavailable. No host permissions or security settings were changed. The revised runner uses the official emulator's slower software CPU mode when acceleration is unavailable, with the same real-device journeys and screenshot requirements.
+- The follow-up adds explicit save, repository/file assertions and a fresh Activity launch to distinguish durable notes/draft recovery from saved-instance state. Existing drafts must not be overwritten by new-document outlines. All runtime results for this follow-up remain pending.
+- Further acceptance still requires exact-source Android tests/lint/build, actual native screenshots and interaction review, signed in-place upgrade, updater checks and published website verification. The public release remains v0.10.0 until those gates pass.

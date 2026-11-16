@@ -91,6 +91,7 @@ internal fun JobDetails(job: JobPosting, preferences: JobPreferences, applicatio
     onBack: () -> Unit, onSave: () -> Unit, onPrepare: () -> Unit, onOpen: () -> Unit, onAsk: () -> Unit, related: @Composable () -> Unit = {}) {
     var expanded by rememberSaveable(job.id) { mutableStateOf(false) }
     val description = remember(job.description) { Html.fromHtml(job.description, Html.FROM_HTML_MODE_LEGACY).toString().trim() }
+    val sections = remember(job.description) { publishedJobSections(job.description) }
     Column(Modifier.fillMaxSize().testTag("jobs-detail"), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.widthIn(max = MeBotTokens.ContentWidth).fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.jobs_back)) }
@@ -128,8 +129,15 @@ internal fun JobDetails(job: JobPosting, preferences: JobPreferences, applicatio
             HorizontalDivider()
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(R.string.jobs_requirements), style = MaterialTheme.typography.titleLarge)
-                Text(description.ifBlank { stringResource(R.string.jobs_no_description) }, style = MaterialTheme.typography.bodyLarge,
-                    maxLines = if (expanded) Int.MAX_VALUE else 14, overflow = TextOverflow.Ellipsis)
+                SupportingText(stringResource(R.string.jobs_source_named, job.source))
+                if (sections.isEmpty()) Text(stringResource(R.string.jobs_no_description), style = MaterialTheme.typography.bodyLarge)
+                (if (expanded) sections else sections.take(3)).forEach { section ->
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (section.heading.isNotBlank()) Text(section.heading, style = MaterialTheme.typography.titleMedium)
+                        if (section.body.isNotBlank()) Text(section.body, style = MaterialTheme.typography.bodyLarge,
+                            maxLines = if (expanded) Int.MAX_VALUE else if (sections.size == 1) 14 else 6, overflow = TextOverflow.Ellipsis)
+                    }
+                }
                 if (description.isNotBlank()) TextButton(onClick = { expanded = !expanded }, modifier = Modifier.heightIn(min = 48.dp)) {
                     Text(stringResource(if (expanded) R.string.jobs_read_less else R.string.jobs_read_more))
                 }
@@ -173,3 +181,21 @@ private fun DetailCheck(text: String, positive: Boolean) {
 }
 
 private fun shortJobDate(timestamp: Long) = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(timestamp))
+
+/** Preserve publisher headings and wording. This is presentation, not AI-inferred requirements. */
+private data class PublishedJobSection(val heading: String, val body: String)
+private fun publishedJobSections(html: String): List<PublishedJobSection> {
+    fun plain(value: String) = Html.fromHtml(value, Html.FROM_HTML_MODE_LEGACY).toString().trim()
+    val headings = Regex("<h[1-6]\\b[^>]*>(.*?)</h[1-6]\\s*>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+        .findAll(html).toList()
+    if (headings.isEmpty()) return plain(html).takeIf { it.isNotBlank() }?.let { listOf(PublishedJobSection("", it)) }.orEmpty()
+    return buildList {
+        plain(html.substring(0, headings.first().range.first)).takeIf { it.isNotBlank() }?.let { add(PublishedJobSection("", it)) }
+        headings.forEachIndexed { index, heading ->
+            val end = headings.getOrNull(index + 1)?.range?.first ?: html.length
+            val body = plain(html.substring(heading.range.last + 1, end))
+            val title = plain(heading.groupValues[1])
+            if (title.isNotBlank() || body.isNotBlank()) add(PublishedJobSection(title, body))
+        }
+    }
+}

@@ -36,7 +36,7 @@
     <string name="jobs_empty">Hakuna kazi za kuonyesha bado</string>
     <string name="jobs_empty_body">Sasisha kuangalia chanzo. Orodha hii haijazwi kwa kazi za kubuni.</string>
     <string name="jobs_no_matches">Hakuna kazi zinazolingana na vichujio hivi</string>
-    <string name="jobs_no_matches_body">Jaribu nafasi au eneo pana zaidi, au angalia matangazo mapya.</string>
+    <string name="jobs_no_matches_body">Jaribu nafasi au eneo lingine, au angalia matangazo yote mapya. Kuangalia yote huondoa maneno ya utafutaji huu, si mapendeleo uliyohifadhi.</string>
     <string name="jobs_empty_saved">Hifadhi hapa nafasi zinazokuvutia</string>
     <string name="jobs_empty_saved_body">Hifadhi kazi ili urudi kusoma maelezo na kujiandaa kwa muda wako.</string>
     <string name="jobs_empty_tracker">Maombi yako, sehemu moja</string>
@@ -225,4 +225,6 @@
     <string name="jobs_draft_outline">Ombi la nafasi ya %1$s katika %2$s\n\n[Jitambulishe na ueleze kwa nini unapenda nafasi hii.]\n\n[Ongeza mfano unaohusiana kutoka uzoefu wako. Jumuisha ukweli unaoweza kuthibitisha pekee.]\n\n[Eleza jinsi uzoefu huo unavyohusiana na mahitaji yaliyochapishwa.]\n\n[Taarifa zako za mawasiliano unazopendelea]</string>
     <string name="jobs_explore_all_roles">Chunguza nafasi zote</string>
     <string name="jobs_connect_to_continue">Unganisha AI ili kuendelea</string>
+    <string name="jobs_listing_tags">Lebo za tangazo</string>
+    <string name="jobs_listing_tags_help">Chagua lebo za kuweka kama vikumbusho kwenye maelezo yako. Lebo za mchapishaji si uthibitisho kwamba unakidhi mahitaji.</string>
 </resources>

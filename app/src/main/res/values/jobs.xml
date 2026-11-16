@@ -36,7 +36,7 @@
     <string name="jobs_empty">No jobs to show yet</string>
     <string name="jobs_empty_body">Refresh to check the source. Nothing is generated or invented to fill this list.</string>
     <string name="jobs_no_matches">No jobs match these filters</string>
-    <string name="jobs_no_matches_body">Try a broader role or location, or browse the latest listings.</string>
+    <string name="jobs_no_matches_body">Try another role or location, or browse all latest listings. Browsing all clears this search, not your saved preferences.</string>
     <string name="jobs_empty_saved">Keep worthwhile opportunities here</string>
     <string name="jobs_empty_saved_body">Save a job to return to its details and prepare at your own pace.</string>
     <string name="jobs_empty_tracker">Your applications, in one place</string>
@@ -225,4 +225,6 @@
     <string name="jobs_draft_outline">Application for %1$s at %2$s\n\n[Introduce yourself and why this role interests you.]\n\n[Add a relevant example from your own experience. Include only facts you can verify.]\n\n[Explain how that experience relates to the published requirements.]\n\n[Your preferred contact details]</string>
     <string name="jobs_explore_all_roles">Explore all roles</string>
     <string name="jobs_connect_to_continue">Connect AI to continue</string>
+    <string name="jobs_listing_tags">Listing tags</string>
+    <string name="jobs_listing_tags_help">Choose tags to keep as reminders in your notes. Publisher tags are not proof that you meet a requirement.</string>
 </resources>
