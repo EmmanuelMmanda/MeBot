@@ -65,5 +65,8 @@ for variant in phone-light phone-dark-large-text tablet-light; do
     -Pandroid.testInstrumentationRunnerArguments.qaVariant="$variant" --stacktrace > "$evidence/instrumentation-$variant.log" 2>&1
 done
 adb -s "$ANDROID_SERIAL" pull /sdcard/Android/data/mebot.nguli.com.debug/files/jobs-device-qa "$evidence/"
-find "$evidence/jobs-device-qa" -name '*.png' -type f | grep -q . || { echo 'No real-device screenshots were produced.' >&2; exit 4; }
+for variant in phone-light phone-dark-large-text tablet-light; do
+  count=$(find "$evidence/jobs-device-qa/$variant" -name '*.png' -type f | wc -l)
+  [[ "$count" -ge 13 ]] || { echo "Incomplete native screenshot evidence for $variant ($count/13)." >&2; exit 4; }
+done
 printf 'Instrumented journey completed; screenshots still require human/model visual inspection.\n' > "$evidence/RESULT.txt"

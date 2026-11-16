@@ -181,12 +181,22 @@ class JobsDeviceJourneyTest {
         runBlocking { app.jobsRepository.preferences(JobPreferences(roles = "engineer", onboarded = true)) }
         launch(); openFixture()
         compose.onNodeWithText(app.getString(R.string.jobs_understand_role)).performScrollTo().performClick()
-        waitFor("jobs-ai-send")
+        // This fixture deliberately has no provider credentials. The dialog must offer
+        // connection, never an enabled send action or an implicit connection attempt.
+        waitFor("jobs-ai-connect")
+        compose.onNodeWithTag("jobs-ai-send").assertDoesNotExist()
         compose.onNodeWithTag("jobs-ai-context-preview").performScrollTo()
             .assertTextEquals(app.getString(R.string.jobs_ai_nothing_shared))
         capture("12-ai-consent-not-sent")
         compose.onNodeWithText(app.getString(R.string.jobs_cancel)).performClick()
         compose.onNodeWithTag("jobs-ai-send").assertDoesNotExist()
+        compose.onNodeWithTag("jobs-ai-connect").assertDoesNotExist()
+        compose.onNodeWithTag("jobs-ai-context-preview").assertDoesNotExist()
         assertTrue(runBlocking { app.jobsRepository.current().applications.isEmpty() })
+        val feed = runBlocking { app.feedRepository.current() }
+        assertTrue(feed.conversations.isEmpty())
+        assertEquals(0, feed.requestsToday)
+        assertEquals(0L, feed.lastAiRefreshMillis)
+        assertTrue(feed.connection.accountId.isBlank())
     }
 }
