@@ -44,9 +44,9 @@ class JobsModelsTest {
         assertFalse(JobsMatcher.matches(job.copy(description = "Django"), JobPreferences(skills = "go")))
         assertTrue(JobsMatcher.matches(job.copy(description = "C++ development"), JobPreferences(skills = "C++")))
     }
-    @Test fun rolesAndSkillsAreAlternativeRelevanceSignals() {
+    @Test fun explicitRolesCannotBeBypassedByGenericOrTechnicalSkills() {
         assertTrue(JobsMatcher.matches(job, JobPreferences(roles = "Nurse; Engineer")))
-        assertTrue(JobsMatcher.matches(job, JobPreferences(roles = "Nurse", skills = "Laravel, React")))
+        assertFalse(JobsMatcher.matches(job, JobPreferences(roles = "Nurse", skills = "Laravel, React")))
         assertFalse(JobsMatcher.matches(job, JobPreferences(roles = "Nurse", skills = "Clinical care")))
     }
     @Test fun reliableSalaryFieldsFilterWithoutCurrencyGuessing() {
@@ -70,4 +70,48 @@ class JobsModelsTest {
         assertTrue("salary_unverified" in JobsMatcher.reasons(fromLow, preferences))
         assertTrue("salary_match" in JobsMatcher.reasons(fromLow.copy(salaryMin = 40000.0), preferences))
     }
+    @Test fun genericSkillsDoNotOverrideOccupationAndCompanyIsNotSkillEvidence() {
+        val sales = job.copy(title = "Sales manager", description = "Great communication skills")
+        assertFalse(JobsMatcher.matches(sales, JobPreferences(roles = "Developer", skills = "Communication")))
+        val unrelated = job.copy(title = "Office manager", company = "Kotlin", description = "Manage office")
+        assertFalse(JobsMatcher.matches(unrelated, JobPreferences(skills = "Kotlin")))
+        assertFalse("skills_match" in JobsMatcher.reasons(unrelated, JobPreferences(skills = "Kotlin")))
+    }
+
+    @Test fun rankingPrefersRoleThenStructuredSkillsAndUsesStableFreshnessTies() {
+        val exact = job.copy(id = "exact", title = "Backend Engineer", postedAt = 1)
+        val tagged = job.copy(id = "tagged", tags = listOf("Kotlin"), postedAt = 2)
+        val prose = job.copy(id = "prose", description = "Kotlin", postedAt = 100)
+        val unrelated = job.copy(id = "unrelated", title = "Sales manager", description = "Kotlin")
+        val prefs = JobPreferences(roles = "Backend Engineer", skills = "Kotlin")
+        assertEquals(listOf("exact", "tagged", "prose"), JobsMatcher.ranked(listOf(prose, unrelated, tagged, exact), prefs).map { it.id })
+        val a = job.copy(id = "a", postedAt = 5)
+        val b = a.copy(id = "b")
+        assertEquals(listOf(a, b), JobsMatcher.ranked(listOf(b, a), prefs))
+        assertTrue(JobsMatcher.ranked(listOf(exact), prefs, "nurse").isEmpty())
+    }
+
+    @Test fun boundedRoleAliasesMatchSymmetricallyAndKeepSeniority() {
+        val developer = job.copy(title = "Senior Backend Developer")
+        val engineerPrefs = JobPreferences(roles = "Backend Engineer")
+        assertTrue(JobsMatcher.matches(developer, engineerPrefs))
+        assertTrue(JobsMatcher.matches(job, JobPreferences(roles = "Back-end Developer")))
+        assertTrue("role_match" in JobsMatcher.reasons(developer, engineerPrefs))
+        assertFalse(JobsMatcher.matches(job.copy(title = "Junior Backend Developer"), JobPreferences(roles = "Senior Backend Engineer")))
+        assertTrue(JobsMatcher.matches(job.copy(title = "Full-stack Developer"), JobPreferences(roles = "Full stack engineer")))
+        assertTrue(JobsMatcher.matches(job.copy(title = "Android Engineer"), JobPreferences(roles = "Android developer")))
+    }
+
+    @Test fun roleAliasesNeverBroadenToDifferentOccupationsOrDescriptionMentions() {
+        val preferences = JobPreferences(roles = "Software developer", skills = "Communication")
+        listOf("Civil Engineer", "Business Developer", "Software Engineering Recruiter", "Sales Manager").forEach { title ->
+            assertFalse(title, JobsMatcher.matches(job.copy(title = title, description = "Software engineer with communication skills"), preferences))
+        }
+        assertFalse(JobsMatcher.matches(job.copy(title = "Engineer"), JobPreferences(roles = "Developer")))
+        assertFalse(JobsMatcher.matches(job.copy(title = "Frontend Developer"), JobPreferences(roles = "Backend Engineer")))
+        val exactAlias = job.copy(id = "alias", title = "Backend Developer", postedAt = 1)
+        val senior = job.copy(id = "senior", postedAt = 2)
+        assertEquals(listOf("alias", "senior"), JobsMatcher.ranked(listOf(senior, exactAlias), JobPreferences(roles = "Backend Engineer")).map { it.id })
+    }
+
 }

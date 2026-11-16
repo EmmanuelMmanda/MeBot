@@ -259,6 +259,7 @@ fun feedMessageResource(code: String?): Int = when (code) {
     "invalid_input" -> R.string.feed_error_invalid_input
     "module_identity_conflict" -> R.string.personal_interests_module_conflict_099
     "suggestion_changed" -> R.string.suggestion097_changed
+    "context_changed" -> R.string.jobs_error_context_changed
     "ai_interrupted" -> R.string.polish_ai_interrupted
     "ai_incomplete" -> R.string.polish_ai_incomplete
     "conversation_limit" -> R.string.polish_conversation_limit

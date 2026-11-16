@@ -23,6 +23,7 @@ object JobsBackup {
         bounded(p.roles, 500); bounded(p.skills, 1000); bounded(p.country, 100)
         bounded(p.employmentType, 100); bounded(p.salaryMinimum, 200)
         require(p.alertFrequencyHours in 6..168)
+        require(p.onboardingStep in 0..3)
         fun currency(value: String) {
             require(value.isEmpty() || (value.length == 3 && value.all { it in 'A'..'Z' } &&
                 runCatching { java.util.Currency.getInstance(value) }.isSuccess))

@@ -2,9 +2,9 @@ name: Review MeBot website
 on:
   push:
     branches: [develop, main]
-    paths: ['README.md', 'docs/**', 'scripts/*showcase*', 'scripts/check-docs.py', '.github/workflows/showcase.yml']
+    paths: ['README.md', 'docs/**', 'scripts/*showcase*', 'scripts/test-jobs-website.py', 'scripts/check-docs.py', '.github/workflows/showcase.yml']
   pull_request:
-    paths: ['README.md', 'docs/**', 'scripts/*showcase*', 'scripts/check-docs.py', '.github/workflows/showcase.yml']
+    paths: ['README.md', 'docs/**', 'scripts/*showcase*', 'scripts/test-jobs-website.py', 'scripts/check-docs.py', '.github/workflows/showcase.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -33,7 +33,9 @@ jobs:
           python3 -m pip install 'playwright==1.56.0'
           python3 -m playwright install --with-deps chromium
       - name: Test mobile, desktop and guide interaction
-        run: python3 scripts/test-showcase-browser.py
+        run: |
+          python3 scripts/test-showcase-browser.py
+          python3 scripts/test-jobs-website.py
       - name: Upload website evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

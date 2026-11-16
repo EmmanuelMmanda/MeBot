@@ -21,6 +21,7 @@ class JobsViewModel(application: Application, private val savedStateHandle: Save
     private val changes = Channel<suspend () -> Unit>(Channel.UNLIMITED)
     private var queuedChanges = 0
     private val pendingBookmarks = mutableSetOf<String>()
+    private var assistantPreparationPending = false
     val ui = mutable.asStateFlow()
     init {
         if (savedStateHandle.get<Boolean>("jobs.exportPending") == true) {
@@ -107,6 +108,24 @@ class JobsViewModel(application: Application, private val savedStateHandle: Save
         val generation = repository.generation()
         mutate { repository.application(value, generation, expectedScope) }
     }
+    /** A one-shot handoff, never replayed after process death. The editable document is
+     * acknowledged on disk before navigation or any externally transmitted AI request. */
+    fun prepareAssistant(value: JobApplication?, expectedScope: String, onCommitted: () -> Unit) {
+        if (assistantPreparationPending) return
+        assistantPreparationPending = true
+        val generation = repository.generation()
+        mutate {
+            try {
+                if (value != null) repository.application(value, generation, expectedScope)
+                val committed = repository.current()
+                if (repository.generation() != generation || committed.editingScope != expectedScope)
+                    throw JobsStateChangedException()
+                mutable.update { it.copy(state = committed, ready = true) }
+                onCommitted()
+            } finally { assistantPreparationPending = false }
+        }
+    }
+
     private fun mutate(action: suspend () -> Unit) {
         queuedChanges++
         mutable.update { it.copy(error = null, saving = true) }

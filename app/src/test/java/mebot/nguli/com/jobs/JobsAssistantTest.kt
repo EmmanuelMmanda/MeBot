@@ -9,6 +9,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import mebot.nguli.com.core.ConversationLogic
+import mebot.nguli.com.core.AiTurn
 import mebot.nguli.com.core.jobs.JobPosting
 import org.junit.Assert.*
 import org.junit.Test
@@ -68,6 +69,55 @@ class JobsAssistantTest {
         assertEquals("true", json.getValue("description_truncated").jsonPrimitive.content)
         assertEquals("false", json.getValue("eligibility_verified").jsonPrimitive.content)
         ConversationLogic.validate(listOf(thread))
+    }
+
+    @Test fun reviewedContextIsExactOptInAndChangesThreadIdentity() {
+        val reviewed = "  Candidate's chosen experience\nUzoefu wa kazi: résumé.\n"
+        val plain = JobsAssistant.conversation(job)
+        val selected = JobsAssistant.conversation(job, reviewed)
+        assertNotEquals(plain.id, selected.id)
+        assertEquals(selected.id, JobsAssistant.conversation(job.copy(description = "New listing"), reviewed).id)
+        assertNotEquals(selected.id, JobsAssistant.conversation(job, "Different selection").id)
+        assertEquals(plain.id, JobsAssistant.conversation(job, "").id)
+        assertEquals(reviewed, selected.attachments.single { it.name == "candidate-context.txt" }.text)
+        assertTrue(selected.attachments.all { it.usedAtMillis == 0L })
+        assertTrue(plain.attachments.none { it.name == "candidate-context.txt" })
+        assertEquals(selected.attachments.map { it.id }.toSet(), JobsAssistant.managedAttachmentIds(job))
+        ConversationLogic.validate(listOf(plain, selected))
+    }
+
+    @Test fun publicExcerptShrinksWithoutTruncatingReviewedContext() {
+        val reviewed = "X".repeat(JobsAssistant.MAX_SHARED_CONTEXT_CHARACTERS)
+        val thread = JobsAssistant.conversation(job.copy(description = "Quoted \"listing\"\n".repeat(5000)), reviewed)
+        assertEquals(reviewed, thread.attachments.single { it.name == "candidate-context.txt" }.text)
+        assertTrue(thread.attachments.sumOf { it.text.length } <= ConversationLogic.maxAttachmentCharacters)
+        val listing = thread.attachments.single { it.name == "job-listing.txt" }.text
+        assertTrue(listing.contains("\"description_truncated\":true"))
+        ConversationLogic.validate(listOf(thread))
+    }
+
+    @Test fun contextValidationRejectsOversizeAndInvalidTextRatherThanChangingReview() {
+        listOf("X".repeat(8001), "private\u0000text", "   ").forEach { invalid ->
+            assertThrows(IllegalArgumentException::class.java) { JobsAssistant.conversation(job, invalid) }
+        }
+    }
+
+    @Test fun everyTypedIntentFitsUserTurnLimitAndPreservesTheQuestion() {
+        val question = "Q".repeat(1000)
+        JobsAssistantIntent.entries.forEach { intent ->
+            val text = JobsAssistant.requestText(intent, question)
+            assertTrue(text.length <= 2000)
+            assertTrue(text.endsWith(question))
+            assertTrue(text.contains("Do not invent experience"))
+            val thread = JobsAssistant.conversation(job).copy(turns = listOf(AiTurn(role = "user", text = text)))
+            ConversationLogic.validate(listOf(thread))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            JobsAssistant.requestText(JobsAssistantIntent.QUESTION, "Q".repeat(1001))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            JobsAssistant.requestText(JobsAssistantIntent.QUESTION, "Q\u0000")
+        }
     }
 
     @Test fun textExportPreservesReviewedUnicodeAndLineBreaksExactly() {

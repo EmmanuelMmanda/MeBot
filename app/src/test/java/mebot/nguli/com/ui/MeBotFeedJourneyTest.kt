@@ -443,9 +443,23 @@ class MeBotFeedJourneyTest {
         try {
             tab("feed")
             waitForTag("feed-screen")
-            compose.waitUntil(15_000) { requestEntered.isCompleted }
+            try {
+                compose.waitUntil(15_000) {
+                    // Like awaitPreparedSuggestionSet, drive the pending IO → Main/Compose
+                    // readiness transition before polling the external provider latch.
+                    compose.waitForIdle()
+                    requestEntered.isCompleted
+                }
+            } catch (failure: ComposeTimeoutException) {
+                val latest = viewModel.ui.value
+                throw AssertionError("Home preparation never entered provider: connected=${latest.connected}, " +
+                    "refreshing=${latest.refreshing}, progress=${latest.refreshProgress}, " +
+                    "generation=${latest.suggestionGeneration}, requests=${state().requestsToday}, " +
+                    "suggestions=${app.suggestionCalls}, error=${latest.error}", failure)
+            }
             assertEquals("Home prepares its current lead, not another card", "toolkit", runBlocking { requestEntered.await() })
             compose.waitUntil(15_000) {
+                compose.waitForIdle()
                 state().requestsToday == requestsBeforePrefetch + 1 && app.suggestionCalls == callsBeforePrefetch + 1
             }
 

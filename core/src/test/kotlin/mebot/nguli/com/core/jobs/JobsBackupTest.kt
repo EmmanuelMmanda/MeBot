@@ -7,6 +7,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class JobsBackupTest {
+    @Test fun onboardingProgressIsBackwardCompatibleAndBoundedInBackup() {
+        assertEquals(0, Json.decodeFromString<JobPreferences>("{}").onboardingStep)
+        for (step in 0..3) {
+            val portable = JobsBackup.export(JobsState(preferences = JobPreferences(onboardingStep = step)))
+            assertEquals(step, JobsBackup.restore(Json.decodeFromString<JobsState>(Json.encodeToString(portable))).preferences.onboardingStep)
+        }
+        for (step in listOf(-1, 4)) {
+            assertThrows(IllegalArgumentException::class.java) {
+                JobsBackup.validate(JobsState(preferences = JobPreferences(onboardingStep = step)))
+            }
+        }
+    }
+
     private val job = JobPosting(id = "source:1", title = "Engineer", url = "https://example.org/jobs/1", source = "Example")
     @Test fun portableBackupRetainsRecordsButNotCatalogAndDeliveryState() {
         val state = JobsState(preferences = JobPreferences(roles = "Engineer", alertsEnabled = true), jobs = listOf(job),
