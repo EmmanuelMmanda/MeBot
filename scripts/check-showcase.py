@@ -34,8 +34,7 @@ for field, proof in [
     ('sourceCommit', 'source_code_commit'), ('sourceTree', 'source_tree'),
     ('applicationId', 'application_id'), ('versionCode', 'version_code'),
     ('filename', 'apk_file'), ('sha256', 'apk_sha256'), ('sizeBytes', 'apk_size_bytes'),
-    ('certificateSha256', 'signer_certificate_sha256'), ('sourceFilename', 'source_file'),
-    ('sourceSha256', 'source_sha256'), ('sourceSizeBytes', 'source_size_bytes'),
+    ('certificateSha256', 'signer_certificate_sha256'),
 ]:
     assert official[field] == public_integrity[proof], f'Published identity mismatch: {field}'
 assert public_integrity['publication_status'] == 'published'
@@ -44,7 +43,7 @@ assert official['publicAssetsAvailable'] == public_integrity['public_assets_avai
 assert official['inAppUpdateAvailable'] == public_integrity['in_app_update_available']
 assert public_integrity.get('public_release_url') == f"{REPO}/releases/tag/{official['tag']}"
 assert re.fullmatch(r'[a-f0-9]{64}', official['sha256']) and re.fullmatch(r'[a-f0-9]{40}', official['sourceCommit'])
-assert official['sizeBytes'] > 0 and official['sourceSizeBytes'] > 0
+assert official['sizeBytes'] > 0
 published_at = datetime.fromisoformat(official['publishedAt'].replace('Z', '+00:00'))
 assert published_at.tzinfo is not None and published_at.utcoffset() == timezone.utc.utcoffset(published_at)
 assert published_at.date().isoformat() == official['publishedDate']
@@ -57,15 +56,32 @@ else:
     assert r['status'] == 'pending'
 
 assets = public_integrity.get('assets', [])
-expected_assets = [official[k] for k in ('filename', 'sourceFilename', 'verificationFilename', 'releaseNotesFilename', 'checksumFilename', 'releaseMetadataFilename')]
-assert sorted(a.get('name', '') for a in assets) == sorted(expected_assets), 'Public receipt must enumerate exactly the release assets'
-for name, digest_key, size_key in [
-    ('filename', 'sha256', 'sizeBytes'), ('sourceFilename', 'sourceSha256', 'sourceSizeBytes'),
-    ('verificationFilename', 'verificationSha256', 'verificationSizeBytes'),
-    ('releaseNotesFilename', 'releaseNotesSha256', 'releaseNotesSizeBytes'),
+required_asset_fields = [
+    ('filename', 'sha256', 'sizeBytes'),
     ('checksumFilename', 'checksumSha256', 'checksumSizeBytes'),
     ('releaseMetadataFilename', 'releaseMetadataSha256', 'releaseMetadataSizeBytes'),
-]:
+]
+optional_asset_fields = [
+    ('sourceFilename', 'sourceSha256', 'sourceSizeBytes'),
+    ('verificationFilename', 'verificationSha256', 'verificationSizeBytes'),
+    ('releaseNotesFilename', 'releaseNotesSha256', 'releaseNotesSizeBytes'),
+]
+asset_fields = list(required_asset_fields)
+for fields in optional_asset_fields:
+    present = [key in official for key in fields]
+    assert all(present) or not any(present), f'Partial optional artifact identity: {fields}'
+    if all(present):
+        asset_fields.append(fields)
+if 'sourceFilename' in official:
+    for field, proof in [('sourceFilename', 'source_file'), ('sourceSha256', 'source_sha256'), ('sourceSizeBytes', 'source_size_bytes')]:
+        assert official[field] == public_integrity[proof], f'Published source archive mismatch: {field}'
+else:
+    assert not any(key in public_integrity for key in ('source_file', 'source_sha256', 'source_size_bytes')), 'Do not invent a published source archive'
+expected_assets = [official[fields[0]] for fields in asset_fields]
+assert len(set(expected_assets)) == len(expected_assets)
+assert sorted(a.get('name', '') for a in assets) == sorted(expected_assets), 'Public receipt must enumerate exactly the release assets'
+for name, digest_key, size_key in asset_fields:
+    assert re.fullmatch(r'[a-f0-9]{64}', official[digest_key]) and official[size_key] > 0
     item = next(a for a in assets if a.get('name') == official[name])
     assert item.get('digest') == 'sha256:' + official[digest_key] and item.get('size') == official[size_key]
     assert item.get('browser_download_url') == release_base + official[name]
@@ -308,7 +324,9 @@ assert '0.9.8' not in (DOCS / 'USER-GUIDE.md').read_text() and '0.9.8' not in pr
 # Existing immutable release evidence and historical showcases remain untouched.
 assert hashlib.sha256((DOCS / 'releases/v0.9.5.json').read_bytes()).hexdigest() == '3eb625d5bbd60b89aa1a91d674c6c8625ba380554f8a05daa43028714b4b47be'
 assert hashlib.sha256((DOCS / 'RELEASE-0.9.5.md').read_bytes()).hexdigest() == '19808c5b6c1cf2e8b0ea1ff0242e14799a0a563df31ffeadc9fb7375b08cd7cf'
-assert hashlib.sha256((DOCS / 'VERIFICATION-0.9.8.md').read_bytes()).hexdigest() == official['verificationSha256']
+historical_098 = next(x for x in r['releases'] if x['version'] == '0.9.8')
+assert hashlib.sha256((DOCS / 'VERIFICATION-0.9.8.md').read_bytes()).hexdigest() == historical_098['verificationSha256']
+assert historical_098['verificationSha256'] == '8a2c699c2600de7219d8a4ff7cb81fce3410db1402a1788fb703dcdc9c6a8dba'
 assert (DOCS / 'guides/release-082.html').is_file()
 assert (DOCS / 'preview-083.html').is_file() and (DOCS / 'preview-084.html').is_file()
 assert (DOCS / 'preview-085.html').is_file() and (DOCS / 'preview-090.html').is_file()

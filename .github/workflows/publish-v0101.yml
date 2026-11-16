@@ -81,7 +81,9 @@ jobs:
           gh release upload v0.10.1 "$RELEASE_DIRECTORY/mebot-0.10.1.apk" "$RELEASE_DIRECTORY/release-metadata.json" "$RELEASE_DIRECTORY/SHA256SUMS.txt" --clobber
           mkdir -p "$RUNNER_TEMP/release-check"
           gh release download v0.10.1 --pattern 'mebot-0.10.1.apk' --pattern release-metadata.json --pattern SHA256SUMS.txt --dir "$RUNNER_TEMP/release-check"
-          gh api repos/$GH_REPO/releases/tags/v0.10.1 > "$RUNNER_TEMP/release-check/release.json"
+          RELEASE_ID=$(gh release view v0.10.1 --json databaseId --jq .databaseId)
+          test "$RELEASE_ID" -gt 0
+          gh api "repos/$GH_REPO/releases/$RELEASE_ID" > "$RUNNER_TEMP/release-check/release.json"
           python3 scripts/verify-release-0101.py assets
           gh release edit v0.10.1 --draft=false --latest
           gh release view v0.10.1 --json url,tagName,isDraft,isPrerelease > "$RELEASE_DIRECTORY/publication.json"
