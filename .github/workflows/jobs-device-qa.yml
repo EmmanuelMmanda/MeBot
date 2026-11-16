@@ -35,6 +35,21 @@ jobs:
           import subprocess
           subprocess.run(['sdkmanager', 'platforms;android-36', 'build-tools;35.0.0', 'emulator', 'system-images;android-35;google_apis;x86_64'], input='y\n' * 30, text=True, check=True)
           PY
+      - name: Build installable native verification packages
+        run: |
+          python3 scripts/prepare-build.py
+          gradle :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug --no-daemon --max-workers=2 --stacktrace
+          git rev-parse HEAD > native-verification-source.txt
+      - name: Preserve packages for an isolated connected-device verification fallback
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: jobs-native-packages-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/androidTest/debug/*.apk
+            native-verification-source.txt
+          if-no-files-found: error
+          retention-days: 14
       - name: Compile device tests and exercise the isolated emulator
         run: bash scripts/verify-jobs-emulator.sh
       - name: Preserve exact-source device evidence
