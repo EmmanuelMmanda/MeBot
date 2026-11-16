@@ -256,7 +256,12 @@ try:
                         assert page.locator('[data-release-date]').get_attribute('datetime')
                         assert page.locator('[data-release-sha]').inner_text()==official['sha256']
                         assert official['sizeBytes'] / 1000000 > 0
-                        assert page.locator('[data-release-assets] a').count() >= 4
+                        allowed_resources = re.compile(r'(?:^|-)source\.zip$|verification\.md$|^RELEASE-NOTES\.md$|^SHA256SUMS\.txt$|^release-metadata\.json$', re.I)
+                        expected_resources = sorted(item['browser_download_url'] for item in github_release_payload()['assets'] if allowed_resources.search(item['name']))
+                        actual_resources = sorted(page.locator('[data-release-assets] a').evaluate_all('(links) => links.map(link => link.href)'))
+                        assert actual_resources == expected_resources, (actual_resources, expected_resources)
+                        assert any(url.endswith('/SHA256SUMS.txt') for url in actual_resources)
+                        assert any(url.endswith('/release-metadata.json') for url in actual_resources)
                         assert not re.search(r'MeBot\s+0\.\d+',page.locator('main').inner_text())
                         assert f"MeBot {official['version']}" in page.locator('footer').inner_text()
                     for img in page.locator('.shot:visible img').all():

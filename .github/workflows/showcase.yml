@@ -2,9 +2,9 @@ name: Review MeBot website
 on:
   push:
     branches: [develop, main]
-    paths: ['README.md', 'docs/**', 'scripts/*showcase*', 'scripts/check-docs.py', '.github/workflows/showcase.yml']
+    paths: ['README.md', 'docs/**', 'scripts/*showcase*', 'scripts/test-jobs-website.py', 'scripts/*jobs-gallery.py', 'scripts/check-docs.py', '.github/workflows/showcase.yml']
   pull_request:
-    paths: ['README.md', 'docs/**', 'scripts/*showcase*', 'scripts/check-docs.py', '.github/workflows/showcase.yml']
+    paths: ['README.md', 'docs/**', 'scripts/*showcase*', 'scripts/test-jobs-website.py', 'scripts/*jobs-gallery.py', 'scripts/check-docs.py', '.github/workflows/showcase.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,7 +13,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   review:
-    runs-on: ubuntu-latest
+    # Playwright 1.56 supports Ubuntu 24.04, not the newer ubuntu-latest image.
+    runs-on: ubuntu-24.04
     # Browser setup alone took 13m11 once; allow the full-guide render suite too.
     timeout-minutes: 25
     steps:
@@ -25,6 +26,7 @@ jobs:
           git diff --exit-code -- README.md START-HERE.md docs/
           python3 scripts/check-docs.py
           python3 scripts/check-showcase.py
+          if [ -f docs/assets/jobs-screens.json ]; then python3 scripts/test-jobs-gallery.py; fi
           node --check docs/site.js
           node --check docs/showcase.js
       - name: Install browser testing
@@ -32,7 +34,9 @@ jobs:
           python3 -m pip install 'playwright==1.56.0'
           python3 -m playwright install --with-deps chromium
       - name: Test mobile, desktop and guide interaction
-        run: python3 scripts/test-showcase-browser.py
+        run: |
+          python3 scripts/test-showcase-browser.py
+          python3 scripts/test-jobs-website.py
       - name: Upload website evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

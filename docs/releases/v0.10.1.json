@@ -1,0 +1,47 @@
+{
+  "version": "0.10.1",
+  "publication_status": "published",
+  "published_at": "2026-11-16T21:56:10Z",
+  "public_release_id": 447663023,
+  "public_release_url": "https://github.com/EmmanuelMmanda/MeBot/releases/tag/v0.10.1",
+  "source_code_commit": "d0b054ec8fad5b97b34664edd63fbaacf21b40aa",
+  "source_tree": "f954b65cd2f1a5f1befb383ec40e3903bbb11d4f",
+  "apk_file": "mebot-0.10.1.apk",
+  "apk_sha256": "38c011bb6c84110af4539341a89ba4a623914a70a91b5db3a2a66fd0c5c72861",
+  "apk_size_bytes": 20864712,
+  "signer_certificate_sha256": "c665c578ecf64f33541670d94f099ee435db1e55790395ff0339f2bdf231d007",
+  "application_id": "mebot.nguli.com",
+  "version_code": 28,
+  "public_assets_available": true,
+  "in_app_update_available": true,
+  "updater_verification_status": "verified",
+  "personal_profile_asset_present": false,
+  "verification_basis": "Release workflow 43964925007 verified the successful fixed-source CI artifact, reconstructed exact signed APK, unchanged application ZIP entries, production certificate, v2/v3 signatures, package/version and 16KB ZIP alignment. All three assets were downloaded and byte-compared before publication, including API sizes and digests. Public API receipt matches these exact files. Native debug journeys passed nine tests across phone light, large-text dark and tablet on an isolated emulator; no physical-device or live-provider claim. The official 0.9.9 app (code 26) discovered the public 0.10.1 release, downloaded the 20.9 MB APK and visibly reached Verified and ready to install on the isolated emulator. The public APK SHA-256 was independently checked. This verifies discovery/download/verification, not completion of installation.",
+  "assets": [
+    {
+      "name": "mebot-0.10.1.apk",
+      "size": 20864712,
+      "digest": "sha256:38c011bb6c84110af4539341a89ba4a623914a70a91b5db3a2a66fd0c5c72861",
+      "browser_download_url": "https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.10.1/mebot-0.10.1.apk"
+    },
+    {
+      "name": "release-metadata.json",
+      "size": 370,
+      "digest": "sha256:ee86dc5f1abf4c9323449b56a9ee0404429159e104a1ef6d3d335e6e6772d459",
+      "browser_download_url": "https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.10.1/release-metadata.json"
+    },
+    {
+      "name": "SHA256SUMS.txt",
+      "size": 171,
+      "digest": "sha256:1f358de04fcde43ecf5a9b2ce4413300b3430eec7ff37843bb22fcbd35550e3c",
+      "browser_download_url": "https://github.com/EmmanuelMmanda/MeBot/releases/download/v0.10.1/SHA256SUMS.txt"
+    }
+  ],
+  "package": "mebot.nguli.com",
+  "checksums_file": "SHA256SUMS.txt",
+  "checksums_sha256": "1f358de04fcde43ecf5a9b2ce4413300b3430eec7ff37843bb22fcbd35550e3c",
+  "checksums_size_bytes": 171,
+  "release_metadata_file": "release-metadata.json",
+  "release_metadata_sha256": "ee86dc5f1abf4c9323449b56a9ee0404429159e104a1ef6d3d335e6e6772d459",
+  "release_metadata_size_bytes": 370
+}
