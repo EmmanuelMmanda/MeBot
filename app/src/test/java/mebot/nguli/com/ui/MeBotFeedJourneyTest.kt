@@ -988,7 +988,14 @@ class MeBotFeedJourneyTest {
     }
     private fun state() = runBlocking { app.feedRepository.current() }
     private fun text(resource: Int, vararg args: Any) = compose.activity.getString(resource, *args)
-    private fun tab(name: String) { compose.onNodeWithTag("nav-$name").performClick() }
+    private fun tab(name: String) {
+        compose.onNodeWithTag("nav-${if (name == "modules") "feed" else name}").performClick()
+        if (name == "modules") {
+            waitForTag("feed-screen")
+            compose.onNodeWithTag("feed-all-modules").performScrollTo().performClick()
+            waitForTag("modules-heading")
+        }
+    }
     private fun back() { compose.onNodeWithContentDescription(text(R.string.back)).performClick() }
     private fun clickText(resource: Int) { compose.onNodeWithText(text(resource)).performScrollTo().performClick() }
     private fun waitForTag(tag: String) {

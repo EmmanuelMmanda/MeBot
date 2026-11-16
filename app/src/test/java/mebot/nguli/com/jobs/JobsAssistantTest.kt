@@ -1,6 +1,10 @@
 package mebot.nguli.com.jobs
 
 import android.app.Application
+import java.io.File
+import androidx.test.core.app.ApplicationProvider
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.text.PDFTextStripper
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -74,13 +78,22 @@ class JobsAssistantTest {
     @Test fun exportsRejectEmptyOrOversizedDocuments() {
         listOf("", "   ", "a".repeat(24001)).forEach { invalid ->
             assertThrows(IllegalArgumentException::class.java) { JobsAssistant.draftTextBytes(invalid) }
-            assertThrows(IllegalArgumentException::class.java) { JobsAssistant.draftPdfBytes(invalid) }
+            assertThrows(IllegalArgumentException::class.java) { JobsAssistant.draftPdfBytes(ApplicationProvider.getApplicationContext(), invalid) }
+        }
+    }
+
+    @Test fun pdfExportDoesNotSilentlyRemoveUnsupportedCharacters() {
+        assertThrows(IllegalArgumentException::class.java) {
+            JobsAssistant.draftPdfBytes(ApplicationProvider.getApplicationContext(), "A\u0000B")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            JobsAssistant.draftPdfBytes(ApplicationProvider.getApplicationContext(), "Unsupported emoji \uD83E\uDDD1")
         }
     }
 
     @Test fun pdfExportProducesRealPdfAndPaginatesLongReviewedText() {
-        val short = JobsAssistant.draftPdfBytes("Reviewed draft\nA concise application document.")
-        val long = JobsAssistant.draftPdfBytes((1..220).joinToString("\n") { "Line $it: confirmed candidate experience for review." })
+        val short = JobsAssistant.draftPdfBytes(ApplicationProvider.getApplicationContext(), "Reviewed draft\nA concise application document.")
+        val long = JobsAssistant.draftPdfBytes(ApplicationProvider.getApplicationContext(), (1..220).joinToString("\n") { "Line $it: confirmed candidate experience for review." })
         fun pages(bytes: ByteArray): Int {
             val pdf = bytes.toString(Charsets.ISO_8859_1)
             assertTrue("Expected PDF header", pdf.startsWith("%PDF-"))
@@ -89,5 +102,20 @@ class JobsAssistantTest {
         }
         assertEquals(1, pages(short))
         assertTrue("Long drafts must span multiple pages", pages(long) > 1)
+        PDDocument.load(long).use { parsed ->
+            assertTrue(parsed.numberOfPages > 1)
+            val extracted = PDFTextStripper().getText(parsed)
+            assertTrue(extracted.contains("Line 1: confirmed candidate experience for review."))
+            assertTrue(extracted.contains("Line 220: confirmed candidate experience for review."))
+        }
+        val unicode = JobsAssistant.draftPdfBytes(ApplicationProvider.getApplicationContext(), "Résumé – Uzoefu wa kazi")
+        PDDocument.load(unicode).use { parsed ->
+            assertTrue(PDFTextStripper().getText(parsed).contains("Résumé – Uzoefu wa kazi"))
+        }
+        // Synthetic render evidence is uploaded by the existing CI artifact configuration.
+        val evidence = File("build/outputs/screenshots/jobs-pdf").apply { mkdirs() }
+        File(evidence, "synthetic-short.pdf").writeBytes(short)
+        File(evidence, "synthetic-multipage.pdf").writeBytes(long)
+        File(evidence, "synthetic-unicode.pdf").writeBytes(unicode)
     }
 }

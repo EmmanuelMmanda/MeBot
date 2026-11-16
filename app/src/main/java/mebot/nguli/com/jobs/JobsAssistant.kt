@@ -1,10 +1,13 @@
 package mebot.nguli.com.jobs
 
-import android.graphics.Color
-import android.graphics.pdf.PdfDocument
-import android.text.Layout
-import android.text.StaticLayout
-import android.text.TextPaint
+import android.content.Context
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.PDPage
+import com.tom_roush.pdfbox.pdmodel.PDPageContentStream
+import com.tom_roush.pdfbox.pdmodel.common.PDRectangle
+import com.tom_roush.pdfbox.pdmodel.font.PDType0Font
+import mebot.nguli.com.R
 import mebot.nguli.com.core.AiAttachment
 import mebot.nguli.com.core.AiConversation
 import mebot.nguli.com.core.jobs.JobPosting
@@ -83,38 +86,65 @@ object JobsAssistant {
         return reviewedText.toByteArray(Charsets.UTF_8)
     }
 
-    /** Paginates reviewed plain text into an actual PDF instead of renaming a text download.
-     * Runs off the main thread. Cancellation and picker lifecycle belong to the caller.
+    /** Actual portable PDF with embedded app typography and extractable Unicode text.
+     * Runs off the main thread. The caller owns the explicit document picker/lifecycle.
+     * Unsupported font characters fail the export rather than silently changing reviewed facts.
      */
-    fun draftPdfBytes(reviewedText: String): ByteArray {
+    fun draftPdfBytes(context: Context, reviewedText: String): ByteArray {
         require(reviewedText.isNotBlank() && reviewedText.length <= 24000)
-        val paint = TextPaint().apply { color = Color.BLACK; textSize = 11f; isAntiAlias = true }
-        val layout = StaticLayout.Builder.obtain(clean(reviewedText), 0, clean(reviewedText).length, paint, 499)
-            .setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(3f, 1f).setIncludePad(false).build()
-        val output = ByteArrayOutputStream()
-        val document = PdfDocument()
-        try {
-            var startLine = 0
-            var pageNumber = 1
-            while (startLine < layout.lineCount) {
-                val top = layout.getLineTop(startLine)
-                var endLine = startLine + 1
-                while (endLine < layout.lineCount && layout.getLineBottom(endLine) - top <= 746) endLine++
-                val bottom = layout.getLineBottom(endLine - 1)
-                val page = document.startPage(PdfDocument.PageInfo.Builder(595, 842, pageNumber++).create())
-                page.canvas.save()
-                page.canvas.clipRect(48, 48, 547, 48 + bottom - top)
-                page.canvas.translate(48f, 48f - top)
-                layout.draw(page.canvas)
-                page.canvas.restore()
-                document.finishPage(page)
-                startLine = endLine
+        require(reviewedText.none { it.code < 32 && it !in "\n\r\t" }) { "Unsupported document control character" }
+        PDFBoxResourceLoader.init(context.applicationContext)
+        return PDDocument().use { document ->
+            val font = context.resources.openRawResource(R.font.figtree).use {
+                PDType0Font.load(document, it, true)
             }
-            document.writeTo(output)
-            return output.toByteArray()
-        } finally {
-            document.close()
-            output.close()
+            val fontSize = 11f
+            val lineHeight = 16f
+            val pageWidth = PDRectangle.A4.width
+            val pageHeight = PDRectangle.A4.height
+            val margin = 48f
+            val width = pageWidth - margin * 2
+            val lines = mutableListOf<String>()
+            clean(reviewedText).replace("\r\n", "\n").replace('\r', '\n')
+                .replace("\t", "    ").split('\n').forEach { paragraph ->
+                    if (paragraph.isEmpty()) lines.add("")
+                    else {
+                        var line = ""
+                        paragraph.codePoints().toArray().forEach { codePoint ->
+                            val character = String(Character.toChars(codePoint))
+                            val candidate = line + character
+                            if (line.isNotEmpty() && font.getStringWidth(candidate) / 1000f * fontSize > width) {
+                                // Wrap at a word boundary when available, otherwise split an overlong word.
+                                val space = line.lastIndexOf(' ')
+                                if (space > 0) {
+                                    lines.add(line.substring(0, space))
+                                    line = line.substring(space + 1) + character
+                                } else {
+                                    lines.add(line)
+                                    line = character
+                                }
+                            } else line = candidate
+                        }
+                        lines.add(line)
+                    }
+                }
+            val linesPerPage = ((pageHeight - margin * 2) / lineHeight).toInt()
+            lines.chunked(linesPerPage).forEach { pageLines ->
+                val page = PDPage(PDRectangle.A4)
+                document.addPage(page)
+                PDPageContentStream(document, page).use { stream ->
+                    stream.beginText()
+                    stream.setFont(font, fontSize)
+                    stream.setLeading(lineHeight)
+                    stream.newLineAtOffset(margin, pageHeight - margin - fontSize)
+                    pageLines.forEachIndexed { index, line ->
+                        if (index > 0) stream.newLine()
+                        stream.showText(line)
+                    }
+                    stream.endText()
+                }
+            }
+            ByteArrayOutputStream().use { output -> document.save(output); output.toByteArray() }
         }
     }
 

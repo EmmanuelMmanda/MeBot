@@ -74,11 +74,19 @@ class MeBotShowcase099JourneyTest {
 
         compose.onNodeWithTag("feed-screen").assertIsDisplayed()
         compose.onNodeWithTag("item-$FSDT_ID").assertIsDisplayed()
-        compose.onNodeWithText("Closes 5 Nov 2026", substring = true, useUnmergedTree = true).assertExists()
+        // The source deadline stays fixed; its status must remain truthful as the calendar advances.
+        val deadline = java.time.LocalDate.of(2026, 11, 5)
+        val today = java.time.LocalDate.now(java.time.ZoneId.of(state().timezone))
+        val deadlineLabel = text(when {
+            today.isBefore(deadline) -> R.string.opportunity_deadline_closes_099
+            today == deadline -> R.string.opportunity_deadline_today_099
+            else -> R.string.opportunity_deadline_passed_099
+        }, "5 Nov 2026")
+        compose.onNodeWithText(deadlineLabel, substring = true, useUnmergedTree = true).assertExists()
         compose.onNodeWithText(text(R.string.feed_time_unavailable), useUnmergedTree = true).assertIsNotDisplayed()
         capture("en-feed-for-you")
         compose.onNodeWithTag("opportunity-deadline-$FSDT_ID", useUnmergedTree = true).assertExists()
-            .assertTextContains("Closes 5 Nov 2026", substring = true)
+            .assertTextContains(deadlineLabel, substring = true)
         assertTrue("The For You selection includes the source-verified FSDT opportunity",
             state().personalDailySelection098?.itemIds?.contains(FSDT_ID) == true &&
                 state().items.single { it.id == FSDT_ID }.let {

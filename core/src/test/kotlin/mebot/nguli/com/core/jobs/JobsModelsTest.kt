@@ -32,6 +32,12 @@ class JobsModelsTest {
         assertTrue(JobsMatcher.reasons(job.copy(location = "EMEA"), prefs).contains("eligibility_unknown"))
         assertFalse(JobsMatcher.reasons(job, prefs).contains("location_match"))
     }
+    @Test fun countryAliasesKeepExplicitEligibleLocations() {
+        assertTrue(JobsMatcher.matches(job.copy(location = "USA"), JobPreferences(country = "United States")))
+        assertTrue(JobsMatcher.matches(job.copy(location = "United Kingdom"), JobPreferences(country = "UK")))
+        assertTrue(JobsMatcher.matches(job.copy(location = "Tanzania"), JobPreferences(country = "TZ")))
+        assertFalse(JobsMatcher.matches(job.copy(location = "USA"), JobPreferences(country = "Tanzania")))
+    }
     @Test fun queryRequiresAllWordsAndMatchesLiteralSkillNames() {
         assertTrue(JobsMatcher.matches(job, JobPreferences(), "backend Laravel"))
         assertFalse(JobsMatcher.matches(job, JobPreferences(), "backend nurse"))
@@ -43,10 +49,25 @@ class JobsModelsTest {
         assertTrue(JobsMatcher.matches(job, JobPreferences(roles = "Nurse", skills = "Laravel, React")))
         assertFalse(JobsMatcher.matches(job, JobPreferences(roles = "Nurse", skills = "Clinical care")))
     }
+    @Test fun reliableSalaryFieldsFilterWithoutCurrencyGuessing() {
+        val prefs = JobPreferences(salaryMinimum = "3000", salaryCurrency = "USD", salaryPeriod = "month")
+        assertFalse(JobsMatcher.matches(job.copy(salaryMax = 30000.0, salaryCurrency = "USD", salaryPeriod = "year"), prefs))
+        assertTrue(JobsMatcher.matches(job.copy(salaryMax = 48000.0, salaryCurrency = "USD", salaryPeriod = "year"), prefs))
+        assertTrue(JobsMatcher.matches(job.copy(salaryMax = 1000.0, salaryCurrency = "EUR", salaryPeriod = "month"), prefs))
+        assertTrue(JobsMatcher.matches(job, prefs))
+        assertTrue(JobsMatcher.reasons(job.copy(salaryMax = 48000.0, salaryCurrency = "USD", salaryPeriod = "year"), prefs).contains("salary_match"))
+    }
     @Test fun salariesNeverBecomeUnsupportedEligibilityClaims() {
         val prefs = JobPreferences(salaryMinimum = "2000")
         assertTrue(JobsMatcher.matches(job.copy(salary = "£50,000 yearly"), prefs))
         assertTrue(JobsMatcher.reasons(job, prefs).contains("salary_unverified"))
         assertTrue(JobsMatcher.reasons(job, prefs).contains("eligibility_unknown"))
+    }
+    @Test fun minimumOnlySalaryDoesNotInventAnUpperBound() {
+        val preferences = JobPreferences(salaryMinimum = "30000", salaryCurrency = "USD", salaryPeriod = "year")
+        val fromLow = JobPosting(salaryMin = 20000.0, salaryCurrency = "USD", salaryPeriod = "year")
+        assertTrue(JobsMatcher.matches(fromLow, preferences))
+        assertTrue("salary_unverified" in JobsMatcher.reasons(fromLow, preferences))
+        assertTrue("salary_match" in JobsMatcher.reasons(fromLow.copy(salaryMin = 40000.0), preferences))
     }
 }

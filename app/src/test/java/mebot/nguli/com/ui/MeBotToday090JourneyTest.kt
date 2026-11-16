@@ -52,7 +52,12 @@ class MeBotToday090JourneyTest {
                 context=listOf(ContextEntry(id="scoped",text="Synthetic local business interest",scopes=setOf("news")))) }
         }
         waitForTag("feed-screen")
-        for(tab in listOf("feed","modules","ai","saved","you")) compose.onNodeWithTag("nav-$tab").assertIsDisplayed()
+        for(tab in listOf("feed","jobs","ai","saved","you")) compose.onNodeWithTag("nav-$tab").assertIsDisplayed()
+        compose.onNodeWithTag("feed-all-modules").performScrollTo().performClick()
+        waitForTag("modules-heading")
+        compose.onNodeWithTag("modules-heading").assertIsDisplayed()
+        compose.onNodeWithTag("nav-feed").performClick()
+        waitForTag("feed-screen")
         compose.onNodeWithTag("filter-today").performScrollTo().performClick()
         compose.onNodeWithTag("feed-screen").performScrollToNode(hasTestTag("star-${item.id}"))
         compose.onNodeWithTag("star-${item.id}").assertIsDisplayed()

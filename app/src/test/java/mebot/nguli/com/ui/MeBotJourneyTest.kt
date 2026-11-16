@@ -185,8 +185,8 @@ class MeBotJourneyTest {
         waitForText(text(R.string.mebot_time_title))
         screenshot("05-mebot-alarm-editor")
         clickContent(text(R.string.mebot_medium))
-        compose.onNodeWithTag("alarm-more-questions").performScrollTo().performClick()
-        compose.onNodeWithTag("alarm-save").performScrollTo().performClick()
+        compose.onNodeWithTag("alarm-more-questions").scrollThenClick()
+        compose.onNodeWithTag("alarm-save").scrollThenClick()
         waitForText(text(R.string.mebot_alarm_access))
         compose.onNodeWithText(text(R.string.mebot_save_off)).performClick()
         waitForState { it.alarms.size == 1 }
@@ -211,9 +211,9 @@ class MeBotJourneyTest {
         navigation(R.string.alarms)
         compose.onNodeWithTag("alarm-create").performClick()
         waitForText(text(R.string.mebot_time_title))
-        compose.onNodeWithTag("alarm-advanced").performScrollTo().performClick()
+        compose.onNodeWithTag("alarm-advanced").scrollThenClick()
         typeInto(R.string.mebot_alarm_name, "Morning walk")
-        compose.onNodeWithTag("alarm-mode-qr").performScrollTo().performClick()
+        compose.onNodeWithTag("alarm-mode-qr").scrollThenClick()
         clickContent(text(R.string.mebot_checkpoint_generate))
         waitForText(text(R.string.mebot_checkpoint_short))
         typeInto(R.string.checkpoint_name, "Hallway")
@@ -225,7 +225,7 @@ class MeBotJourneyTest {
         waitForText(text(R.string.mebot_time_title))
         compose.onNode(hasText(text(R.string.mebot_alarm_name)) and hasSetTextAction())
             .performScrollTo().assertTextContains("Morning walk")
-        compose.onNodeWithTag("alarm-save").performScrollTo().performClick()
+        compose.onNodeWithTag("alarm-save").scrollThenClick()
         waitForText(text(R.string.mebot_alarm_access))
         compose.onNodeWithText(text(R.string.mebot_save_off)).performClick()
         waitForState { it.alarms.size == 1 }
@@ -265,7 +265,7 @@ class MeBotJourneyTest {
         navigation(R.string.alarms)
         compose.onNodeWithTag("alarm-create").performClick()
         waitForText(text(R.string.mebot_time_title))
-        compose.onNodeWithTag("alarm-save").performScrollTo().performClick()
+        compose.onNodeWithTag("alarm-save").scrollThenClick()
         waitForText(text(R.string.mebot_alarm_access))
         compose.onNodeWithText(text(R.string.mebot_save_off)).performClick()
         waitForState { it.alarms.size == 2 }
@@ -354,11 +354,11 @@ class MeBotJourneyTest {
         waitForText(text(R.string.mebot_time_title))
         compose.onNodeWithText("Hallway").performScrollTo().assertIsDisplayed()
         observeCurrent("editor-open-hallway-visible")
-        compose.onNodeWithTag("alarm-advanced").performScrollTo().performClick()
+        compose.onNodeWithTag("alarm-advanced").scrollThenClick()
         compose.onNode(hasText(text(R.string.mebot_alarm_name)) and hasSetTextAction())
             .performScrollTo().performTextReplacement("Updated QR")
         observeCurrent("pre-save")
-        compose.onNodeWithTag("alarm-save").performScrollTo().performClick()
+        compose.onNodeWithTag("alarm-save").scrollThenClick()
         observeCurrent("post-save-click")
         try {
             waitForState { state ->
@@ -383,7 +383,7 @@ class MeBotJourneyTest {
         waitForText(text(R.string.mebot_time_title))
         clickContent(text(R.string.mebot_use_checkpoint, "Desk"))
         compose.onNodeWithText("Desk").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithTag("alarm-save").performScrollTo().performClick()
+        compose.onNodeWithTag("alarm-save").scrollThenClick()
         waitForState { it.alarms.single().checkpointCode == "new-desk-marker" }
         assertEquals("Desk", current().alarms.single().checkpointLabel)
     }
@@ -474,7 +474,7 @@ class MeBotJourneyTest {
         return compose.activity.createConfigurationContext(config).getString(resource)
     }
     private fun explore() {
-        compose.onNodeWithTag("setup099-continue-public").performScrollTo().performClick()
+        compose.onNodeWithTag("setup099-continue-public").scrollThenClick()
         waitForTag("feed-screen")
         waitForState { it.profile.onboardingComplete }
         compose.waitUntil(15_000) {
@@ -485,15 +485,23 @@ class MeBotJourneyTest {
         compose.onNodeWithTag("quick-guide").assertDoesNotExist() // Completed tour goes straight to useful content.
         waitForTransientMessages()
     }
+    // Let scrolling/layout settle before pointer coordinates are calculated. Keep real
+    // pointer activation so this journey continues to detect unreachable controls.
+    private fun SemanticsNodeInteraction.scrollThenClick() {
+        performScrollTo()
+        compose.waitForIdle()
+        assertIsDisplayed().assertIsEnabled().performClick()
+    }
     private fun openModuleCatalog() {
         compose.onNodeWithTag("nav-feed").performClick()
         waitForTag("feed-screen")
-        compose.onNodeWithTag("feed-all-modules").performScrollTo().performClick()
+        compose.onNodeWithTag("feed-all-modules").scrollThenClick()
+        waitForTag("modules-heading")
     }
     private fun openCheckIn() {
         waitForTransientMessages()
         openModuleCatalog()
-        compose.onNodeWithTag("module-checkin").performScrollTo().performClick()
+        compose.onNodeWithTag("module-checkin").scrollThenClick()
         waitForTag("daily-screen")
     }
     private fun navigation(resource: Int) {
@@ -502,7 +510,7 @@ class MeBotJourneyTest {
         if (tab == "modules") openModuleCatalog() else compose.onNodeWithTag("nav-$tab").performClick()
         utility?.let {
             waitForTag(it)
-            compose.onNodeWithTag(it).performScrollTo().performClick()
+            compose.onNodeWithTag(it).scrollThenClick()
             if (resource == R.string.alarms) waitForTag("alarm-create") else waitForText(text(R.string.mb_focus_silent))
         }
     }

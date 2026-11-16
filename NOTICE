@@ -10,6 +10,7 @@ This application uses third-party open-source components, including:
 - ZXing and ZXing Android Embedded — ZXing authors, Journey Mobile / JourneyApps and contributors.
 - Guava ListenableFuture — Google and contributors, Apache License 2.0.
 - JSpecify annotations — JSpecify contributors, Apache License 2.0.
+- PdfBox-Android — Tom Roush, Apache PDFBox contributors and included Adobe/Unicode contributors, Apache License 2.0 and included notices. Original notices are bundled in app assets/licenses.
 - Figtree — Erik Kennedy and contributors, SIL Open Font License 1.1.
 
 The original Figtree license is included in docs/FONT-LICENSE.txt and in the app's assets. The website copy at docs/assets/figtree.ttf is identical to the app font.

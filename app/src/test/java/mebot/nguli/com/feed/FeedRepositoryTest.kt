@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.test.core.app.ApplicationProvider
 import mebot.nguli.com.core.*
+import mebot.nguli.com.core.jobs.*
+import kotlinx.coroutines.flow.first
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -102,6 +104,74 @@ class FeedRepositoryTest {
         file.writeText(original)
         assertTrue(runCatching { repository().first.current() }.exceptionOrNull() is IllegalArgumentException)
         assertEquals(original, file.readText())
+    }
+
+    @Test fun interruptedJobsRestoreRollsForwardFromDurableMarkerAfterReopen() = runBlocking {
+        val pending = JobsState(preferences = JobPreferences(roles = "Engineer", alertsEnabled = true))
+        val firstScope = SupervisorJob().also { jobs += it }
+        val first = FeedRepository(storageContext, CoroutineScope(Dispatchers.IO + firstScope), restoreJobs = { error("Simulated disk failure") })
+        assertTrue(runCatching { first.importBackup { sampleState().copy(jobsBackup = pending) } }.isFailure)
+        assertTrue(runCatching { first.current() }.isFailure) // No half-restored feed escapes.
+        assertTrue(storageDirectory.resolve("mebot/feed.json").readText().contains("jobsBackup"))
+        firstScope.cancelAndJoin()
+        var restored: JobsState? = null
+        val secondScope = SupervisorJob().also { jobs += it }
+        val reopened = FeedRepository(storageContext, CoroutineScope(Dispatchers.IO + secondScope), restoreJobs = { restored = it })
+        val visible = reopened.state.first()
+        assertEquals("Engineer", restored!!.preferences.roles)
+        assertFalse(restored!!.preferences.alertsEnabled)
+        assertNull(visible.jobsBackup)
+        assertEquals(sampleState().name, visible.name)
+        assertNull(reopened.current().jobsBackup)
+    }
+
+    @Test fun cancellationAfterJobsWriteReplaysIdempotentlyBeforeNextMutation() = runBlocking {
+        var writes = 0
+        var cancel = true
+        val storeScope = SupervisorJob().also { jobs += it }
+        val store = FeedRepository(storageContext, CoroutineScope(Dispatchers.IO + storeScope), restoreJobs = {
+            writes++
+            if (cancel) throw kotlinx.coroutines.CancellationException("Simulated process interruption")
+        })
+        assertTrue(runCatching { store.importBackup { sampleState().copy(jobsBackup = JobsState()) } }.isFailure)
+        cancel = false
+        store.update { it.copy(name = "Edited after recovery") }
+        assertEquals(2, writes)
+        assertEquals("Edited after recovery", store.current().name)
+        assertNull(store.current().jobsBackup)
+    }
+
+    @Test fun legacyImportDoesNotTouchJobsAndSharedGateSeesOnlyCompletedRestore() = runBlocking {
+        var writes = 0
+        val storeScope = SupervisorJob().also { jobs += it }
+        val store = FeedRepository(storageContext, CoroutineScope(Dispatchers.IO + storeScope), restoreJobs = { writes++ })
+        store.importBackup { sampleState() }
+        assertEquals(0, writes)
+        store.importBackup { sampleState().copy(jobsBackup = JobsState()) }
+        val observed = store.withJobsConsistency { writes }
+        assertEquals(1, observed)
+        assertNull(store.state.first().jobsBackup)
+    }
+
+    @Test fun jobsReadersWaitForFeedJournalRecoveryWithoutRecursiveLock() = runBlocking {
+        lateinit var feed: FeedRepository
+        val jobsStore = mebot.nguli.com.jobs.JobsRepository(storageContext, consistencyRepository = { feed })
+        var fail = true
+        val storeScope = SupervisorJob().also { jobs += it }
+        feed = FeedRepository(storageContext, CoroutineScope(Dispatchers.IO + storeScope), restoreJobs = {
+            jobsStore.restoreFromJournal(it)
+            if (fail) error("Interrupted before journal clear")
+        })
+        val backup = JobsState(preferences = JobPreferences(roles = "Recovered role"))
+        assertTrue(runCatching { feed.importBackup { sampleState().copy(jobsBackup = backup) } }.isFailure)
+        assertTrue(runCatching { jobsStore.current() }.isFailure)
+        fail = false
+        kotlinx.coroutines.withTimeout(5000) {
+            assertEquals("Recovered role", jobsStore.state.first().preferences.roles)
+            jobsStore.preferences(backup.preferences.copy(skills = "Restored skill"))
+            assertEquals("Restored skill", jobsStore.current().preferences.skills)
+            assertNull(feed.current().jobsBackup)
+        }
     }
 
     private fun repository(): Pair<FeedRepository, Job> {

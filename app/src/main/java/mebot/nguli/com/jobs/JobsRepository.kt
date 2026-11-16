@@ -6,6 +6,8 @@ import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.Serializer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
@@ -20,24 +22,43 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 
 /** Independent on-device store; no CV, location or search terms are sent to the public source. */
-class JobsRepository(context: Context, private val http: FeedHttp = SecureFeedHttp(maxBytes = 8 * 1024 * 1024)) {
+class JobsRepository(context: Context, private val http: FeedHttp = SecureFeedHttp(maxBytes = 8 * 1024 * 1024),
+    private val consistencyRepository: (() -> mebot.nguli.com.feed.FeedRepository)? = null,
+    private val isOnline: () -> Boolean = {
+        val connectivity = context.getSystemService(android.net.ConnectivityManager::class.java)
+        connectivity.getNetworkCapabilities(connectivity.activeNetwork)?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+    }) {
     private val mutex = Mutex()
+    private val mutationMutex = Mutex()
     private val epoch = java.util.concurrent.atomic.AtomicLong()
     private val store = DataStoreFactory.create(serializer = JobsSerializer,
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
         produceFile = { context.applicationContext.filesDir.resolve("mebot/jobs.json") })
-    val state = store.data
-    suspend fun current() = state.first()
-    suspend fun erase(): JobsState {
-        epoch.incrementAndGet()
-        return store.updateData { JobsState() }
+    private suspend fun <T> consistent(action: suspend () -> T): T {
+        val coordinator = consistencyRepository?.invoke()
+        return if (coordinator != null) coordinator.withJobsConsistency(action) else action()
     }
-    suspend fun update(transform: (JobsState) -> JobsState) = store.updateData(transform)
+    // Re-read under the shared journal gate: an earlier queued emission must not expose
+    // a Jobs snapshot from before an interrupted cross-store restore.
+    val state = store.data.map { consistent { store.data.first() } }.distinctUntilChanged()
+    suspend fun current() = consistent { store.data.first() }
+    suspend fun erase(): JobsState = consistent { mutationMutex.withLock {
+        epoch.incrementAndGet()
+        store.updateData { JobsState() }
+    } }
+    suspend fun update(transform: (JobsState) -> JobsState) = consistent { mutationMutex.withLock { store.updateData(transform) } }
+    /** Called only while FeedRepository owns its consistency gate. Never acquire it again. */
+    suspend fun restoreFromJournal(value: JobsState): JobsState = mutationMutex.withLock {
+        epoch.incrementAndGet()
+        store.updateData { JobsBackup.restore(value) }
+    }
     suspend fun preferences(value: JobPreferences) = update { it.copy(preferences = value) }
-    suspend fun save(id: String) = update { s ->
+    suspend fun save(id: String) = setSaved(id, current().applications.none { it.jobId == id })
+    suspend fun setSaved(id: String, desired: Boolean) = update { s ->
         val existing = s.applications.find { it.jobId == id }
-        if (existing != null && existing.status == "saved" && existing.notes.isBlank() && existing.draft.isBlank()) s.copy(applications = s.applications.filterNot { it.jobId == id })
-        else if (existing != null) s
+        if (!desired && existing != null && existing.status == "saved" && existing.notes.isBlank() && existing.draft.isBlank())
+            s.copy(applications = s.applications.filterNot { it.jobId == id })
+        else if (!desired || existing != null) s
         else s.copy(applications = s.applications + JobApplication(id, snapshot = s.jobs.find { it.id == id }, updatedAt = System.currentTimeMillis()))
     }
     suspend fun application(value: JobApplication) = update { s ->
@@ -51,6 +72,8 @@ class JobsRepository(context: Context, private val http: FeedHttp = SecureFeedHt
         val token = epoch.get()
         val before = current()
         if (before.lastAttemptAt > 0 && now - before.lastAttemptAt < 6 * 60 * 60 * 1000L) return@withLock false
+        // A disconnected device has not contacted a provider and must not consume its refresh window.
+        if (!isOnline()) throw mebot.nguli.com.feed.FeedFailure("offline")
         update { it.copy(lastAttemptAt = now) }
         val failed = mutableListOf<String>()
         val fetched = mutableListOf<JobPosting>()
@@ -121,7 +144,10 @@ internal fun parseJobicyJobs(raw: String, now: Long): Pair<List<JobPosting>, Str
             url = url, source = "Jobicy", fetchedAt = now,
             postedAt = runCatching { java.time.OffsetDateTime.parse(text("pubDate")).toInstant().toEpochMilli() }.getOrDefault(0),
             salary = listOf(text("salaryMin"), text("salaryMax"), text("salaryCurrency"), text("salaryPeriod")).filter { it.isNotBlank() }.joinToString(" "),
-            tags = list("jobIndustry"))
+            tags = list("jobIndustry"),
+            salaryMin = text("salaryMin").toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 },
+            salaryMax = text("salaryMax").toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 },
+            salaryCurrency = text("salaryCurrency"), salaryPeriod = text("salaryPeriod"))
     }.getOrNull() }.distinctBy { it.id }
     require(entries.isEmpty() || jobs.isNotEmpty())
     val next = if (root["hasMore"]?.jsonPrimitive?.booleanOrNull == true)

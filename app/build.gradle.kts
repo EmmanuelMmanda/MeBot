@@ -66,6 +66,10 @@ kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarg
 
 dependencies {
     implementation(project(":core"))
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0") {
+        // Local unencrypted generation only; no signing/encryption or private-document import.
+        exclude(group = "org.bouncycastle")
+    }
     implementation("androidx.biometric:biometric:1.1.0")
     // MainActivity is a FragmentActivity for BiometricPrompt. Biometric 1.1.0 otherwise
     // brings Fragment 1.2.5, whose 16-bit request-code check crashes modern ActivityResult launches.

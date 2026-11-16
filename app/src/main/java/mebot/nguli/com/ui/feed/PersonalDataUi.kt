@@ -66,6 +66,7 @@ internal fun FeedImportReview(ui: FeedUiState, onConfirm: () -> Unit, onCancel: 
                     if (!contextImport) {
                         ImportCount(stringResource(R.string.imports_saved), preview.saved)
                         ImportCount(stringResource(R.string.imports_conversations), preview.conversations)
+                        preview.jobs?.let { ImportCount(stringResource(R.string.jobs_import_count), it) }
                     }
                 }
                 HorizontalDivider()
@@ -73,6 +74,8 @@ internal fun FeedImportReview(ui: FeedUiState, onConfirm: () -> Unit, onCancel: 
                     style = MaterialTheme.typography.bodyMedium)
                 if (contextImport) Text(stringResource(if (preview.modules > 0) R.string.imports_modules_replace else R.string.imports_modules_keep),
                     style = MaterialTheme.typography.bodyMedium)
+                if (!contextImport) Text(stringResource(if (preview.jobs != null) R.string.jobs_import_replace else R.string.jobs_import_keep),
+                    style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("import-jobs-impact"))
                 if (!contextImport) Text(stringResource(R.string.imports_local_tools_keep), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 ui.error?.let { FeedStatus(it) }

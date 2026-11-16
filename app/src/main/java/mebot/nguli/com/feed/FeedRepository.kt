@@ -8,23 +8,67 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import mebot.nguli.com.core.jobs.JobsBackup
+import mebot.nguli.com.core.jobs.JobsState
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.ByteArrayOutputStream
 
-class FeedRepository(context: Context, scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())) {
+class FeedRepository(
+    context: Context,
+    scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+    private val restoreJobs: suspend (JobsState) -> Unit = {
+        throw IllegalStateException("Jobs restore coordinator is not configured")
+    },
+) {
+    // Shared lock order is Feed consistency -> Jobs mutation. Recovery never calls a gated Jobs API.
+    private val consistency = Mutex()
     private val store = DataStoreFactory.create(serializer = FeedSerializer, scope = scope,
         produceFile = { context.applicationContext.filesDir.resolve("mebot/feed.json") })
-    val state = store.data
-    suspend fun current(): FeedState = state.first()
-    suspend fun update(transform: (FeedState) -> FeedState): FeedState = store.updateData { current ->
-        val next = transform(current)
-        // A repeated selection or an already-recorded view should not revalidate and rewrite the store.
-        if (next == current) current else FeedLogic.validate(next)
+    val state = store.data.map { withJobsConsistency { store.data.first() } }.distinctUntilChanged()
+    suspend fun current(): FeedState = withJobsConsistency { store.data.first() }
+
+    /** Jobs reads/mutations use this gate too, so neither store exposes a half-restored backup. */
+    suspend fun <T> withJobsConsistency(action: suspend () -> T): T = consistency.withLock {
+        recoverLocked()
+        action()
     }
-    suspend fun erase(): FeedState = store.updateData { FeedState(personalSeedApplied = true) }
+
+    private suspend fun recoverLocked() {
+        val pending = store.data.first().jobsBackup ?: return
+        val restored = JobsBackup.restore(pending)
+        // Idempotent roll-forward: if the process dies after this write, replaying it is safe.
+        restoreJobs(restored)
+        store.updateData { current -> current.copy(jobsBackup = null) }
+    }
+
+    suspend fun update(transform: (FeedState) -> FeedState): FeedState = withJobsConsistency {
+        store.updateData { current ->
+            val next = transform(current)
+            require(next.jobsBackup == null) { "Use importBackup for journaled restoration" }
+            if (next == current) current else FeedLogic.validate(next)
+        }
+    }
+
+    /** The durable marker is the commit point. Failures after it remain pending for recovery. */
+    suspend fun importBackup(transform: (FeedState) -> FeedState): FeedState = consistency.withLock {
+        recoverLocked()
+        store.updateData { current ->
+            FeedLogic.validate(transform(current)).also { next -> next.jobsBackup?.let(JobsBackup::validate) }
+        }
+        recoverLocked()
+        store.data.first()
+    }
+
+    suspend fun erase(): FeedState = withJobsConsistency {
+        store.updateData { FeedState(personalSeedApplied = true) }
+    }
 
     suspend fun applyOptionalSeed(context: Context) {
         if (current().personalSeedApplied) {
@@ -54,7 +98,9 @@ private object FeedSerializer : Serializer<FeedState> {
     override val defaultValue = FeedState()
     override suspend fun readFrom(input: InputStream): FeedState {
         val bytes = input.readBounded(8 * 1024 * 1024)
-        return FeedLogic.validate(FeedJson.decodeFromString(bytes.toString(Charsets.UTF_8)))
+        return FeedLogic.validate(FeedJson.decodeFromString(bytes.toString(Charsets.UTF_8))).also {
+            it.jobsBackup?.let(JobsBackup::validate)
+        }
     }
     override suspend fun writeTo(t: FeedState, output: OutputStream) {
         // Updates and reads are validated at the repository boundary. Avoid walking all cached

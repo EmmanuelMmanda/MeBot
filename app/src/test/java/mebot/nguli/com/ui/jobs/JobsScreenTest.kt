@@ -3,6 +3,7 @@ package mebot.nguli.com.ui.jobs
 import androidx.compose.runtime.*
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import mebot.nguli.com.core.jobs.*
 import mebot.nguli.com.ui.MeBotTheme
 import org.junit.Assert.*
@@ -24,13 +25,30 @@ class JobsScreenTest {
     private var state by mutableStateOf(JobsState(preferences = JobPreferences(onboarded = true), jobs = listOf(job)))
     private val opened = mutableListOf<String>()
     private val asked = mutableListOf<String>()
-    private fun render(error: String? = null, draft: String = "") {
+    private var pendingApplication by mutableStateOf<JobApplication?>(null)
+    private var pendingPreferences by mutableStateOf<JobPreferences?>(null)
+    private var screenError by mutableStateOf<String?>(null)
+    private fun render(error: String? = null, draft: String = "", acknowledge: Boolean = true) {
+        screenError = error
         compose.setContent {
+            LaunchedEffect(pendingApplication, pendingPreferences) {
+                if (acknowledge) {
+                    withFrameNanos { }
+                    pendingApplication?.let { application ->
+                        state = state.copy(applications = state.applications.filterNot { it.jobId == application.jobId } + application)
+                        pendingApplication = null
+                    }
+                    pendingPreferences?.let { preferences ->
+                        state = state.copy(preferences = preferences)
+                        pendingPreferences = null
+                    }
+                }
+            }
             MeBotTheme {
-                JobsScreen(state, false, error, {}, { state = state.copy(preferences = it) }, { id ->
+                JobsScreen(state, false, screenError, {}, { pendingPreferences = it }, { id ->
                     state = state.copy(applications = state.applications + JobApplication(id, snapshot = job))
                 }, { application ->
-                    state = state.copy(applications = state.applications.filterNot { it.jobId == application.jobId } + application)
+                    pendingApplication = application
                 }, { _, prompt -> asked += prompt }, { opened += it }, { draft })
             }
         }
@@ -74,6 +92,7 @@ class JobsScreenTest {
         render(); prepare()
         compose.onNodeWithTag("jobs-notes").performScrollTo().performTextInput("Check work eligibility")
         compose.onNodeWithTag("jobs-save-progress").performScrollTo().performClick()
+        compose.waitUntil(5_000) { state.applications.isNotEmpty() }
         assertEquals("preparing", state.applications.single().status)
         assertEquals("Check work eligibility", state.applications.single().notes)
         assertTrue(asked.isEmpty()); assertTrue(opened.isEmpty())
@@ -99,4 +118,62 @@ class JobsScreenTest {
         compose.waitForIdle()
         compose.onNodeWithTag("jobs-screen").assertIsDisplayed()
     }
+    @Test fun applicationSaveWaitsForPersistenceAcknowledgement() {
+        render(acknowledge = false); prepare()
+        compose.onNodeWithTag("jobs-notes").performScrollTo().performTextInput("Draft awaiting disk write")
+        compose.onNodeWithTag("jobs-save-progress").performScrollTo().performClick()
+        compose.onNodeWithText("Saving your changes…").assertIsDisplayed()
+        assertTrue(state.applications.isEmpty())
+        compose.runOnIdle {
+            state = state.copy(applications = listOf(requireNotNull(pendingApplication)))
+            pendingApplication = null
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag("jobs-prepare").assertExists()
+    }
+
+    @Test fun storageFailureKeepsWorkspaceEditsVisible() {
+        render(acknowledge = false); prepare()
+        compose.onNodeWithTag("jobs-notes").performScrollTo().performTextInput("Do not lose this draft")
+        compose.onNodeWithTag("jobs-save-progress").performScrollTo().performClick()
+        compose.runOnIdle { screenError = "storage_error" }
+        compose.waitForIdle()
+        compose.onNodeWithTag("jobs-storage-error").assertIsDisplayed()
+        compose.onNodeWithTag("jobs-notes").performScrollTo().assertTextContains("Do not lose this draft")
+        assertTrue(state.applications.isEmpty())
+    }
+
+    @Test fun salaryFilterRequiresExplicitCurrencyAndPeriod() {
+        render()
+        compose.onNodeWithTag("jobs-preferences").performClick()
+        compose.onNodeWithTag("jobs-salary-minimum").performScrollTo().performTextInput("2000")
+        compose.onNodeWithTag("jobs-preferences-save").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithTag("jobs-salary-currency").performScrollTo().performTextInput("USD")
+        compose.onNodeWithText("Choose a pay period").performScrollTo().performClick()
+        compose.onNodeWithText("Per month").performClick()
+        compose.onNodeWithTag("jobs-preferences-save").performScrollTo().assertIsEnabled().performClick()
+        compose.waitUntil(5_000) { state.preferences.salaryCurrency == "USD" && state.preferences.salaryPeriod == "month" }
+        assertEquals("2000", state.preferences.salaryMinimum)
+    }
+
+    @Test fun restoredUnconfirmedSaveRetainsDraftWithoutResubmitting() {
+        val restoration = StateRestorationTester(compose)
+        var writes = 0
+        restoration.setContent {
+            MeBotTheme {
+                JobsScreen(state, false, null, {}, {}, {}, { writes++ }, { _, _ -> }, {}, saving = false)
+            }
+        }
+        prepare()
+        compose.onNodeWithTag("jobs-notes").performScrollTo().performTextInput("Retain this interrupted draft")
+        compose.onNodeWithTag("jobs-save-progress").performScrollTo().performClick()
+        compose.onNodeWithText("Saving your changes…").assertIsDisplayed()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.waitForIdle()
+        compose.onNodeWithTag("jobs-save-unconfirmed").assertIsDisplayed()
+        compose.onNodeWithTag("jobs-notes").performScrollTo().assertTextContains("Retain this interrupted draft")
+        assertEquals(1, writes)
+        assertTrue(state.applications.isEmpty())
+    }
+
 }

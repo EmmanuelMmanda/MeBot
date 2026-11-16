@@ -123,7 +123,7 @@ data class FeedUiState(
     val providerAuthBusy: Boolean = false,
 )
 
-data class FeedImportPreview(val kind: String, val name: String, val entries: Int, val modules: Int, val saved: Int = 0, val conversations: Int = 0)
+data class FeedImportPreview(val kind: String, val name: String, val entries: Int, val modules: Int, val saved: Int = 0, val conversations: Int = 0, val jobs: Int? = null)
 
 class FeedViewModel(application: Application, private val savedStateHandle: SavedStateHandle) : AndroidViewModel(application) {
     /** Keeps existing non-Activity callers (including test factories) on the same Application. */
@@ -2395,7 +2395,9 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         val json = Json { ignoreUnknownKeys = false }
         val root = runCatching { json.parseToJsonElement(text).jsonObject }.getOrElse { throw FeedFailure("import_format") }
         if (root["schemaVersion"]?.jsonPrimitive?.content != "1" || "modules" !in root || "connection" !in root) throw FeedFailure("import_format")
-        return runCatching { FeedLogic.validate(json.decodeFromString<FeedState>(text)) }.getOrElse { throw FeedFailure("import_invalid") }
+        return runCatching { FeedLogic.validate(json.decodeFromString<FeedState>(text)).also {
+            it.jobsBackup?.let(mebot.nguli.com.core.jobs.JobsBackup::validate)
+        } }.getOrElse { throw FeedFailure("import_invalid") }
     }
     private suspend fun applyContext(imported: PersonalContextImport) {
         cancelRefresh(); cancelAiWork(); lastAutomaticAttemptMillis = 0L
@@ -2414,17 +2416,17 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         conversationSelectionGeneration++
         clearSavedConversationSelection()
         cancelConnection(); cancelRefresh(); cancelAiWork(discardSuggestionRollback = true)
-        // Commit the data first. A failed store write must not erase a working account.
-        // A blank plan account prevents old API credentials being used if cleanup fails.
-        repository.update { local ->
+        val restoredJobs = candidate.jobsBackup?.let(mebot.nguli.com.core.jobs.JobsBackup::restore)
+        repository.importBackup { local ->
             val setup = Setup099Logic.contextConfirmed(local.setup099, candidate.context)
             candidate.copy(notifications = false, personalSeedApplied = true, modules = ModuleCatalog.mergeCatalog(candidate.modules),
                 items = candidate.items.map { AiSuggestedInteractions095.clear(it.copy(aiRelevance = null)) },
-                suggestionSets097 = emptyList(), personalDailySelection098 = null,
-                // Wizard identity and notice snoozes belong to this installation, not an imported backup.
+                suggestionSets097 = emptyList(), personalDailySelection098 = null, jobsBackup = restoredJobs,
                 setup099 = setup, dismissedNotices = local.dismissedNotices,
                 connection = AiConnection(mode = "chatgpt", model = candidate.connection.model), aiPauseCode = "")
         }
+        // Import returns only after both stores are consistent and the durable marker is cleared.
+        // On interruption, repository access rolls the pending import forward before exposing data.
         apiPresence.definitive(false)
         FeedWorker.cancel(app)
         withContext(Dispatchers.IO) { engine.clearAllCredentials() }
@@ -2466,7 +2468,7 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                     val value = withContext(Dispatchers.Default) { decodeBackup(text) }
                     if (generation != importGeneration) return@launch
                     pendingBackupImport = value
-                    FeedImportPreview(kind, name, value.context.size, value.modules.size, value.savedIds.size, value.conversations.size)
+                    FeedImportPreview(kind, name, value.context.size, value.modules.size, value.savedIds.size, value.conversations.size, value.jobsBackup?.applications?.size)
                 }
                 if (generation == importGeneration) _ui.update { it.copy(importPreview = preview) }
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -2520,7 +2522,9 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
     }
     fun exportFeedBackup(uri: Uri) = work {
         val state = repository.current()
-        write(uri, Json { prettyPrint = true; encodeDefaults = true }.encodeToString(state.copy(
+        val jobsBackup = mebot.nguli.com.core.jobs.JobsBackup.export(app.jobsRepository.current())
+        val text = Json { prettyPrint = true; encodeDefaults = true }.encodeToString(state.copy(
+            jobsBackup = jobsBackup,
             items = state.items.map(AiSuggestedInteractions095::clear),
             suggestionSets097 = emptyList(), personalDailySelection098 = null,
             connection = state.connection.copy(accountId = ""), aiPauseCode = "",
@@ -2528,7 +2532,9 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             // resurrect the first-run wizard on another installation.
             setup099 = if (state.onboardingComplete) Setup099State(stage = Setup099Stage.COMPLETE)
                 else state.setup099.copy(firstChatGptAccountKey = "", pendingImportAccountKey = "", importRouteAcknowledgedAccountKey = ""),
-        )))
+        ))
+        if (text.toByteArray(Charsets.UTF_8).size > 8 * 1024 * 1024) throw FeedFailure("file_too_large")
+        write(uri, text)
         _ui.update { it.copy(notice = "saved", error = null) }
     }
     fun importFeedBackup(uri: Uri) {
@@ -2553,6 +2559,7 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
             apiPresence.definitive(false)
             repository.erase(); FeedWorker.cancel(app)
             app.jobsRepository.erase(); mebot.nguli.com.jobs.JobsAlertScheduler.cancel(app)
+            mebot.nguli.com.jobs.JobsRefreshScheduler.cancel(app)
             clearSavedConversationSelection()
             _ui.update { it.copy(connected = false, activeConversationId = null, conversationOpening = false,
                 conversationReady = true, error = null, notice = null) }

@@ -9,6 +9,7 @@ data class JobPosting(
     val location: String = "", val remote: Boolean = false, val employmentType: String = "",
     val description: String = "", val url: String = "", val source: String = "",
     val postedAt: Long = 0, val fetchedAt: Long = 0, val salary: String = "", val tags: List<String> = emptyList(),
+    val salaryMin: Double? = null, val salaryMax: Double? = null, val salaryCurrency: String = "", val salaryPeriod: String = "",
 )
 
 @Serializable
@@ -17,6 +18,7 @@ data class JobPreferences(
     val remoteOnly: Boolean = false, val employmentType: String = "",
     val salaryMinimum: String = "", val onboarded: Boolean = false,
     val alertsEnabled: Boolean = false, val alertFrequencyHours: Int = 24,
+    val salaryCurrency: String = "", val salaryPeriod: String = "",
 )
 
 @Serializable
@@ -40,12 +42,44 @@ object JobsMatcher {
         Regex("(?<![\\p{L}\\p{N}])" + Regex.escape(needle) + "(?![\\p{L}\\p{N}])", RegexOption.IGNORE_CASE).containsMatchIn(haystack)
     private fun content(job: JobPosting) = listOf(job.title, job.company, job.location, job.description, job.tags.joinToString(" ")).joinToString(" ")
     private fun type(value: String) = normalized(value).replace(Regex("[ _-]+"), "")
+    private val aliasesByCountry: Map<String, Set<String>> by lazy {
+        val common = mapOf("US" to setOf("us", "usa", "united states", "united states of america"),
+            "GB" to setOf("uk", "gb", "united kingdom", "great britain"),
+            "TZ" to setOf("tz", "tanzania", "tanzania, united republic of"))
+        buildMap {
+            for (code in Locale.getISOCountries()) {
+                val locale = Locale.Builder().setRegion(code).build()
+                val aliases = setOf(code.lowercase(Locale.ROOT), locale.getDisplayCountry(Locale.ENGLISH).lowercase(Locale.ROOT)) + common[code].orEmpty()
+                aliases.forEach { put(it, aliases) }
+            }
+        }
+    }
+    private fun countryAliases(value: String): Set<String> = normalized(value).let {
+        if (it.isBlank()) emptySet() else aliasesByCountry[it] ?: setOf(it)
+    }
     private fun locationMatches(job: JobPosting, preferences: JobPreferences): Boolean =
-        preferences.country.isNotBlank() && contains(job.location, preferences.country.trim())
+        countryAliases(preferences.country).any { contains(job.location, it) }
     private fun worldwide(job: JobPosting): Boolean = normalized(job.location) in setOf("worldwide", "anywhere", "global", "remote - worldwide", "remote (worldwide)")
     private fun unspecifiedLocation(job: JobPosting) = normalized(job.location) in setOf("", "remote", "not specified", "unknown")
 
+    private fun comparableSalary(job: JobPosting, preferences: JobPreferences, upperBoundOnly: Boolean = false): Double? {
+        if (preferences.salaryCurrency.isBlank() || preferences.salaryPeriod.isBlank()) return null
+        if (!job.salaryCurrency.equals(preferences.salaryCurrency.trim(), true)) return null
+        fun annualFactor(period: String): Double? = when (normalized(period)) {
+            "year", "yearly", "annual", "annually" -> 1.0
+            "month", "monthly" -> 12.0
+            else -> null
+        }
+        val amount = (if (upperBoundOnly) job.salaryMax else job.salaryMax ?: job.salaryMin)?.takeIf { it.isFinite() && it >= 0 } ?: return null
+        if (job.salaryPeriod.equals(preferences.salaryPeriod.trim(), true)) return amount
+        val sourceFactor = annualFactor(job.salaryPeriod) ?: return null
+        val targetFactor = annualFactor(preferences.salaryPeriod) ?: return null
+        return amount * sourceFactor / targetFactor
+    }
     fun matches(job: JobPosting, preferences: JobPreferences, query: String = ""): Boolean {
+        val minimum = preferences.salaryMinimum.trim().toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 }
+        val salary = comparableSalary(job, preferences, upperBoundOnly = true)
+        if (minimum != null && salary != null && salary < minimum) return false
         if (preferences.remoteOnly && !job.remote) return false
         if (preferences.employmentType.isNotBlank() && job.employmentType.isNotBlank() &&
             type(preferences.employmentType) != type(job.employmentType)) return false
@@ -70,7 +104,11 @@ object JobsMatcher {
             type(preferences.employmentType) == type(job.employmentType)) add("employment_match")
         if (locationMatches(job, preferences)) add("location_match")
         add("eligibility_unknown")
-        // Salary is source text without normalized currency or pay period. Never infer a comparable amount.
-        if (preferences.salaryMinimum.isNotBlank()) add("salary_unverified")
+        // Only explicit structured salary fields are comparable; raw salary prose is never inferred.
+        if (preferences.salaryMinimum.isNotBlank()) {
+            val minimum = preferences.salaryMinimum.trim().toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 }
+            val salary = comparableSalary(job, preferences)
+            if (minimum != null && salary != null && salary >= minimum) add("salary_match") else add("salary_unverified")
+        }
     }
 }

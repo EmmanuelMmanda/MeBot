@@ -32,7 +32,7 @@ class JobsRepositoryTest {
     @Test fun requestsAreThrottledAndApplicationSnapshotSurvivesRefresh() = runBlocking {
         var calls = 0
         val http = object : FeedHttp { override suspend fun request(url: String, method: String, body: String?, bearer: String?): String { calls++; return response } }
-        val repository = JobsRepository(ApplicationProvider.getApplicationContext(), http)
+        val repository = JobsRepository(ApplicationProvider.getApplicationContext(), http, isOnline = { true })
         repository.erase()
         assertTrue(repository.refresh(100000))
         assertFalse(repository.refresh(100001))
@@ -40,5 +40,40 @@ class JobsRepositoryTest {
         repository.save("remotive:1")
         repository.update { it.copy(jobs = emptyList()) }
         assertEquals("Engineer", repository.current().applications.single().snapshot?.title)
+    }
+    @Test fun offlineAttemptDoesNotConsumeProviderRefreshWindow() = runBlocking {
+        var calls = 0
+        var online = false
+        val http = object : FeedHttp { override suspend fun request(url: String, method: String, body: String?, bearer: String?): String { calls++; return response } }
+        val repository = JobsRepository(ApplicationProvider.getApplicationContext(), http, isOnline = { online })
+        repository.erase()
+        try { repository.refresh(100000); fail("Offline refresh must fail") } catch (_: mebot.nguli.com.feed.FeedFailure) { }
+        assertEquals(0, calls)
+        assertEquals(0L, repository.current().lastAttemptAt)
+        online = true
+        assertTrue(repository.refresh(100001))
+        assertEquals(2, calls)
+    }
+    @Test fun jobicyKeepsExplicitSalaryAndPagination() {
+        val raw = """{"success":true,"jobs":[{"id":9,"jobTitle":"Engineer","url":"https://jobicy.com/jobs/9-engineer","salaryMin":1000,"salaryMax":2000,"salaryCurrency":"USD","salaryPeriod":"month"}],"hasMore":true,"nextCursor":"next"}"""
+        val (jobs, cursor) = parseJobicyJobs(raw, 123)
+        assertEquals("next", cursor)
+        assertEquals(1000.0, jobs.single().salaryMin!!, 0.0)
+        assertEquals(2000.0, jobs.single().salaryMax!!, 0.0)
+        assertEquals("USD", jobs.single().salaryCurrency)
+        assertEquals("month", jobs.single().salaryPeriod)
+    }
+    @Test fun explicitBookmarkWritesAreIdempotentAndPreserveApplicationWork() = runBlocking {
+        val repository = JobsRepository(ApplicationProvider.getApplicationContext(), isOnline = { false })
+        repository.erase()
+        val job = mebot.nguli.com.core.jobs.JobPosting(id = "job:1", title = "Example role")
+        repository.update { it.copy(jobs = listOf(job)) }
+        repository.setSaved(job.id, true)
+        repository.setSaved(job.id, true)
+        assertEquals(1, repository.current().applications.size)
+        repository.application(repository.current().applications.single().copy(notes = "Keep my work", draft = "Reviewed draft"))
+        repository.setSaved(job.id, false)
+        assertEquals("Keep my work", repository.current().applications.single().notes)
+        assertEquals("Reviewed draft", repository.current().applications.single().draft)
     }
 }

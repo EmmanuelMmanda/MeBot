@@ -262,8 +262,14 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
     val callVm: RealtimeCall099ViewModel = viewModel()
     val callUi by callVm.ui.collectAsStateWithLifecycle()
     var page by rememberSaveable { mutableStateOf("feed") }
+    var jobsSavedRequest by rememberSaveable { mutableIntStateOf(0) }
+    var jobsVisitRequested by remember { mutableStateOf(false) }
     LaunchedEffect(page, jobsUi.loading) {
-        if (page == "jobs" && !jobsUi.loading && jobsUi.state.lastAttemptAt == 0L && jobsUi.error == null) jobsVm.refresh()
+        if (page != "jobs") jobsVisitRequested = false
+        else if (!jobsUi.loading && !jobsVisitRequested) {
+            jobsVisitRequested = true
+            jobsVm.refresh()
+        }
     }
     LaunchedEffect(jobsNavigationRequest) { if (jobsNavigationRequest > 0) page = "jobs" }
     var showQuickGuide by rememberSaveable { mutableStateOf(false) }
@@ -749,7 +755,10 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                     errorCode = feedUi.error, onDismissError = feedVm::clearMessage)
                 else -> screenStates.SaveableStateProvider(if (page == "daily") "daily:$visitDate" else page) {
                     when (page) {
-                        "jobs" -> JobsScreen(jobsUi.state, jobsUi.loading, jobsUi.error, jobsVm::refresh, jobsVm::preferences, jobsVm::save, jobsVm::application,
+                        "jobs" -> if (!jobsUi.ready) ScreenContainer {
+                            if (jobsUi.error != null) ScreenTitle(stringResource(R.string.data_error_title), stringResource(R.string.data_error_body))
+                            else CircularProgressIndicator()
+                        } else JobsScreen(jobsUi.state, jobsUi.loading, jobsUi.error, jobsVm::refresh, jobsVm::preferences, jobsVm::save, jobsVm::application,
                             onAsk = { job, request ->
                                 aiReturn = "jobs"
                                 feedVm.openJobsConversation(job, request)
@@ -758,7 +767,8 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
                             } }, lastAiDraft = { job ->
                                 feed.conversations.find { it.id == JobsAssistant.conversation(job).id }?.turns?.lastOrNull { it.role == "assistant" }?.text.orEmpty()
-                            })
+                            }, onExport = jobsVm::exportPdf, exportBusy = jobsUi.exportBusy, exportResult = jobsUi.exportResult,
+                            onClearExportResult = jobsVm::clearExportResult, initialTab = "saved", tabRequest = jobsSavedRequest, saving = jobsUi.saving, refreshPhase = jobsUi.refreshPhase, onCancelRefresh = jobsVm::cancelRefresh)
                         "feed" -> {
                             val now = ZonedDateTime.now()
                             val nextAlarm = if ("alarms" in state.settings.enabledModules) state.alarms.filter { it.enabled }.minByOrNull { nextAlarmOccurrence(it, now).toInstant() } else null
@@ -791,7 +801,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                         "module-edit" -> moduleDraft?.let { draft -> ModuleEditor(Json.decodeFromString(draft), feedUi, moduleIsNew,
                             { module -> feedVm.clearMessage(); feedVm.saveModule(module) }, feedVm::removeModule, { page = "modules" },
                             onSavePersonalized = { module, notes -> feedVm.clearMessage(); feedVm.saveModule(module, notes) }, onOpenItem = ::openItem) }
-                        "saved" -> SavedFeed(feed, ::openItem, feedVm::toggleSaved, { page = "feed" })
+                        "saved" -> SavedFeed(feed, ::openItem, feedVm::toggleSaved, { page = "feed" }, onJobs = { jobsSavedRequest++; page = "jobs" })
                         "you" -> YouScreen(feedUi,
                             { contextReturn = "you"; feedVm.clearMessage(); page = "context" }, ::openConnection,
                             { deliveryReturn = "you"; feedVm.clearMessage(); screenStates.removeState("delivery"); page = "delivery" }, { page = "settings" }, { page = "data" }, onSoftwareUpdates={page="software-updates"}, onAppLock={page="app-lock"}, onStarred={page="starred-settings"}, onInterests={openPersonalInterests()})
