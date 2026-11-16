@@ -190,6 +190,7 @@ def check_catalog():
             ('sourceSizeBytes', 'source_size_bytes'),
             ('verificationFilename', 'verification_file'),
             ('verificationSha256', 'verification_sha256'),
+            ('verificationSizeBytes', 'verification_size_bytes'),
             ('releaseNotesFilename', 'release_notes_file'),
             ('releaseNotesSha256', 'release_notes_sha256'),
             ('releaseNotesSizeBytes', 'release_notes_size_bytes'),
@@ -207,14 +208,25 @@ def check_catalog():
         if 'assets' in integrity:
             assets = integrity['assets']
             expected = []
-            for name, digest, size in [('filename','sha256','sizeBytes'),('sourceFilename','sourceSha256','sourceSizeBytes'),('verificationFilename','verificationSha256','verificationSizeBytes'),('releaseNotesFilename','releaseNotesSha256','releaseNotesSizeBytes'),('checksumFilename','checksumSha256','checksumSizeBytes'),('releaseMetadataFilename','releaseMetadataSha256','releaseMetadataSizeBytes')]:
+            required_artifacts = [('filename','sha256','sizeBytes'), ('checksumFilename','checksumSha256','checksumSizeBytes'), ('releaseMetadataFilename','releaseMetadataSha256','releaseMetadataSizeBytes')]
+            optional_artifacts = [('sourceFilename','sourceSha256','sourceSizeBytes'), ('verificationFilename','verificationSha256','verificationSizeBytes'), ('releaseNotesFilename','releaseNotesSha256','releaseNotesSizeBytes')]
+            artifact_fields = list(required_artifacts)
+            for fields in optional_artifacts:
+                present = [key in catalog for key in fields]
+                if any(present) and not all(present):
+                    error(path, f'partial optional artifact identity: {fields}')
+                elif all(present):
+                    artifact_fields.append(fields)
+            for name, digest, size in artifact_fields:
                 expected.append(catalog[name])
+                if not re.fullmatch(r'[0-9a-f]{64}', catalog.get(digest) or '') or not isinstance(catalog.get(size), int) or catalog[size] <= 0:
+                    error(path, f'invalid artifact hash or size: {catalog[name]}')
                 asset = next((a for a in assets if a.get('name') == catalog[name]), {})
                 url = f"https://github.com/EmmanuelMmanda/MeBot/releases/download/{catalog['tag']}/{catalog[name]}"
                 if asset.get('digest') != 'sha256:' + catalog[digest] or asset.get('size') != catalog[size] or asset.get('browser_download_url') != url:
                     error(path, f'published asset proof differs: {catalog[name]}')
             if sorted(a.get('name','') for a in assets) != sorted(expected):
-                error(path, 'published proof must enumerate exactly the six catalogued assets')
+                error(path, 'published proof must enumerate exactly the catalogued assets')
         if integrity.get('personal_profile_asset_present') is not False:
             error(path, 'current public integrity must exclude a personal profile')
         for entry in [catalog, *entries]:
@@ -242,7 +254,7 @@ def check_catalog():
                 error(path, f'latest {field} differs from public integrity')
         if catalog.get('filename') != f"mebot-{catalog.get('version')}.apk":
             error(path, 'latest public APK filename must be lowercase and version-matched')
-        for field in ('sha256', 'sourceSha256', 'verificationSha256', 'releaseNotesSha256', 'checksumSha256', 'releaseMetadataSha256'):
+        for field in ('sha256', 'checksumSha256', 'releaseMetadataSha256', *[key for key in ('sourceSha256', 'verificationSha256', 'releaseNotesSha256') if key in catalog]):
             if not re.fullmatch(r'[0-9a-f]{64}', catalog.get(field) or ''):
                 error(path, f'latest {field} must be a lowercase SHA-256 digest')
         for field in ('sourceCommit', 'sourceTree'):
