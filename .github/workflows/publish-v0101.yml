@@ -1,0 +1,95 @@
+name: Publish official MeBot 0.10.1
+on:
+  push:
+    branches: [release/publish-v0.10.1]
+    paths:
+      - '.github/workflows/publish-v0101.yml'
+      - 'release/0.10.1/**'
+      - 'scripts/verify-release-0101.py'
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: mebot-official-v0101
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'EmmanuelMmanda/MeBot' && github.ref == 'refs/heads/release/publish-v0.10.1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: EmmanuelMmanda/MeBot
+      SOURCE: d0b054ec8fad5b97b34664edd63fbaacf21b40aa
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Verify source and exact successful CI artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/mebot-release" "$RUNNER_TEMP/mebot-input"
+          echo "RELEASE_DIRECTORY=$RUNNER_TEMP/mebot-release" >> "$GITHUB_ENV"
+          gh api repos/$GH_REPO/actions/runs/43956622167 > "$RUNNER_TEMP/run.json"
+          gh api repos/$GH_REPO/actions/artifacts/14273057049 > "$RUNNER_TEMP/artifact.json"
+          python3 scripts/verify-release-0101.py provenance
+          git diff --exit-code "$SOURCE" HEAD -- app core service gradle gradlew gradlew.bat gradle.properties settings.gradle.kts build.gradle.kts scripts/assemble-signed-apk.py scripts/prepare-build.py
+          gh api repos/$GH_REPO/actions/artifacts/14273057049/zip > "$RUNNER_TEMP/mebot-input/ci.zip"
+          echo "cf658b67f2ccdfe9aa4510d9a968170ec7bf0b37755b8e42aa2982c405c996a0  $RUNNER_TEMP/mebot-input/ci.zip" | sha256sum -c -
+          python3 - <<'PY'
+          import os,zipfile
+          from pathlib import Path
+          p=Path(os.environ['RUNNER_TEMP'])/'mebot-input'
+          with zipfile.ZipFile(p/'ci.zip') as z:
+              assert z.namelist()==['app-release-unsigned.apk']
+              (p/'app-release-unsigned.apk').write_bytes(z.read('app-release-unsigned.apk'))
+          PY
+          python3 scripts/assemble-signed-apk.py release/0.10.1/public-signature-manifest.json "$RUNNER_TEMP/mebot-input/app-release-unsigned.apk" "$RUNNER_TEMP/mebot-release/mebot-0.10.1.apk"
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          packages: 'platform-tools build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: false
+      - name: Verify production certificate, package and 16KB alignment
+        run: |
+          set -euo pipefail
+          TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          "$TOOLS/apksigner" verify --verbose --print-certs "$RELEASE_DIRECTORY/mebot-0.10.1.apk" > "$RELEASE_DIRECTORY/signature-verification.txt"
+          "$TOOLS/zipalign" -c -P 16 -v 4 "$RELEASE_DIRECTORY/mebot-0.10.1.apk" > "$RELEASE_DIRECTORY/alignment-verification.txt"
+          "$TOOLS/aapt" dump badging "$RELEASE_DIRECTORY/mebot-0.10.1.apk" > "$RELEASE_DIRECTORY/apk-badging.txt"
+          python3 scripts/verify-release-0101.py package
+      - name: Create fixed-source tag and draft, verify assets, publish latest
+        run: |
+          set -euo pipefail
+          if gh release view v0.10.1 --json isDraft > "$RUNNER_TEMP/existing-release.json" 2>/dev/null; then
+            test "$(jq -r .isDraft "$RUNNER_TEMP/existing-release.json")" = true
+          fi
+          if git rev-parse --verify refs/tags/v0.10.1 >/dev/null 2>&1; then
+            test "$(git rev-parse v0.10.1^{commit})" = "$SOURCE"
+          else
+            git tag v0.10.1 "$SOURCE"
+            git push origin refs/tags/v0.10.1
+          fi
+          if ! gh release view v0.10.1 >/dev/null 2>&1; then
+            gh release create v0.10.1 --verify-tag --draft --title 'MeBot 0.10.1' --notes-file release/0.10.1/RELEASE.md
+          fi
+          test "$(gh release view v0.10.1 --json isDraft --jq .isDraft)" = true
+          gh release upload v0.10.1 "$RELEASE_DIRECTORY/mebot-0.10.1.apk" "$RELEASE_DIRECTORY/release-metadata.json" "$RELEASE_DIRECTORY/SHA256SUMS.txt" --clobber
+          mkdir -p "$RUNNER_TEMP/release-check"
+          gh release download v0.10.1 --pattern 'mebot-0.10.1.apk' --pattern release-metadata.json --pattern SHA256SUMS.txt --dir "$RUNNER_TEMP/release-check"
+          gh api repos/$GH_REPO/releases/tags/v0.10.1 > "$RUNNER_TEMP/release-check/release.json"
+          python3 scripts/verify-release-0101.py assets
+          gh release edit v0.10.1 --draft=false --latest
+          gh release view v0.10.1 --json url,tagName,isDraft,isPrerelease > "$RELEASE_DIRECTORY/publication.json"
+      - name: Export verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mebot-official-0.10.1-delivery
+          path: ${{ runner.temp }}/mebot-release/
+          retention-days: 14
+          if-no-files-found: warn
