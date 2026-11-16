@@ -42,7 +42,7 @@ fun FeedOnboarding(state: FeedState, language: String, onLanguage: (String) -> U
     MeBotOnboarding(state, language, onLanguage, onStart, onConnect, onPreferences)
 
 @Composable
-fun SavedFeed(state: FeedState, onItem: (String) -> Unit, onSave: (String) -> Unit, onFeed: () -> Unit) {
+fun SavedFeed(state: FeedState, onItem: (String) -> Unit, onSave: (String) -> Unit, onFeed: () -> Unit, onJobs: (() -> Unit)? = null) {
     var query by rememberSaveable { mutableStateOf("") }
     var tab by rememberSaveable { mutableStateOf("saved") }
     var module by rememberSaveable { mutableStateOf("all") }
@@ -77,6 +77,11 @@ fun SavedFeed(state: FeedState, onItem: (String) -> Unit, onSave: (String) -> Un
                     Text(stringResource(R.string.library_title), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
                     IconButton(onClick = { editCollectionId = null; oldest = !oldest }, modifier = Modifier.size(48.dp).testTag("library-sort")) {
                         Icon(Icons.Outlined.Sort, stringResource(if (oldest) R.string.library_oldest else R.string.library_recent))
+                    }
+                }
+                onJobs?.let { openJobs ->
+                    OutlinedButton(onClick = openJobs, modifier = Modifier.fillMaxWidth().testTag("library-jobs")) {
+                        Icon(Icons.Outlined.WorkOutline, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.jobs_saved))
                     }
                 }
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

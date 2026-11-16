@@ -6,16 +6,21 @@ import android.os.Looper
 import android.view.PixelCopy
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.Density
 import mebot.nguli.com.R
+import mebot.nguli.com.MeBotNavigation
 import mebot.nguli.com.core.*
 import mebot.nguli.com.feed.FeedUiState
 import mebot.nguli.com.ui.feed.ModuleEditor
@@ -98,6 +103,74 @@ class ModuleCatalogUiTest {
         assertEquals(saves.first(), saves.last())
     }
 
+    @Test fun everydayToolsOpenThroughRealPointerAfterScrollingFullCatalog() {
+        val opened = mutableListOf<String>()
+        compose.setContent {
+            MeBotTheme {
+                Scaffold(bottomBar = { MeBotNavigation("modules") {} }) { padding ->
+                    Surface(Modifier.fillMaxSize().padding(padding)) {
+                        ModulesScreen(FeedState(onboardingComplete = true), AppState(),
+                            onEdit = {}, onToggle = { _, _ -> },
+                            onUtility = { opened += it }, onUtilityToggle = { _, _ -> })
+                    }
+                }
+            }
+        }
+        listOf("module-focus" to "focus", "module-checkin" to "daily", "module-alarm" to "alarms").forEach { (tag, route) ->
+            val before = opened.size
+            compose.onNodeWithTag(tag).performScrollTo()
+            compose.waitForIdle()
+            val target = compose.onNodeWithTag(tag)
+            println("UTILITY_POINTER $tag clipped=${target.fetchSemanticsNode().boundsInRoot} " +
+                "unclipped=${target.getUnclippedBoundsInRoot()} root=${compose.onRoot().fetchSemanticsNode().boundsInRoot}")
+            target.assertIsDisplayed().assertIsEnabled().performClick()
+            compose.waitForIdle()
+            screenshot("utility-pointer-$route-after", advanceClock = false)
+            assertEquals("Pointer on $tag must invoke its destination exactly once.\n" + compose.onRoot().printToString(),
+                listOf(route), opened.drop(before))
+        }
+    }
+
+    @Test fun everydayToolsRemainReachableWithRealGestureScrolling() {
+        val opened = mutableListOf<String>()
+        compose.setContent {
+            MeBotTheme {
+                Scaffold(bottomBar = { MeBotNavigation("modules") {} }) { padding ->
+                    Surface(Modifier.fillMaxSize().padding(padding).testTag("utility-gesture-viewport")) {
+                        ModulesScreen(FeedState(onboardingComplete = true), AppState(),
+                            onEdit = {}, onToggle = { _, _ -> },
+                            onUtility = { opened += it }, onUtilityToggle = { _, _ -> })
+                    }
+                }
+            }
+        }
+        val viewport = compose.onNodeWithTag("utility-gesture-viewport")
+        listOf("module-alarm" to "alarms", "module-focus" to "focus", "module-checkin" to "daily").forEach { (tag, route) ->
+            val target = compose.onNodeWithTag(tag)
+            fun fullyVisible(): Boolean {
+                val bounds = target.getUnclippedBoundsInRoot()
+                val visible = viewport.getUnclippedBoundsInRoot()
+                return (bounds.bottom - bounds.top) > 0.dp && bounds.top >= visible.top + 8.dp &&
+                    bounds.bottom <= visible.bottom - 8.dp && bounds.left >= visible.left && bounds.right <= visible.right
+            }
+            var swipes = 0
+            while (!fullyVisible() && swipes < 24) {
+                viewport.performTouchInput { swipeUp(startY = height * .8f, endY = height * .35f, durationMillis = 500) }
+                compose.waitForIdle()
+                swipes++
+            }
+            assertTrue("$tag must become fully visible within 24 real swipes.\n" + compose.onRoot().printToString(), fullyVisible())
+            println("UTILITY_GESTURE $tag swipes=$swipes clipped=${target.fetchSemanticsNode().boundsInRoot} " +
+                "unclipped=${target.getUnclippedBoundsInRoot()} viewport=${viewport.getUnclippedBoundsInRoot()}")
+            val before = opened.size
+            target.assertIsDisplayed().assertIsEnabled().performClick()
+            compose.waitForIdle()
+            screenshot("utility-gesture-$route-after", advanceClock = false)
+            assertEquals("Real gesture and tap must open $route exactly once.\n" + compose.onRoot().printToString(),
+                listOf(route), opened.drop(before))
+        }
+    }
+
     @Test fun categoryBrowsingAndTogglesReflectCommittedConfiguration() {
         val state = mutableStateOf(FeedState(onboardingComplete = true))
         val toggles = mutableListOf<Pair<String, Boolean>>()
@@ -151,8 +224,8 @@ class ModuleCatalogUiTest {
 
     private fun text(id: Int) = compose.activity.getString(id)
 
-    private fun screenshot(name: String) {
-        compose.mainClock.advanceTimeBy(5_000)
+    private fun screenshot(name: String, advanceClock: Boolean = true) {
+        if (advanceClock) compose.mainClock.advanceTimeBy(5_000)
         compose.waitForIdle()
         val image = compose.runOnIdle {
             val window = compose.activity.window

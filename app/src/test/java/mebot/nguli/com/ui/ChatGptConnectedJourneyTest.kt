@@ -448,11 +448,21 @@ class ChatGptConnectedJourneyTest {
         assertEquals(listOf("chatgpt:subscription-fixture-token"), app.asked)
         assertEquals(listOf(text(R.string.edition_ask_today_prompt)), app.askedQuestions)
         assertTrue(app.askedContexts.single().isEmpty())
-        // The assistant turn triggers a separate automatic suggestion prefetch. Let it settle
-        // before measuring whether Activity recreation issues any additional model requests.
+        // The provider-return fixture is recorded before the suggestion cache is committed.
+        // suggestionWorking covers Send/Edit, not prefetch: await the durable READY batch
+        // before rotation, otherwise ON_STOP correctly cancels the still-running preparation.
+        val completedTarget = requireNotNull(SuggestionTargets097.conversation(state(), conversation.id, "en"))
         compose.waitUntil(15_000) {
             compose.waitForIdle()
-            app.suggestedQuestionSets.size > suggestionsBeforeAnswer && !feedViewModel.ui.value.suggestionWorking
+            val persisted = state()
+            val sheet = feedViewModel.suggestionSheet097(completedTarget, "en")
+            app.suggestedQuestionSets.size > suggestionsBeforeAnswer &&
+                feedViewModel.ui.value.suggestionGeneration == null &&
+                sheet.status == SuggestionSheetStatus097.READY && sheet.options.size == 5 &&
+                persisted.suggestionSets097.any {
+                    it.targetKind == "conversation" && it.targetId == conversation.id &&
+                        it.revision == completedTarget.revision
+                }
         }
         val requestsAfterAnswer = state().requestsToday
         val suggestionsAfterAnswer = app.suggestedQuestionSets.size

@@ -160,8 +160,16 @@ class MeBotUsabilityJourneyTest {
         compose.onNodeWithTag("module-search").performTextInput("weather")
         compose.onNodeWithTag("module-news").assertDoesNotExist()
         clickText(R.string.modules_filter_disabled)
+        compose.onNodeWithText(text(R.string.modules_filter_disabled)).assertIsSelected()
         compose.onNodeWithTag("module-toggle-weather").performScrollTo().performClick()
         waitForState { it.modules.single { module -> module.id == "weather" }.enabled }
+        // Disk acknowledgement precedes the IO→ViewModel→Compose state emission.
+        // Wait for the committed enabled module to leave the Disabled results too.
+        compose.waitUntil(15_000) {
+            compose.waitForIdle()
+            compose.onAllNodesWithTag("module-weather").fetchSemanticsNodes().isEmpty()
+        }
+        compose.onNodeWithText(text(R.string.modules_filter_disabled)).assertIsSelected()
         compose.onNodeWithTag("module-weather").assertDoesNotExist()
 
         tab("feed")

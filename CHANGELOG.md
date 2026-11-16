@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.0 — Jobs candidate, unreleased
+
+- Add a dedicated Jobs destination with non-AI matching, saved listings, application notes and reviewed PDF drafts.
+- Add attributed Remotive and Jobicy remote-job feeds with local preferences and preserved offline cache.
+- Reuse the streamed assistant with explicit job-only context and optional local-match alerts.
+- Include Jobs records in personal-data backups. Final verification and production release remain gated.
+
+See the [candidate experience notes](docs/RELEASE-0.10.0.md) for coverage limits.
+
 ## 0.9.5 — 2026-10-26
 
 - Open stories in MeBot first, keeping the publisher visible and using a compact story-grounded category label.

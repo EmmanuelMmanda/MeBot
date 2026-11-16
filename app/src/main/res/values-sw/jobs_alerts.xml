@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="jobs_alert_channel">Nafasi za kazi</string>
+    <string name="jobs_alert_title">Kuna nafasi mpya za kazi</string>
+    <string name="jobs_alert_body">Kuna nafasi mpya zinazoendana na chaguo zako. Fungua Kazi uangalie vigezo.</string>
+</resources>

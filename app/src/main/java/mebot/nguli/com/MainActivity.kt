@@ -57,6 +57,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import mebot.nguli.com.alarm.AlarmActivity
 import mebot.nguli.com.core.*
 import mebot.nguli.com.ui.*
+import mebot.nguli.com.ui.jobs.JobsScreen
+import mebot.nguli.com.jobs.JobsViewModel
+import mebot.nguli.com.jobs.JobsAssistant
 import mebot.nguli.com.ui.feed.*
 import mebot.nguli.com.feed.RealtimeCall099ViewModel
 import mebot.nguli.com.feed.RealtimeScope099
@@ -121,6 +124,7 @@ class MainActivity : FragmentActivity() {
         super.onDestroy()
     }
 
+    private var jobsNavigationRequest by mutableIntStateOf(0)
     private var softwareNavigationRequest by mutableIntStateOf(0)
     private var alarmNavigationRequest by mutableIntStateOf(0)
     private var feedNavigationRequest by mutableIntStateOf(0)
@@ -143,6 +147,7 @@ class MainActivity : FragmentActivity() {
         feedNavigationItem = savedInstanceState?.getString("mebot.feedNavigationItem") ?: intent?.getStringExtra("item_id")
         chatGptNavigationRequest = savedInstanceState?.getInt("mebot.chatGptNavigationRequest")
             ?: if (ChatGptReturnLink.matches(intent, packageName)) 1 else 0
+        jobsNavigationRequest = savedInstanceState?.getInt("mebot.jobsNavigationRequest") ?: if (intent?.action == "mebot.nguli.com.OPEN_JOBS") 1 else 0
         softwareNavigationRequest = savedInstanceState?.getInt("mebot.softwareNavigationRequest")
             ?: if (intent?.action == "mebot.nguli.com.OPEN_SOFTWARE_UPDATES") 1 else 0
         mebot.nguli.com.updates.SoftwareUpdateWorker.schedule(this, (application as MeBotApplication).softwareUpdates.state.value.automaticChecks)
@@ -215,7 +220,7 @@ class MainActivity : FragmentActivity() {
                     ) {
                     if (protection.locked) AppLockScreen(appLock) { biometricUnlock.authenticate(biometricTitle, biometricPinLabel) }
                     else protectedScreens.SaveableStateProvider("personal-navigation") {
-                        FeedClock(timezone = feedUi.state?.timezone.orEmpty(), noticeDismissals = feedUi.state?.dismissedNotices.orEmpty()) { MeBotApp(ui, vm, feedUi, feedVm, alarmNavigationRequest, feedNavigationRequest, feedNavigationItem, chatGptNavigationRequest, softwareNavigationRequest) { voicePrivacyStop = it } }
+                        FeedClock(timezone = feedUi.state?.timezone.orEmpty(), noticeDismissals = feedUi.state?.dismissedNotices.orEmpty()) { MeBotApp(ui, vm, feedUi, feedVm, alarmNavigationRequest, feedNavigationRequest, feedNavigationItem, chatGptNavigationRequest, softwareNavigationRequest, jobsNavigationRequest) { voicePrivacyStop = it } }
                     }
                     }
                     SideEffect { privacyCurtain.committed(coverEpoch, lockTicket, protection.locked) }
@@ -227,6 +232,7 @@ class MainActivity : FragmentActivity() {
     public override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.action == "mebot.nguli.com.OPEN_JOBS") jobsNavigationRequest++
         if (intent.action == "mebot.nguli.com.OPEN_SOFTWARE_UPDATES") softwareNavigationRequest++
         if (intent.action == "mebot.nguli.com.OPEN_ALARMS") alarmNavigationRequest++
         if (intent.action == "mebot.nguli.com.OPEN_FEED") { feedNavigationItem = intent.getStringExtra("item_id"); feedNavigationRequest++ }
@@ -236,6 +242,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
+        outState.putInt("mebot.jobsNavigationRequest", jobsNavigationRequest)
         outState.putInt("mebot.softwareNavigationRequest", softwareNavigationRequest)
         outState.putInt("mebot.alarmNavigationRequest", alarmNavigationRequest)
         outState.putInt("mebot.feedNavigationRequest", feedNavigationRequest)
@@ -246,13 +253,26 @@ class MainActivity : FragmentActivity() {
 
 @Composable
 private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, feedVm: FeedViewModel,
-    alarmNavigationRequest: Int, feedNavigationRequest: Int, feedNavigationItem: String?, chatGptNavigationRequest: Int, softwareNavigationRequest: Int,
+    alarmNavigationRequest: Int, feedNavigationRequest: Int, feedNavigationItem: String?, chatGptNavigationRequest: Int, softwareNavigationRequest: Int, jobsNavigationRequest: Int,
     onVoicePrivacyHandler: ((() -> Unit)?) -> Unit) {
+    val jobsVm: JobsViewModel = viewModel()
+    val jobsUi by jobsVm.ui.collectAsStateWithLifecycle()
+    val jobsEditingScope = jobsUi.state.editingScope
     val voiceVm: Realtime099ViewModel = viewModel()
     val voiceSetupUi by voiceVm.ui.collectAsStateWithLifecycle()
     val callVm: RealtimeCall099ViewModel = viewModel()
     val callUi by callVm.ui.collectAsStateWithLifecycle()
     var page by rememberSaveable { mutableStateOf("feed") }
+    var jobsSavedRequest by rememberSaveable { mutableIntStateOf(0) }
+    var jobsVisitRequested by remember { mutableStateOf(false) }
+    LaunchedEffect(page, jobsUi.loading) {
+        if (page != "jobs") jobsVisitRequested = false
+        else if (!jobsUi.loading && !jobsVisitRequested) {
+            jobsVisitRequested = true
+            jobsVm.refresh()
+        }
+    }
+    LaunchedEffect(jobsNavigationRequest) { if (jobsNavigationRequest > 0) page = "jobs" }
     var showQuickGuide by rememberSaveable { mutableStateOf(false) }
     var explicitlyOpenedSetup099 by rememberSaveable { mutableStateOf(false) }
     var finishingSetup099 by remember { mutableStateOf(false) }
@@ -565,7 +585,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
             awaitCancellation()
         }
     }
-    val basePages = setOf("feed", "modules", "ai", "saved", "you")
+    val basePages = setOf("feed", "jobs", "modules", "ai", "saved", "you")
     fun openItem(id: String) {
         if (page != "item") detailReturn = when (page) { "saved", "search", "module-edit" -> page; else -> "feed" }
         // Acquire before Home disposes its lease: the same item's prepared request survives
@@ -627,7 +647,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
             "alarm-edit" -> "alarms"
             "alarms", "focus", "history", "daily", "module-edit" -> "modules"
             "item" -> detailReturn
-            "ai" -> if (aiReturn == "item" && feedUi.state?.items?.any { it.id == itemId } == true) "item" else "feed"
+            "ai" -> if (aiReturn == "jobs") "jobs" else if (aiReturn == "item" && feedUi.state?.items?.any { it.id == itemId } == true) "item" else "feed"
             "ask" -> if (itemId != null) "item" else "feed"
             "voice-setup", "voice-call" -> "ai"
             "connect" -> if (onboarded) connectionReturn else "feed"
@@ -736,6 +756,23 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                     errorCode = feedUi.error, onDismissError = feedVm::clearMessage)
                 else -> screenStates.SaveableStateProvider(if (page == "daily") "daily:$visitDate" else page) {
                     when (page) {
+                        "jobs" -> if (!jobsUi.ready) ScreenContainer {
+                            if (jobsUi.error != null) ScreenTitle(stringResource(R.string.data_error_title), stringResource(R.string.data_error_body))
+                            else CircularProgressIndicator()
+                        } else key(jobsEditingScope) { JobsScreen(jobsUi.state, jobsUi.loading, jobsUi.error, jobsVm::refresh,
+                            { value -> jobsVm.preferences(value, jobsEditingScope) },
+                            { id -> jobsVm.save(id, jobsEditingScope) },
+                            { value -> jobsVm.application(value, jobsEditingScope) },
+                            onAsk = { job, request ->
+                                aiReturn = "jobs"
+                                feedVm.openJobsConversation(job, request)
+                                page = "ai"
+                            }, onOpen = { url -> if (FeedLogic.safeUrl(url, true)) {
+                                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                            } }, lastAiDraft = { job ->
+                                feed.conversations.find { it.id == JobsAssistant.conversation(job).id }?.turns?.lastOrNull { it.role == "assistant" }?.text.orEmpty()
+                            }, onExport = jobsVm::exportPdf, exportBusy = jobsUi.exportBusy, exportResult = jobsUi.exportResult,
+                            onClearExportResult = jobsVm::clearExportResult, initialTab = "saved", tabRequest = jobsSavedRequest, saving = jobsUi.saving, refreshPhase = jobsUi.refreshPhase, onCancelRefresh = jobsVm::cancelRefresh) }
                         "feed" -> {
                             val now = ZonedDateTime.now()
                             val nextAlarm = if ("alarms" in state.settings.enabledModules) state.alarms.filter { it.enabled }.minByOrNull { nextAlarmOccurrence(it, now).toInstant() } else null
@@ -759,7 +796,9 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                         }
                         "modules" -> ModulesScreen(feed, state,
                             onEdit = ::openModule, onToggle = feedVm::setModuleEnabled,
-                            onUtility = { route -> if (route == "focus") openFocus(null, null) else { if (route == "daily") visitDate = date.toString(); page = route } },
+                            onUtility = { route ->
+                                if (route == "focus") openFocus(null, null) else { if (route == "daily") visitDate = date.toString(); page = route }
+                            },
                             onUtilityToggle = { id, checked -> vm.saveSettings { it.copy(enabledModules = (if (checked) it.enabledModules + id else it.enabledModules - id) + "daily") } },
                             error = feedUi.error, onDismissError = feedVm::clearMessage,
                             onReorder = feedVm::reorderModules,
@@ -768,7 +807,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                         "module-edit" -> moduleDraft?.let { draft -> ModuleEditor(Json.decodeFromString(draft), feedUi, moduleIsNew,
                             { module -> feedVm.clearMessage(); feedVm.saveModule(module) }, feedVm::removeModule, { page = "modules" },
                             onSavePersonalized = { module, notes -> feedVm.clearMessage(); feedVm.saveModule(module, notes) }, onOpenItem = ::openItem) }
-                        "saved" -> SavedFeed(feed, ::openItem, feedVm::toggleSaved, { page = "feed" })
+                        "saved" -> SavedFeed(feed, ::openItem, feedVm::toggleSaved, { page = "feed" }, onJobs = { jobsSavedRequest++; page = "jobs" })
                         "you" -> YouScreen(feedUi,
                             { contextReturn = "you"; feedVm.clearMessage(); page = "context" }, ::openConnection,
                             { deliveryReturn = "you"; feedVm.clearMessage(); screenStates.removeState("delivery"); page = "delivery" }, { page = "settings" }, { page = "data" }, onSoftwareUpdates={page="software-updates"}, onAppLock={page="app-lock"}, onStarred={page="starred-settings"}, onInterests={openPersonalInterests()})
@@ -914,7 +953,7 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
 internal fun MeBotNavigation(page: String, onPage: (String) -> Unit) {
     val items = listOf(
         Triple("feed", R.string.feed_tab, Icons.Outlined.ViewAgenda),
-        Triple("modules", R.string.feed_modules_tab, Icons.Outlined.GridView),
+        Triple("jobs", R.string.jobs_tab, Icons.Outlined.WorkOutline),
         Triple("ai", R.string.workspace_title, Icons.Outlined.ChatBubbleOutline),
         Triple("saved", R.string.feed_saved_tab, Icons.Outlined.BookmarkBorder),
         Triple("you", R.string.feed_you_tab, Icons.Outlined.PersonOutline),

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="jobs_alert_channel">Job matches</string>
+    <string name="jobs_alert_title">New jobs to review</string>
+    <string name="jobs_alert_body">New listings match your preferences. Open Jobs to check requirements.</string>
+</resources>

@@ -60,6 +60,8 @@ data class FeedState(
     val backgroundEnabled: Boolean = false,
     val backgroundWifiOnly: Boolean = true,
     val backgroundBatteryNotLow: Boolean = true,
+    /** Portable Jobs envelope; a persisted value is also a pending roll-forward restore journal. */
+    val jobsBackup: mebot.nguli.com.core.jobs.JobsState? = null,
 
 )
 
