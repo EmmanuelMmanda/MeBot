@@ -16,6 +16,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -89,6 +90,7 @@ fun JobsScreen(
     }
     var assistantIntent by rememberSaveable { mutableStateOf("") }
     var assistantQuestion by rememberSaveable { mutableStateOf("") }
+    var questionDrafts by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
     var pendingPreferences by rememberSaveable { mutableStateOf("") }
     val pendingSaving = pendingPreferences.isNotBlank()
     var restoredPending by remember { mutableStateOf(pendingSaving) }
@@ -111,7 +113,9 @@ fun JobsScreen(
         onPreferences(value)
     }
     BackHandler(route != "browse") { if (!pendingSaving) route = "browse" }
-    Column(Modifier.fillMaxSize()) {
+    val reviewVisible = selected != null && JobsAssistantIntent.entries.any { it.name == assistantIntent }
+    Box(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().then(if (reviewVisible) Modifier.clearAndSetSemantics {} else Modifier)) {
         if (saveUnconfirmed) Surface(color = MaterialTheme.colorScheme.errorContainer) {
             Text(stringResource(R.string.jobs_save_unconfirmed), Modifier.fillMaxWidth().padding(16.dp).testTag("jobs-save-unconfirmed"))
         }
@@ -265,11 +269,14 @@ fun JobsScreen(
     if (allowedIntent != null && selected != null) JobsAiReview(
         intent = allowedIntent, question = assistantQuestion, snapshot = contextSnapshot,
         provider = aiProviderLabel, supportsContext = onAssistant != null, connected = aiConnected,
+        customQuestion = questionDrafts[selected.id].orEmpty(),
+        onQuestionChange = { questionDrafts = questionDrafts + (selected.id to it) },
         onConnect = { assistantIntent = ""; onConnectAi() },
         onDismiss = { assistantIntent = "" }, onSend = { request ->
             assistantIntent = ""
             if (onAssistant != null) onAssistant(selected, request) else onAsk(selected, request.question)
         })
+    }
 }
 
 @Composable

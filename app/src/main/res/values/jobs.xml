@@ -240,4 +240,6 @@
     <string name="jobs_question_count">%1$d / 1,000 characters</string>
     <string name="jobs_question_invalid">Use at most 1,000 characters and remove unsupported null characters. Your question is kept here.</string>
     <string name="jobs_ai_fresh_chat">Each Jobs action starts a fresh chat. Earlier chats remain in MeBot history.</string>
+    <string name="jobs_jobicy_region_unassigned">Region not specified by Jobicy</string>
+    <string name="jobs_source_region_raw">Source region label: %1$s. Confirm country eligibility with the employer.</string>
 </resources>

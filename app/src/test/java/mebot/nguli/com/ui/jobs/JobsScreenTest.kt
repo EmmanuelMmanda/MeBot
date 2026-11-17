@@ -1,8 +1,10 @@
 package mebot.nguli.com.ui.jobs
 
 import androidx.compose.runtime.*
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import mebot.nguli.com.core.jobs.*
 import mebot.nguli.com.jobs.JobsAssistantRequest
@@ -19,7 +21,7 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class JobsScreenTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val job = JobPosting(id = "fixture-job", title = "Software engineer", company = "Example employer",
         location = "Worldwide", remote = true, employmentType = "full_time", description = "Build reliable systems.",
         url = "https://example.com/jobs/fixture", source = "Remotive")
@@ -31,7 +33,7 @@ class JobsScreenTest {
     private var pendingPreferences by mutableStateOf<JobPreferences?>(null)
     private var preferencesWrites = 0
     private var screenError by mutableStateOf<String?>(null)
-    private fun render(error: String? = null, draft: String = "", acknowledge: Boolean = true, context: JobsContextSnapshot = JobsContextSnapshot()) {
+    private fun render(error: String? = null, draft: String = "", acknowledge: Boolean = true, context: JobsContextSnapshot = JobsContextSnapshot(), connected: Boolean = true) {
         screenError = error
         compose.setContent {
             LaunchedEffect(pendingApplication, pendingPreferences) {
@@ -54,7 +56,7 @@ class JobsScreenTest {
                         (old?.copy(bookmarked = !old.bookmarked) ?: JobApplication(id, snapshot = job)))
                 }, { application ->
                     pendingApplication = application
-                }, { _, prompt -> asked += prompt }, { opened += it }, { draft }, contextSnapshot = context, onAssistant = { _, request -> assistantRequests += request })
+                }, { _, prompt -> asked += prompt }, { opened += it }, { draft }, contextSnapshot = context, onAssistant = { _, request -> assistantRequests += request }, aiConnected = connected)
             }
         }
     }
@@ -70,8 +72,7 @@ class JobsScreenTest {
         action.assertIsDisplayed()
         println("JOBS_REVIEW_TRACE before detail action click")
         action.performClick()
-        println("JOBS_REVIEW_TRACE after detail action click; native dialog=" +
-            org.robolectric.shadows.ShadowDialog.getLatestDialog()?.isShowing)
+        println("JOBS_REVIEW_TRACE after detail action click")
         compose.onNodeWithText(androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
             .getString(mebot.nguli.com.R.string.jobs_ai_review_title)).assertIsDisplayed()
         compose.onNodeWithTag("jobs-ai-fresh-chat").assertExists()
@@ -232,17 +233,17 @@ class JobsScreenTest {
         assertEquals(mebot.nguli.com.jobs.JobsAssistantIntent.QUESTION, assistantRequests.single().intent)
     }
 
-    @Test fun isolatedReviewDialogReachesIdleWithoutJobsScreen() {
+    @Test fun isolatedReviewSurfaceReachesIdleWithoutJobsScreen() {
         compose.setContent {
             MeBotTheme {
                 JobsAiReview(mebot.nguli.com.jobs.JobsAssistantIntent.REQUIREMENTS, "Explain this role",
                     JobsContextSnapshot(), "Test provider", true, true, {}, {}, {})
             }
         }
-        println("JOBS_REVIEW_TRACE isolated dialog content set")
+        println("JOBS_REVIEW_TRACE isolated review surface content set")
         compose.onNodeWithTag("jobs-ai-fresh-chat").assertExists()
         compose.onNodeWithTag("jobs-ai-send").assertIsDisplayed().assertIsEnabled()
-        println("JOBS_REVIEW_TRACE isolated dialog idle")
+        println("JOBS_REVIEW_TRACE isolated review surface idle")
     }
 
     @Test fun detailActionScrollAndPointerClickWithoutDialogReachIdle() {
@@ -259,6 +260,115 @@ class JobsScreenTest {
         compose.waitForIdle()
         assertEquals(1, clicks)
         println("JOBS_REVIEW_TRACE isolated detail pointer click idle")
+    }
+
+    @Test fun jobicyAnywhereIsUnassignedAndPreservesRawSourceRegion() {
+        state = state.copy(jobs = listOf(job.copy(source = "Jobicy", location = "Anywhere")))
+        render()
+        compose.onNodeWithTag("jobs-screen").performScrollToNode(hasTestTag("job-card-${job.id}"))
+        compose.onNodeWithText("Region not specified by Jobicy", substring = true).assertIsDisplayed()
+        openJob()
+        compose.onNodeWithText("Region not specified by Jobicy").assertIsDisplayed()
+        compose.onNodeWithText("Source region label: Anywhere. Confirm country eligibility with the employer.")
+            .performScrollTo().assertIsDisplayed()
+        assertEquals("Anywhere", state.jobs.single().location)
+    }
+
+    @Test fun otherSourceAnywhereIsNotAttributedToJobicy() {
+        state = state.copy(jobs = listOf(job.copy(source = "Remotive", location = "Anywhere")))
+        render()
+        compose.onNodeWithTag("jobs-screen").performScrollToNode(hasTestTag("job-card-${job.id}"))
+        compose.onNodeWithText("Anywhere", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Region not specified by Jobicy", substring = true).assertDoesNotExist()
+        openJob()
+        compose.onNodeWithText("Anywhere").assertIsDisplayed()
+        compose.onNodeWithText("Source region label:", substring = true).assertDoesNotExist()
+    }
+
+    @Test fun disconnectedQuestionDraftSurvivesConnectAndExplicitReopenWithoutSending() {
+        render(connected = false); openJob(); openAiReviewWithTrace()
+        compose.onNodeWithTag("jobs-ai-question").performScrollTo().performTextReplacement("Is this role open in Tanzania?")
+        compose.onNodeWithTag("jobs-ai-connect").performClick()
+        compose.onNodeWithTag("jobs-ai-question").assertDoesNotExist()
+        openAiReviewWithTrace()
+        compose.onNodeWithTag("jobs-ai-question").performScrollTo().assertTextContains("Is this role open in Tanzania?")
+        compose.onNodeWithTag("jobs-ai-send").assertDoesNotExist()
+        assertTrue(assistantRequests.isEmpty())
+        compose.onNodeWithText("Cancel").performClick()
+        openAiReviewWithTrace()
+        compose.onNodeWithTag("jobs-ai-question").performScrollTo().assertTextContains("Is this role open in Tanzania?")
+        assertTrue(assistantRequests.isEmpty())
+    }
+
+    @Test @Config(qualifiers = "w360dp-h800dp-xhdpi")
+    fun captureReviewSurfaceLightPhone() = captureReviewSurface("light")
+
+    @Test @Config(qualifiers = "w360dp-h800dp-xhdpi")
+    fun captureReviewSurfaceDarkPhone() = captureReviewSurface("dark")
+
+    private fun captureReviewSurface(theme: String) {
+        compose.setContent {
+            MeBotTheme(mebot.nguli.com.core.Settings(theme = theme)) {
+                JobsAiReview(mebot.nguli.com.jobs.JobsAssistantIntent.REQUIREMENTS, "Explain this role and its requirements.",
+                    JobsContextSnapshot(), "Not connected", true, false, {}, {}, {})
+            }
+        }
+        compose.onNodeWithTag("jobs-ai-connect").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        compose.onNodeWithTag("jobs-ai-review-screen").assertIsDisplayed()
+        // Match this project's proven Robolectric native-graphics capture path. Compose's
+        // captureToImage waits for a hardware redraw callback unavailable in this host setup.
+        val image = compose.runOnIdle {
+            val window = compose.activity.window
+            window.decorView.invalidate()
+            android.graphics.Bitmap.createBitmap(window.decorView.width, window.decorView.height,
+                android.graphics.Bitmap.Config.ARGB_8888).also { bitmap ->
+                var status: Int? = null
+                android.view.PixelCopy.request(window, bitmap, { status = it }, android.os.Handler(android.os.Looper.getMainLooper()))
+                assertEquals(android.view.PixelCopy.SUCCESS, status)
+            }
+        }
+        val directory = java.io.File("build/outputs/screenshots/jobs-review-host").apply { mkdirs() }
+        java.io.File(directory, "review-360-$theme.png").outputStream().use {
+            assertTrue(image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it))
+        }
+        java.io.File(directory, "PROVENANCE.txt").writeText("Robolectric native-graphics host rendering, 360dp. Synthetic review. Not an emulator/device lifecycle verification.\n")
+    }
+
+    @Test fun reviewHidesUnderlyingDetailActionsFromAccessibilityUntilCancelled() {
+        render(); openJob(); openAiReviewWithTrace()
+        compose.onNodeWithTag("jobs-apply-source").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Save job").assertDoesNotExist()
+        compose.onNodeWithText("Cancel").performClick()
+        compose.onNodeWithTag("jobs-apply-source").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Save job").assertIsDisplayed()
+        assertTrue(opened.isEmpty())
+        assertTrue(assistantRequests.isEmpty())
+    }
+
+    @Test fun changedSourceRevisionRequiresFreshSelectionBeforeSharingNewFacts() {
+        var snapshot by mutableStateOf(JobsContextSnapshot("before", listOf(JobsContextCandidate("same-id", "profile", "About you",
+            "Skills: Kotlin", JobsContextField.SKILL_TO_CONFIRM, "Kotlin", "self_reported_skill_review"))))
+        compose.setContent {
+            MeBotTheme {
+                JobsAiReview(mebot.nguli.com.jobs.JobsAssistantIntent.REQUIREMENTS, "Explain this role", snapshot,
+                    "Test provider", true, true, {}, {}, { assistantRequests += it })
+            }
+        }
+        compose.onNodeWithContentDescription("About you\nSkills: Kotlin").performScrollTo().performClick()
+        compose.onNodeWithTag("jobs-ai-context-preview").performScrollTo().assertTextEquals("Skills: Kotlin")
+        compose.runOnIdle { snapshot = snapshot.copy(revision = "after", candidates = snapshot.candidates.map {
+            it.copy(sourceText = "Skills: private new fact")
+        }) }
+        compose.onNodeWithContentDescription("About you\nSkills: private new fact").performScrollTo().assertIsOff()
+        compose.onNodeWithTag("jobs-ai-context-preview").performScrollTo().assertTextEquals(
+            androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+                .getString(mebot.nguli.com.R.string.jobs_ai_nothing_shared))
+        compose.onNodeWithTag("jobs-ai-send").performClick()
+        assertEquals("", assistantRequests.single().sharedContext)
+        assertEquals("after", assistantRequests.single().contextRevision)
+        compose.onNodeWithContentDescription("About you\nSkills: private new fact").performScrollTo().performClick()
+        compose.onNodeWithTag("jobs-ai-send").performClick()
+        assertEquals("Skills: private new fact", assistantRequests.last().sharedContext)
     }
 
 }

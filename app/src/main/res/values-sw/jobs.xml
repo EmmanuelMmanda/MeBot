@@ -240,4 +240,6 @@
     <string name="jobs_question_count">Herufi %1$d / 1,000</string>
     <string name="jobs_question_invalid">Tumia herufi zisizozidi 1,000 na uondoe herufi tupu zisizokubalika. Swali lako limehifadhiwa hapa.</string>
     <string name="jobs_ai_fresh_chat">Kila hatua ya Jobs huanza mazungumzo mapya. Mazungumzo ya awali hubaki kwenye historia ya MeBot.</string>
+    <string name="jobs_jobicy_region_unassigned">Jobicy haijabainisha eneo</string>
+    <string name="jobs_source_region_raw">Eneo lililoandikwa na chanzo: %1$s. Hakiki ustahiki wa nchi na mwajiri.</string>
 </resources>

@@ -49,7 +49,7 @@ internal fun JobCard(job: JobPosting, preferences: JobPreferences, application: 
                 JobBookmark(application, saving, onSave)
             }
             Text(buildList {
-                add(job.location.ifBlank { stringResource(R.string.jobs_location_unknown) })
+                add(jobLocationLabel(job))
                 if (job.remote) add(stringResource(R.string.jobs_remote))
                 if (job.employmentType.isNotBlank()) add(employmentLabel(job.employmentType))
             }.distinct().joinToString(" · "), style = MaterialTheme.typography.bodySmall,
@@ -108,7 +108,7 @@ internal fun JobDetails(job: JobPosting, preferences: JobPreferences, applicatio
             }
             Text(job.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                JobFact(job.location.ifBlank { stringResource(R.string.jobs_location_unknown) })
+                JobFact(jobLocationLabel(job))
                 if (job.remote) JobFact(stringResource(R.string.jobs_remote))
                 if (job.employmentType.isNotBlank()) JobFact(employmentLabel(job.employmentType))
             }
@@ -121,6 +121,8 @@ internal fun JobDetails(job: JobPosting, preferences: JobPreferences, applicatio
                 "closed" -> R.string.jobs_status_source_closed
                 else -> R.string.jobs_status_source_unknown
             }), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (job.hasUnassignedJobicyRegion()) Text(stringResource(R.string.jobs_source_region_raw, job.location),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (job.statusCheckedAt > 0) Text(stringResource(R.string.jobs_status_checked, date(job.statusCheckedAt)),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.testTag("jobs-status-checked"))
@@ -203,4 +205,15 @@ private fun publishedJobSections(html: String): List<PublishedJobSection> {
             if (title.isNotBlank() || body.isNotBlank()) add(PublishedJobSection(title, body))
         }
     }
+}
+
+/** Jobicy's Anywhere category is unassigned geography, not worldwide eligibility. */
+internal fun JobPosting.hasUnassignedJobicyRegion(): Boolean =
+    source.trim().equals("Jobicy", ignoreCase = true) && location.trim().equals("Anywhere", ignoreCase = true)
+
+@Composable
+private fun jobLocationLabel(job: JobPosting): String = when {
+    job.hasUnassignedJobicyRegion() -> stringResource(R.string.jobs_jobicy_region_unassigned)
+    job.location.isBlank() -> stringResource(R.string.jobs_location_unknown)
+    else -> job.location
 }
