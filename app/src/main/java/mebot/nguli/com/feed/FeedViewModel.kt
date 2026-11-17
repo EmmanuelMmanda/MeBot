@@ -1265,7 +1265,10 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
         val generation = beginConversationSelection(null)
         return viewModelScope.launch {
             try {
+                // A detail action approves only the displayed listing/context, never old chat turns
+                // or files. Follow-ups within the opened chat still use sendConversation.
                 val candidate = mebot.nguli.com.jobs.JobsAssistant.conversation(job, request.sharedContext)
+                    .copy(id = "job-${java.util.UUID.randomUUID()}")
                 val prompt = mebot.nguli.com.jobs.JobsAssistant.requestText(request.intent, request.question)
                 val jobsRepository = getApplication<MeBotApplication>().jobsRepository
                 val jobsEpoch = jobsRepository.generation()
@@ -1279,19 +1282,12 @@ class FeedViewModel(application: Application, private val savedStateHandle: Save
                     if (request.sharedContext.isNotEmpty() && request.contextRevision.isNotEmpty() &&
                         mebot.nguli.com.core.jobs.JobsContextSuggestions.build(state, preferences).revision != request.contextRevision)
                         throw FeedFailure("context_changed")
-                    val existing = state.conversations.find { it.id == candidate.id }
-                    if (existing == null && state.conversations.size >= ConversationLogic.maxConversations)
+                    if (state.conversations.size >= ConversationLogic.maxConversations)
                         throw FeedFailure("conversation_limit")
-                    val managed = mebot.nguli.com.jobs.JobsAssistant.managedAttachmentIds(job)
-                    val refreshed = existing?.copy(
-                        attachments = existing.attachments.filterNot { it.id in managed } + candidate.attachments,
-                        contextScope = "jobs", updatedAtMillis = System.currentTimeMillis()) ?: candidate
-                    // Keep user attachments, or fail explicitly. Never silently discard evidence.
-                    try { ConversationLogic.validate(listOf(refreshed)) }
+                    try { ConversationLogic.validate(listOf(candidate)) }
                     catch (_: IllegalArgumentException) { throw FeedFailure("invalid_input") }
-                    selected = refreshed
-                    state.copy(conversations = state.conversations.filterNot { it.id == candidate.id } + refreshed,
-                        suggestionSets097 = if (existing?.attachments != refreshed.attachments) emptyList() else state.suggestionSets097)
+                    selected = candidate
+                    state.copy(conversations = state.conversations + candidate)
                 }
                 if (generation != conversationSelectionGeneration) return@launch
                 val thread = selected ?: return@launch

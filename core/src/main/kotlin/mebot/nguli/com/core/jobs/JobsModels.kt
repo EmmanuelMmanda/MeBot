@@ -10,6 +10,7 @@ data class JobPosting(
     val description: String = "", val url: String = "", val source: String = "",
     val postedAt: Long = 0, val fetchedAt: Long = 0, val salary: String = "", val tags: List<String> = emptyList(),
     val salaryMin: Double? = null, val salaryMax: Double? = null, val salaryCurrency: String = "", val salaryPeriod: String = "",
+    val sourceStatus: String = "", val statusCheckedAt: Long = 0,
 )
 
 @Serializable
@@ -26,6 +27,7 @@ data class JobPreferences(
 data class JobApplication(
     val jobId: String = "", val status: String = "saved", val notes: String = "", val updatedAt: Long = 0,
     val snapshot: JobPosting? = null, val draft: String = "", val draftUpdatedAt: Long = 0,
+    val bookmarked: Boolean = true,
 )
 
 @Serializable
@@ -80,10 +82,26 @@ object JobsMatcher {
     private fun countryAliases(value: String): Set<String> = normalized(value).let {
         if (it.isBlank()) emptySet() else aliasesByCountry[it] ?: setOf(it)
     }
-    private fun locationMatches(job: JobPosting, preferences: JobPreferences): Boolean =
-        countryAliases(preferences.country).any { contains(job.location, it) }
-    private fun worldwide(job: JobPosting): Boolean = normalized(job.location) in setOf("worldwide", "anywhere", "global", "remote - worldwide", "remote (worldwide)")
-    private fun unspecifiedLocation(job: JobPosting) = normalized(job.location) in setOf("", "remote", "not specified", "unknown")
+    // Source geography is evidence for browsing, never work authorization. In particular,
+    // Jobicy "Anywhere" means no assigned source region, not verified worldwide hiring.
+    private fun unspecifiedLocation(job: JobPosting) = normalized(job.location) in
+        setOf("", "remote", "not specified", "unknown", "anywhere")
+    private fun worldwide(job: JobPosting): Boolean = normalized(job.location) in
+        setOf("worldwide", "global", "remote - worldwide", "remote (worldwide)")
+    private fun geographicParts(job: JobPosting): List<String> = normalized(job.location)
+        .split(Regex("[,;/|()]"))
+        .map { it.trim().removePrefix("remote - ").removePrefix("remote in ").removeSuffix(" only").removeSuffix(" remote").trim() }
+        .filter(String::isNotBlank)
+    private fun broadRegion(job: JobPosting): Boolean = geographicParts(job).any { it in setOf(
+        "emea", "africa", "europe", "eu", "european union", "apac", "asia pacific", "asia-pacific",
+        "asia", "latam", "latin america", "north america", "south america", "americas", "middle east", "oceania") }
+    private fun locationMatches(job: JobPosting, preferences: JobPreferences): Boolean {
+        if (unspecifiedLocation(job) || worldwide(job) || broadRegion(job)) return false
+        return countryAliases(preferences.country).any { alias ->
+            // ISO2 codes must be location tokens, not ordinary prose such as "in" or "us".
+            if (alias.length == 2) alias in geographicParts(job) else contains(job.location, alias)
+        }
+    }
 
     private fun comparableSalary(job: JobPosting, preferences: JobPreferences, upperBoundOnly: Boolean = false): Double? {
         if (preferences.salaryCurrency.isBlank() || preferences.salaryPeriod.isBlank()) return null
@@ -108,8 +126,7 @@ object JobsMatcher {
             type(preferences.employmentType) != type(job.employmentType)) return false
         // Broad geographic scopes require human verification. Do not turn a continent label into a hiring guarantee.
         if (preferences.country.isNotBlank() && !locationMatches(job, preferences) && !worldwide(job) && !unspecifiedLocation(job)) {
-            val broad = normalized(job.location) in setOf("emea", "africa", "remote - emea", "remote - africa")
-            if (!broad) return false
+            if (!broadRegion(job)) return false
         }
         val searchable = content(job)
         if (query.trim().split(Regex("\\s+")).filter(String::isNotBlank).any { !contains(searchable, it) }) return false

@@ -114,4 +114,41 @@ class JobsModelsTest {
         assertEquals(listOf("alias", "senior"), JobsMatcher.ranked(listOf(senior, exactAlias), JobPreferences(roles = "Backend Engineer")).map { it.id })
     }
 
+    @Test fun jobicyAnywhereRemainsUnassignedWithoutCountryOrWorldwideClaim() {
+        val source = job.copy(source = "Jobicy", location = "Anywhere")
+        for (country in listOf("Tanzania", "Germany", "India", "United States")) {
+            val preferences = JobPreferences(country = country)
+            assertTrue(JobsMatcher.matches(source, preferences))
+            assertFalse(JobsMatcher.reasons(source, preferences).contains("location_match"))
+            assertTrue(JobsMatcher.reasons(source, preferences).contains("eligibility_unknown"))
+        }
+        assertEquals("Anywhere", source.location)
+    }
+    @Test fun broadSourceRegionsDoNotFalselyExcludeCountriesOrAssertMembership() {
+        for ((region, country) in listOf("Europe" to "Germany", "EU" to "France", "APAC" to "India",
+            "Remote - Africa" to "Tanzania", "LATAM" to "Brazil", "North America" to "Canada",
+            "Europe, USA" to "Germany", "EMEA" to "United States")) {
+            val listing = job.copy(location = region)
+            val preferences = JobPreferences(country = country)
+            assertTrue("$region remains reviewable for $country", JobsMatcher.matches(listing, preferences))
+            assertFalse(JobsMatcher.reasons(listing, preferences).contains("location_match"))
+            assertTrue(JobsMatcher.reasons(listing, preferences).contains("eligibility_unknown"))
+        }
+        assertFalse(JobsMatcher.matches(job.copy(location = "USA"), JobPreferences(country = "Germany")))
+        assertFalse(JobsMatcher.matches(job.copy(location = "Germany"), JobPreferences(country = "India")))
+    }
+    @Test fun twoLetterCountryCodesAreNotEnglishProseMatches() {
+        val india = JobPreferences(country = "India")
+        assertFalse(JobsMatcher.matches(job.copy(location = "Remote in USA"), india))
+        assertFalse(JobsMatcher.reasons(job.copy(location = "Remote in USA"), india).contains("location_match"))
+        assertTrue(JobsMatcher.matches(job.copy(location = "IN"), india))
+        assertTrue(JobsMatcher.matches(job.copy(location = "US, IN"), india))
+        assertTrue(JobsMatcher.matches(job.copy(location = "Remote - GB"), JobPreferences(country = "United Kingdom")))
+        assertTrue(JobsMatcher.matches(job.copy(location = "Remote in US"), JobPreferences(country = "United States")))
+        assertTrue(JobsMatcher.matches(job.copy(location = "UK only"), JobPreferences(country = "United Kingdom")))
+        assertFalse(JobsMatcher.matches(job.copy(location = "Work at USA"), JobPreferences(country = "Austria")))
+        assertFalse(JobsMatcher.matches(job.copy(location = "Open to USA"), JobPreferences(country = "Tonga")))
+        assertTrue(JobsMatcher.matches(job.copy(location = "AT / DE"), JobPreferences(country = "Austria")))
+    }
+
 }

@@ -54,6 +54,7 @@ object JobsBackup {
                 if (j.salaryMin != null && j.salaryMax != null) require(j.salaryMin <= j.salaryMax)
                 require(j.tags.size <= 30); j.tags.forEach { bounded(it, 500) }
                 require(j.postedAt in 0..MAX_TIME && j.fetchedAt in 0..MAX_TIME)
+                require(j.sourceStatus in setOf("", "active", "closed", "unknown") && j.statusCheckedAt in 0..MAX_TIME)
                 total += j.description.length + j.tags.sumOf { it.length } + 5000
             }
         }

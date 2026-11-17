@@ -26,7 +26,7 @@ import mebot.nguli.com.ui.*
 @Composable
 internal fun CompanyMark(company: String, large: Boolean = false) {
     Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(14.dp)) {
-        Box(Modifier.size(if (large) 56.dp else 42.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(if (large) 40.dp else 32.dp), contentAlignment = Alignment.Center) {
             Text(company.trim().take(1).uppercase().ifBlank { "·" }, style = if (large) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.SemiBold)
         }
@@ -39,28 +39,31 @@ internal fun JobCard(job: JobPosting, preferences: JobPreferences, application: 
     Surface(onClick = onSelect, modifier = Modifier.fillMaxWidth().testTag("job-card-${job.id}"),
         shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 CompanyMark(job.company)
-                Text(job.company, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(job.company, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(job.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
                 JobBookmark(application, saving, onSave)
             }
-            Text(job.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                JobFact(job.location.ifBlank { stringResource(R.string.jobs_location_unknown) })
-                if (job.remote) JobFact(stringResource(R.string.jobs_remote))
-                if (job.employmentType.isNotBlank()) JobFact(employmentLabel(job.employmentType))
-            }
+            Text(buildList {
+                add(jobLocationLabel(job))
+                if (job.remote) add(stringResource(R.string.jobs_remote))
+                if (job.employmentType.isNotBlank()) add(employmentLabel(job.employmentType))
+            }.distinct().joinToString(" · "), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (job.salary.isNotBlank()) Text(job.salary, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-            val reasons = JobsMatcher.reasons(job, preferences).filter { it.endsWith("_match") }.take(2)
+            val reasons = JobsMatcher.reasons(job, preferences).filter { it.endsWith("_match") }.take(1)
             if (reasons.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.Top) {
                 Icon(Icons.Outlined.CheckCircle, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.primary)
                 Text(reasons.map { reasonLabel(it) }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(if (application != null) statusLabel(application.status) else job.source, style = MaterialTheme.typography.labelMedium,
-                    color = if (application != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Text(job.source, style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).testTag("job-source-${job.id}"))
                 if (job.postedAt > 0) Text(shortJobDate(job.postedAt), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Icon(Icons.Outlined.ArrowForward, stringResource(R.string.jobs_details), Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -70,12 +73,11 @@ internal fun JobCard(job: JobPosting, preferences: JobPreferences, application: 
 
 @Composable
 internal fun JobBookmark(application: JobApplication?, saving: Boolean, onSave: () -> Unit) {
-    if (application == null || (application.status == "saved" && application.notes.isBlank() && application.draft.isBlank())) {
-        IconButton(onClick = onSave, enabled = !saving) {
-            Icon(if (application == null) Icons.Outlined.BookmarkBorder else Icons.Outlined.Bookmark,
-                stringResource(if (application == null) R.string.jobs_save else R.string.jobs_unsave), tint = MaterialTheme.colorScheme.primary)
-        }
-    } else Icon(Icons.Outlined.Bookmark, stringResource(R.string.jobs_saved), Modifier.padding(12.dp).size(24.dp), tint = MaterialTheme.colorScheme.primary)
+    val saved = application?.bookmarked == true
+    IconButton(onClick = onSave, enabled = !saving) {
+        Icon(if (saved) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
+            stringResource(if (saved) R.string.jobs_unsave else R.string.jobs_save), tint = MaterialTheme.colorScheme.primary)
+    }
 }
 
 @Composable
@@ -88,7 +90,7 @@ internal fun JobFact(label: String) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun JobDetails(job: JobPosting, preferences: JobPreferences, application: JobApplication?, saving: Boolean, isSnapshot: Boolean,
-    onBack: () -> Unit, onSave: () -> Unit, onPrepare: () -> Unit, onOpen: () -> Unit, onAsk: () -> Unit, related: @Composable () -> Unit = {}) {
+    onBack: () -> Unit, onSave: () -> Unit, onOpen: () -> Unit, onAsk: () -> Unit, related: @Composable () -> Unit = {}) {
     var expanded by rememberSaveable(job.id) { mutableStateOf(false) }
     val description = remember(job.description) { Html.fromHtml(job.description, Html.FROM_HTML_MODE_LEGACY).toString().trim() }
     val sections = remember(job.description) { publishedJobSections(job.description) }
@@ -99,32 +101,31 @@ internal fun JobDetails(job: JobPosting, preferences: JobPreferences, applicatio
             JobBookmark(application, saving, onSave)
         }
         Column(Modifier.weight(1f).widthIn(max = MeBotTokens.ContentWidth).fillMaxWidth().verticalScroll(rememberScrollState())
-            .padding(horizontal = MeBotTokens.ScreenPadding, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            CompanyMark(job.company, large = true)
-            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            .padding(horizontal = MeBotTokens.ScreenPadding, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                CompanyMark(job.company, large = true)
                 Text(job.company, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(job.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-                if (application != null) Text(statusLabel(application.status), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
+            Text(job.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                JobFact(job.location.ifBlank { stringResource(R.string.jobs_location_unknown) })
+                JobFact(jobLocationLabel(job))
                 if (job.remote) JobFact(stringResource(R.string.jobs_remote))
                 if (job.employmentType.isNotBlank()) JobFact(employmentLabel(job.employmentType))
             }
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(stringResource(R.string.jobs_salary), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(job.salary.ifBlank { stringResource(R.string.jobs_not_disclosed) }, style = MaterialTheme.typography.titleMedium)
-            }
-            HorizontalDivider()
-            val reasons = JobsMatcher.reasons(job, preferences)
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(stringResource(R.string.jobs_match), style = MaterialTheme.typography.titleMedium)
-                val positive = reasons.filter { it.endsWith("_match") }
-                if (positive.isEmpty()) SupportingText(stringResource(R.string.jobs_explore_reason))
-                positive.forEach { DetailCheck(reasonLabel(it), true) }
-                Text(stringResource(R.string.jobs_verify_heading), style = MaterialTheme.typography.labelLarge)
-                reasons.filterNot { it.endsWith("_match") }.forEach { DetailCheck(reasonLabel(it), false) }
-            }
+            Text(job.salary.ifBlank { stringResource(R.string.jobs_salary_unknown) }, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (job.sourceStatus == "closed")
+                Text(stringResource(R.string.jobs_listing_closed), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("jobs-listing-closed"))
+            Text(stringResource(when (job.sourceStatus) {
+                "active" -> R.string.jobs_status_source_active
+                "closed" -> R.string.jobs_status_source_closed
+                else -> R.string.jobs_status_source_unknown
+            }), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (job.hasUnassignedJobicyRegion()) Text(stringResource(R.string.jobs_source_region_raw, job.location),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (job.statusCheckedAt > 0) Text(stringResource(R.string.jobs_status_checked, date(job.statusCheckedAt)),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("jobs-status-checked"))
             if (isSnapshot) SupportingText(stringResource(R.string.jobs_snapshot_warning))
             HorizontalDivider()
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -141,6 +142,15 @@ internal fun JobDetails(job: JobPosting, preferences: JobPreferences, applicatio
                 if (description.isNotBlank()) TextButton(onClick = { expanded = !expanded }, modifier = Modifier.heightIn(min = 48.dp)) {
                     Text(stringResource(if (expanded) R.string.jobs_read_less else R.string.jobs_read_more))
                 }
+            }
+            val reasons = JobsMatcher.reasons(job, preferences)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(stringResource(R.string.jobs_match), style = MaterialTheme.typography.titleMedium)
+                val positive = reasons.filter { it.endsWith("_match") }
+                if (positive.isEmpty()) SupportingText(stringResource(R.string.jobs_explore_reason))
+                positive.forEach { DetailCheck(reasonLabel(it), true) }
+                Text(stringResource(R.string.jobs_verify_heading), style = MaterialTheme.typography.labelLarge)
+                reasons.filterNot { it.endsWith("_match") }.forEach { DetailCheck(reasonLabel(it), false) }
             }
             if (job.tags.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 job.tags.distinct().take(8).forEach { JobFact(it) }
@@ -162,9 +172,6 @@ internal fun JobDetails(job: JobPosting, preferences: JobPreferences, applicatio
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onOpen, enabled = job.url.startsWith("https://"), modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp).testTag("jobs-apply-source")) {
                     Text(stringResource(R.string.jobs_apply_on_source, job.source), Modifier.weight(1f)); Icon(Icons.Outlined.OpenInNew, null, Modifier.size(18.dp))
-                }
-                OutlinedButton(onClick = onPrepare, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("jobs-prepare")) {
-                    Text(stringResource(R.string.jobs_prepare))
                 }
             }
         }
@@ -198,4 +205,15 @@ private fun publishedJobSections(html: String): List<PublishedJobSection> {
             if (title.isNotBlank() || body.isNotBlank()) add(PublishedJobSection(title, body))
         }
     }
+}
+
+/** Jobicy's Anywhere category is unassigned geography, not worldwide eligibility. */
+internal fun JobPosting.hasUnassignedJobicyRegion(): Boolean =
+    source.trim().equals("Jobicy", ignoreCase = true) && location.trim().equals("Anywhere", ignoreCase = true)
+
+@Composable
+private fun jobLocationLabel(job: JobPosting): String = when {
+    job.hasUnassignedJobicyRegion() -> stringResource(R.string.jobs_jobicy_region_unassigned)
+    job.location.isBlank() -> stringResource(R.string.jobs_location_unknown)
+    else -> job.location
 }

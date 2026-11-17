@@ -115,66 +115,36 @@ class JobsDeviceJourneyTest {
         assertTrue(runBlocking { app.jobsRepository.current().preferences.onboarded })
     }
 
-    @Test fun documentAndNotesSurviveActivityRecreationAndPickerCancellation() {
-        runBlocking { app.jobsRepository.preferences(JobPreferences(roles = "engineer", skills = "SQL", onboarded = true)) }
+    @Test fun discoverySaveAndDetailSurviveActivityRecreationWithoutLegacyDataLoss() {
+        val legacy = JobApplication(fixture.id, status = "preparing", notes = "Synthetic retained note", draft = "Synthetic retained draft", snapshot = fixture)
+        runBlocking {
+            app.jobsRepository.preferences(JobPreferences(roles = "engineer", skills = "SQL", onboarded = true))
+            app.jobsRepository.update { it.copy(applications = listOf(legacy)) }
+        }
         launch(); openFixture(); capture("07-detail")
         compose.onNodeWithTag("jobs-apply-source").assertHasClickAction().assertHeightIsAtLeast(48.dp)
-        compose.onNodeWithTag("jobs-prepare").performClick()
-        waitFor("jobs-notes")
-        compose.onNodeWithTag("jobs-notes").performScrollTo().performTextInput("Synthetic note: confirm location eligibility.")
-        capture("08-workspace")
-        scenario!!.recreate()
-        waitFor("jobs-notes")
-        compose.onNodeWithTag("jobs-notes").performScrollTo().assertTextContains("Synthetic note: confirm location eligibility.")
-        compose.onNodeWithTag("jobs-open-document").performScrollTo().performClick()
-        waitFor("jobs-document-text")
-        compose.onNodeWithTag("jobs-document-text").performScrollTo()
-            .assertTextContains(app.getString(R.string.jobs_draft_outline, fixture.title, fixture.company))
-        compose.onNodeWithTag("jobs-document-text").performTextReplacement("Synthetic application draft for device verification only.")
-        compose.onNodeWithTag("jobs-export-pdf").performScrollTo().assertIsNotEnabled()
-        compose.onNode(isToggleable()).performScrollTo().performClick()
-        capture("09-document-reviewed")
-        compose.onNodeWithTag("jobs-export-pdf").performScrollTo().assertIsEnabled().performClick()
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-        capture("10-system-file-picker")
-        android.os.ParcelFileDescriptor.AutoCloseInputStream(InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("input keyevent 4")).use { it.readBytes() }
-        waitFor("jobs-document-text")
-        compose.onNodeWithTag("jobs-document-text").performScrollTo().assertTextContains("Synthetic application draft for device verification only.")
-        capture("11-picker-cancel-restored")
-        scenario!!.recreate()
-        waitFor("jobs-document-text")
-        compose.onNodeWithTag("jobs-document-text").performScrollTo().assertTextContains("Synthetic application draft for device verification only.")
-        assertFalse(runBlocking { app.jobsRepository.current().applications.any { it.status == "applied" } })
-
-        // Recreation above verifies Android saved-instance state. Explicitly save and then
-        // finish/relaunch as well, so rememberSaveable cannot masquerade as durable storage.
-        compose.onNodeWithText(app.getString(R.string.jobs_save_draft)).performScrollTo().performClick()
-        waitFor("jobs-notes") // Save acknowledgement returns to the workspace only after persistence.
-        val expectedNote = "Synthetic note: confirm location eligibility."
-        val expectedDraft = "Synthetic application draft for device verification only."
-        val saved = runBlocking { app.jobsRepository.current() }.applications.single { it.jobId == fixture.id }
-        assertEquals(expectedNote, saved.notes)
-        assertEquals(expectedDraft, saved.draft)
-        assertEquals("preparing", saved.status)
-        // Inspect the actual DataStore file without opening a second DataStore on that file.
-        val persisted = Json { ignoreUnknownKeys = true }.decodeFromString<JobsState>(
-            app.filesDir.resolve("mebot/jobs.json").readText()
-        ).applications.single { it.jobId == fixture.id }
-        assertEquals(expectedNote, persisted.notes)
-        assertEquals(expectedDraft, persisted.draft)
-        assertEquals("preparing", persisted.status)
-
-        scenario!!.close()
-        scenario = null
-        launch()
-        openFixture()
-        compose.onNodeWithTag("jobs-prepare").performClick()
-        waitFor("jobs-notes")
-        compose.onNodeWithTag("jobs-notes").performScrollTo().assertTextContains(expectedNote)
-        compose.onNodeWithTag("jobs-open-document").performScrollTo().performClick()
-        waitFor("jobs-document-text")
-        compose.onNodeWithTag("jobs-document-text").performScrollTo().assertTextContains(expectedDraft)
-        capture("13-durable-draft-fresh-launch")
+        compose.onNodeWithTag("jobs-prepare").assertDoesNotExist()
+        compose.onNodeWithContentDescription(app.getString(R.string.jobs_unsave)).performClick()
+        compose.waitUntil(5000) { !runBlocking { app.jobsRepository.current().applications.single().bookmarked } }
+        scenario!!.recreate(); waitFor("jobs-detail")
+        capture("08-restored-detail")
+        compose.onNodeWithContentDescription(app.getString(R.string.jobs_save)).performClick()
+        compose.waitUntil(5000) { runBlocking { app.jobsRepository.current().applications.single().bookmarked } }
+        compose.onNodeWithContentDescription(app.getString(R.string.jobs_back)).performClick()
+        waitFor("jobs-screen")
+        compose.onNodeWithTag("jobs-screen").performScrollToNode(hasTestTag("jobs-tab-saved"))
+        compose.onNodeWithTag("jobs-tab-saved").performClick()
+        compose.onNodeWithTag("jobs-screen").performScrollToNode(hasTestTag("job-card-${fixture.id}"))
+        compose.onNodeWithTag("job-source-${fixture.id}", useUnmergedTree = true).assertExists()
+        capture("09-saved")
+        scenario!!.close(); scenario = null
+        launch(); openFixture()
+        val stored = runBlocking { app.jobsRepository.current() }.applications.single()
+        assertTrue(stored.bookmarked)
+        assertEquals(legacy.notes, stored.notes)
+        assertEquals(legacy.draft, stored.draft)
+        assertEquals(legacy.status, stored.status)
+        capture("10-fresh-launch-detail")
     }
 
     @Test fun aiConsentShowsNoPersonalDataSelectedAndCancelSendsNothing() {

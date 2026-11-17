@@ -102,6 +102,19 @@ class JobsAssistantTest {
         }
     }
 
+    @Test fun discoveryActionsDoNotStartApplicationOrDocumentWorkflows() {
+        assertEquals(setOf(JobsAssistantIntent.REQUIREMENTS, JobsAssistantIntent.QUESTION), JobsAssistantIntent.entries.toSet())
+        val request = JobsAssistantRequest()
+        assertTrue(request.sharedContext.isEmpty())
+        assertTrue(request.contextRevision.isEmpty())
+        val explanation = JobsAssistant.requestText(JobsAssistantIntent.REQUIREMENTS, "")
+        assertTrue(explanation.contains("location restrictions"))
+        assertTrue(explanation.contains("missing details"))
+        assertTrue(explanation.contains("original listing"))
+        assertTrue(explanation.contains("not an application service"))
+        assertFalse(explanation.contains("Draft a concise cover letter"))
+    }
+
     @Test fun everyTypedIntentFitsUserTurnLimitAndPreservesTheQuestion() {
         val question = "Q".repeat(1000)
         JobsAssistantIntent.entries.forEach { intent ->
@@ -117,6 +130,21 @@ class JobsAssistantTest {
         }
         assertThrows(IllegalArgumentException::class.java) {
             JobsAssistant.requestText(JobsAssistantIntent.QUESTION, "Q\u0000")
+        }
+    }
+
+    @Test fun listingAvailabilityIsDatedProviderEvidenceNotAnOpenJobGuarantee() {
+        listOf("", "active", "closed", "unknown").forEach { status ->
+            val dated = job.copy(sourceStatus = status, statusCheckedAt = 1794820000123L)
+            val evidence = JobsAssistant.conversation(dated).attachments.single().text
+            val listing = Json.parseToJsonElement(evidence.substringAfter("\n")).jsonObject
+            assertEquals(status, listing.getValue("source_status_as_reported").jsonPrimitive.content)
+            assertEquals("1794820000123", listing.getValue("status_checked_at_epoch_ms").jsonPrimitive.content)
+            val note = listing.getValue("availability_note").jsonPrimitive.content
+            assertTrue(note.contains("not a guarantee"))
+            assertTrue(note.contains("Only explicit closed means not current"))
+            assertTrue(note.contains("blank or unknown is unverified"))
+            ConversationLogic.validate(listOf(JobsAssistant.conversation(dated)))
         }
     }
 

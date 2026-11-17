@@ -111,10 +111,10 @@ internal fun JobsGuidedSetup(preferences: JobPreferences, onboarding: Boolean, b
                             Icon(Icons.Outlined.Add, null)
                         } }
                     }
-                    if (customRole || draft.roles.isNotBlank()) OutlinedTextField(draft.roles, { update(draft.copy(roles = it.take(500))) },
+                    if (customRole) OutlinedTextField(draft.roles, { update(draft.copy(roles = it.take(500))) },
                         label = { Text(stringResource(R.string.jobs_selected_roles)) }, supportingText = { Text(stringResource(R.string.jobs_roles_hint)) },
                         modifier = Modifier.fillMaxWidth().testTag("jobs-role-custom"), shape = RoundedCornerShape(16.dp))
-                    else TextButton(onClick = { customRole = true }) { Text(stringResource(R.string.jobs_add_own_role)) }
+                    else TextButton(onClick = { customRole = true }) { Text(stringResource(if (draft.roles.isBlank()) R.string.jobs_add_own_role else R.string.jobs_edit_keywords)) }
                     SupportingText(stringResource(if (draft.roles.isBlank()) R.string.jobs_all_roles_default else R.string.jobs_choices_editable))
                 }
                 1 -> {

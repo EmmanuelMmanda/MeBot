@@ -38,7 +38,7 @@
     <string name="jobs_no_matches">No jobs match these filters</string>
     <string name="jobs_no_matches_body">Try another role or location, or browse all latest listings. Browsing all clears this search, not your saved preferences.</string>
     <string name="jobs_empty_saved">Keep worthwhile opportunities here</string>
-    <string name="jobs_empty_saved_body">Save a job to return to its details and prepare at your own pace.</string>
+    <string name="jobs_empty_saved_body">Save a listing to compare it or return to its original source later.</string>
     <string name="jobs_empty_tracker">Your applications, in one place</string>
     <string name="jobs_empty_tracker_body">Open a job and start preparing. Opening an employer link never marks an application as submitted.</string>
     <string name="jobs_back">Back to jobs</string>
@@ -65,7 +65,7 @@
     <string name="jobs_prepare">Prepare application</string>
     <string name="jobs_assistant">Discuss this job</string>
     <string name="jobs_assistant_hint">Optional AI help uses this job and the context you choose to share. Browsing and tracking work without AI.</string>
-    <string name="jobs_ask_prompt">Explain this job’s requirements, distinguish known facts from unknowns, and help me plan an honest application. Ask before using personal details.</string>
+    <string name="jobs_ask_prompt">Explain this role and its requirements. Separate source facts from unknowns, and clarify location, pay and eligibility. Ask before using personal details.</string>
     <string name="jobs_document_prompt">Help prepare an application for this job. First ask for my relevant verified experience and CV. Do not invent qualifications. Prepare editable CV and cover-letter drafts for my review, not submission.</string>
     <string name="jobs_workspace">Application workspace</string>
     <string name="jobs_status">Application status</string>
@@ -111,10 +111,10 @@
     <string name="jobs_notification_denied">Notifications are not allowed. Jobs still works; you can enable notifications in device settings.</string>
     <string name="jobs_daily">Daily</string>
     <string name="jobs_weekly">Weekly</string>
-    <string name="jobs_error_partial">Some sources could not refresh. Available results and saved listings remain visible; check each listing’s last-updated time.</string>
+    <string name="jobs_error_partial">This refresh is partial. Some listings or source checks are unavailable; available results and saved listings remain visible. Check each listing’s dates.</string>
     <string name="jobs_error_storage">Could not save changes on this device. Your edits remain here. Try saving again; do not close the app until they are saved.</string>
     <string name="jobs_saving">Saving your changes…</string>
-    <string name="jobs_snapshot_warning">This saved job is no longer in the current feed. Your progress is retained; check availability on the original listing before applying.</string>
+    <string name="jobs_snapshot_warning">This saved listing is no longer in the current feed. Check its original source for availability.</string>
     <string name="jobs_keep_editing">Keep editing</string>
     <string name="jobs_salary_currency">Currency code</string>
     <string name="jobs_salary_currency_hint">Use a currency code, for example TZS, USD or KES.</string>
@@ -148,7 +148,7 @@
     <string name="jobs_read_more">Read full description</string>
     <string name="jobs_understand_role">Understand this role with AI</string>
     <string name="jobs_source_named">Listed by %1$s</string>
-    <string name="jobs_apply_on_source">Apply on %1$s</string>
+    <string name="jobs_apply_on_source">View listing on %1$s</string>
     <string name="jobs_role_technology">Technology</string>
     <string name="jobs_role_design">Design</string>
     <string name="jobs_role_data">Data &amp; analysis</string>
@@ -158,7 +158,7 @@
     <string name="jobs_role_operations">Operations &amp; projects</string>
     <string name="jobs_role_finance">Finance</string>
     <string name="jobs_setup_roles">What work interests you?</string>
-    <string name="jobs_setup_roles_body">Pick a few directions. We will use these to find relevant listings, not to decide what you qualify for.</string>
+    <string name="jobs_setup_roles_body">Choose a few roles. You can change them later.</string>
     <string name="jobs_setup_skills">What do you bring?</string>
     <string name="jobs_setup_skills_body">Choose skills you actually use. These suggestions are starting points, not claims about you.</string>
     <string name="jobs_setup_location">Where could you work?</string>
@@ -193,9 +193,9 @@
     <string name="jobs_edit_choice">Edit</string>
     <string name="jobs_suggested_prefill">Suggested from %1$s. Review or edit before continuing.</string>
     <string name="jobs_browse_headline">Your next opportunity</string>
-    <string name="jobs_search_summary">Based on your choices. Always verify eligibility.</string>
+    <string name="jobs_search_summary">Find relevant roles, check the requirements and open the original listing.</string>
     <string name="jobs_connected_modules">Keep exploring in MeBot</string>
-    <string name="jobs_connected_modules_body">Related interests, not proof of qualifications. Your modules stay separate from job applications.</string>
+    <string name="jobs_connected_modules_body">Related interests, not proof of qualifications. Open a module to explore its context.</string>
     <string name="jobs_prepare_heading">Prepare a thoughtful application</string>
     <string name="jobs_prepare_body">Keep the evidence, draft and next step together. Nothing is sent to an employer here.</string>
     <string name="jobs_prepare_step_one">1. Collect your evidence</string>
@@ -215,7 +215,7 @@
     <string name="jobs_ai_nothing_shared">No personal information selected. Only the public listing and your request will be shared.</string>
     <string name="jobs_ai_limit">This selection is too long. Keep it under 8,000 characters before sending.</string>
     <string name="jobs_ai_send">Send to AI</string>
-    <string name="jobs_ai_not_connected">Connect AI from the MeBot tab to use this action. You can still write and save your draft here.</string>
+    <string name="jobs_ai_not_connected">Connect AI from the MeBot tab to ask about this role. Browsing, saving and source links work without AI.</string>
     <string name="jobs_ai_cover_prompt">Help me draft a factual cover letter for this role. Use only the candidate evidence I explicitly share; ask for missing details and do not invent qualifications.</string>
     <string name="jobs_ai_cv_prompt">Suggest concrete CV improvements for this role using only the evidence I share. Do not invent experience, education or achievements.</string>
     <string name="jobs_ai_interview_prompt">Help me prepare for an interview for this role. Ground practice questions in the listing and keep suggested answers honest about missing personal evidence.</string>
@@ -227,4 +227,19 @@
     <string name="jobs_connect_to_continue">Connect AI to continue</string>
     <string name="jobs_listing_tags">Listing tags</string>
     <string name="jobs_listing_tags_help">Choose tags to keep as reminders in your notes. Publisher tags are not proof that you meet a requirement.</string>
+    <string name="jobs_edit_keywords">Edit keywords</string>
+    <string name="jobs_salary_unknown">Salary not disclosed</string>
+    <string name="jobs_listing_closed">This listing is marked closed by its source. Check the original page for updates.</string>
+    <string name="jobs_source_brief">Remote-focused listings. Availability can change; check the original source.</string>
+    <string name="jobs_about_sources">About these listings</string>
+    <string name="jobs_custom_question">Ask a specific question (optional)</string>
+    <string name="jobs_status_source_active">Source reports active; availability is not independently confirmed.</string>
+    <string name="jobs_status_source_closed">Source reports closed.</string>
+    <string name="jobs_status_source_unknown">Availability unknown. Verify the original listing.</string>
+    <string name="jobs_status_checked">Source status checked: %1$s</string>
+    <string name="jobs_question_count">%1$d / 1,000 characters</string>
+    <string name="jobs_question_invalid">Use at most 1,000 characters and remove unsupported null characters. Your question is kept here.</string>
+    <string name="jobs_ai_fresh_chat">Each Jobs action starts a fresh chat. Earlier chats remain in MeBot history.</string>
+    <string name="jobs_jobicy_region_unassigned">Region not specified by Jobicy</string>
+    <string name="jobs_source_region_raw">Source region label: %1$s. Confirm country eligibility with the employer.</string>
 </resources>

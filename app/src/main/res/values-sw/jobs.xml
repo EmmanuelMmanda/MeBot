@@ -38,7 +38,7 @@
     <string name="jobs_no_matches">Hakuna kazi zinazolingana na vichujio hivi</string>
     <string name="jobs_no_matches_body">Jaribu nafasi au eneo lingine, au angalia matangazo yote mapya. Kuangalia yote huondoa maneno ya utafutaji huu, si mapendeleo uliyohifadhi.</string>
     <string name="jobs_empty_saved">Hifadhi hapa nafasi zinazokuvutia</string>
-    <string name="jobs_empty_saved_body">Hifadhi kazi ili urudi kusoma maelezo na kujiandaa kwa muda wako.</string>
+    <string name="jobs_empty_saved_body">Hifadhi tangazo ili kulinganisha au kurudi kwenye chanzo chake baadaye.</string>
     <string name="jobs_empty_tracker">Maombi yako, sehemu moja</string>
     <string name="jobs_empty_tracker_body">Fungua kazi na anza kujiandaa. Kufungua kiungo cha mwajiri hakumaanishi umetuma ombi.</string>
     <string name="jobs_back">Rudi kwenye kazi</string>
@@ -65,7 +65,7 @@
     <string name="jobs_prepare">Andaa ombi</string>
     <string name="jobs_assistant">Jadili kazi hii</string>
     <string name="jobs_assistant_hint">Msaada wa AI si lazima. Hutumia kazi hii na taarifa unazochagua kushiriki. Kutafuta na kufuatilia kazi kunafanya kazi bila AI.</string>
-    <string name="jobs_ask_prompt">Eleza mahitaji ya kazi hii, tofautisha ukweli na mambo yasiyojulikana, kisha nisaidie kupanga ombi la kweli. Uliza kabla ya kutumia taarifa binafsi.</string>
+    <string name="jobs_ask_prompt">Eleza kazi hii na vigezo vyake. Tofautisha ukweli wa chanzo na yasiyojulikana, na fafanua eneo, malipo na ustahiki. Uliza kabla ya kutumia taarifa binafsi.</string>
     <string name="jobs_document_prompt">Nisaidie kuandaa ombi la kazi hii. Kwanza uliza uzoefu wangu halisi na CV. Usibuni sifa. Andaa rasimu za CV na barua nipitie, si kutuma.</string>
     <string name="jobs_workspace">Maandalizi ya ombi</string>
     <string name="jobs_status">Hatua ya ombi</string>
@@ -111,10 +111,10 @@
     <string name="jobs_notification_denied">Arifa hazijaruhusiwa. Sehemu ya Kazi bado inafanya kazi; unaweza kuruhusu arifa kwenye mipangilio ya simu.</string>
     <string name="jobs_daily">Kila siku</string>
     <string name="jobs_weekly">Kila wiki</string>
-    <string name="jobs_error_partial">Baadhi ya vyanzo havijapatikana. Matokeo yaliyopo na kazi ulizohifadhi bado zinaonekana; angalia muda wa taarifa za kila kazi.</string>
+    <string name="jobs_error_partial">Usasishaji huu haujakamilika. Baadhi ya nafasi au ukaguzi wa vyanzo havijapatikana; matokeo yaliyopo na kazi ulizohifadhi bado zinaonekana. Angalia tarehe za kila nafasi.</string>
     <string name="jobs_error_storage">Mabadiliko hayajahifadhiwa kwenye kifaa. Uhariri wako bado upo. Jaribu kuhifadhi tena; usifunge programu mpaka uhifadhi.</string>
     <string name="jobs_saving">Inahifadhi mabadiliko…</string>
-    <string name="jobs_snapshot_warning">Kazi hii iliyohifadhiwa haipo kwenye orodha ya sasa. Maendeleo yako bado yapo; hakiki upatikanaji kwenye tangazo la awali kabla ya kuomba.</string>
+    <string name="jobs_snapshot_warning">Tangazo hili lililohifadhiwa halipo tena kwenye orodha ya sasa. Hakiki upatikanaji kwenye chanzo chake.</string>
     <string name="jobs_keep_editing">Endelea kuhariri</string>
     <string name="jobs_salary_currency">Msimbo wa sarafu</string>
     <string name="jobs_salary_currency_hint">Tumia msimbo wa sarafu, kwa mfano TZS, USD au KES.</string>
@@ -148,7 +148,7 @@
     <string name="jobs_read_more">Soma maelezo yote</string>
     <string name="jobs_understand_role">Elewa nafasi hii kwa AI</string>
     <string name="jobs_source_named">Imeorodheshwa na %1$s</string>
-    <string name="jobs_apply_on_source">Tuma ombi kupitia %1$s</string>
+    <string name="jobs_apply_on_source">Angalia tangazo kwenye %1$s</string>
     <string name="jobs_role_technology">Teknolojia</string>
     <string name="jobs_role_design">Ubunifu</string>
     <string name="jobs_role_data">Data na uchambuzi</string>
@@ -158,7 +158,7 @@
     <string name="jobs_role_operations">Uendeshaji na miradi</string>
     <string name="jobs_role_finance">Fedha</string>
     <string name="jobs_setup_roles">Unapenda kazi gani?</string>
-    <string name="jobs_setup_roles_body">Chagua maeneo machache. Tutayatumia kupata nafasi zinazohusiana, si kuamua sifa zako.</string>
+    <string name="jobs_setup_roles_body">Chagua kazi chache. Unaweza kubadilisha baadaye.</string>
     <string name="jobs_setup_skills">Una ujuzi gani?</string>
     <string name="jobs_setup_skills_body">Chagua ujuzi unaoutumia. Haya ni mapendekezo ya kuanzia, si madai kuhusu wewe.</string>
     <string name="jobs_setup_location">Unaweza kufanya kazi wapi?</string>
@@ -193,9 +193,9 @@
     <string name="jobs_edit_choice">Hariri</string>
     <string name="jobs_suggested_prefill">Pendekezo kutoka %1$s. Kagua au hariri kabla ya kuendelea.</string>
     <string name="jobs_browse_headline">Nafasi yako inayofuata</string>
-    <string name="jobs_search_summary">Kutokana na chaguo zako. Thibitisha sifa zinazohitajika.</string>
+    <string name="jobs_search_summary">Tafuta kazi zinazokufaa, soma vigezo na ufungue tangazo la asili.</string>
     <string name="jobs_connected_modules">Endelea kuchunguza ndani ya MeBot</string>
-    <string name="jobs_connected_modules_body">Mapendeleo yanayohusiana, si uthibitisho wa sifa. Moduli zako zinabaki tofauti na maombi ya kazi.</string>
+    <string name="jobs_connected_modules_body">Haya ni maslahi yanayohusiana, si uthibitisho wa sifa. Fungua moduli kuchunguza muktadha wake.</string>
     <string name="jobs_prepare_heading">Andaa ombi makini</string>
     <string name="jobs_prepare_body">Weka ushahidi, rasimu na hatua inayofuata pamoja. Hakuna kinachotumwa kwa mwajiri hapa.</string>
     <string name="jobs_prepare_step_one">1. Kusanya ushahidi wako</string>
@@ -215,7 +215,7 @@
     <string name="jobs_ai_nothing_shared">Hakuna taarifa binafsi zilizochaguliwa. Nafasi ya umma na ombi lako pekee vitashirikiwa.</string>
     <string name="jobs_ai_limit">Chaguo hili ni refu sana. Punguza hadi chini ya herufi 8,000 kabla ya kutuma.</string>
     <string name="jobs_ai_send">Tuma kwa AI</string>
-    <string name="jobs_ai_not_connected">Unganisha AI kwenye kichupo cha MeBot kutumia hatua hii. Bado unaweza kuandika na kuhifadhi rasimu hapa.</string>
+    <string name="jobs_ai_not_connected">Unganisha AI kwenye kichupo cha MeBot kuuliza kuhusu kazi hii. Kutafuta, kuhifadhi na viungo vya chanzo hufanya kazi bila AI.</string>
     <string name="jobs_ai_cover_prompt">Nisaidie kuandaa barua ya maombi yenye ukweli kwa nafasi hii. Tumia tu ushahidi ninaoshiriki wazi; uliza taarifa zinazokosekana bila kubuni sifa.</string>
     <string name="jobs_ai_cv_prompt">Pendekeza maboresho mahususi ya CV kwa nafasi hii kwa ushahidi ninaoshiriki pekee. Usibuni uzoefu, elimu au mafanikio.</string>
     <string name="jobs_ai_interview_prompt">Nisaidie kujiandaa kwa usaili wa nafasi hii. Tumia maelezo ya nafasi kuandaa maswali na usibuni ushahidi binafsi kwenye majibu.</string>
@@ -227,4 +227,19 @@
     <string name="jobs_connect_to_continue">Unganisha AI ili kuendelea</string>
     <string name="jobs_listing_tags">Lebo za tangazo</string>
     <string name="jobs_listing_tags_help">Chagua lebo za kuweka kama vikumbusho kwenye maelezo yako. Lebo za mchapishaji si uthibitisho kwamba unakidhi mahitaji.</string>
+    <string name="jobs_edit_keywords">Hariri maneno ya utafutaji</string>
+    <string name="jobs_salary_unknown">Mshahara haujawekwa wazi</string>
+    <string name="jobs_listing_closed">Chanzo kimeonyesha tangazo hili limefungwa. Angalia ukurasa wa asili kwa taarifa mpya.</string>
+    <string name="jobs_source_brief">Matangazo mengi ni kazi za mbali. Upatikanaji unaweza kubadilika; hakiki chanzo.</string>
+    <string name="jobs_about_sources">Kuhusu matangazo haya</string>
+    <string name="jobs_custom_question">Uliza swali maalumu (hiari)</string>
+    <string name="jobs_status_source_active">Chanzo kinasema tangazo liko wazi; upatikanaji haujathibitishwa kwa njia nyingine.</string>
+    <string name="jobs_status_source_closed">Chanzo kinasema tangazo limefungwa.</string>
+    <string name="jobs_status_source_unknown">Upatikanaji haujulikani. Hakiki tangazo la asili.</string>
+    <string name="jobs_status_checked">Hali ya chanzo ilikaguliwa: %1$s</string>
+    <string name="jobs_question_count">Herufi %1$d / 1,000</string>
+    <string name="jobs_question_invalid">Tumia herufi zisizozidi 1,000 na uondoe herufi tupu zisizokubalika. Swali lako limehifadhiwa hapa.</string>
+    <string name="jobs_ai_fresh_chat">Kila hatua ya Jobs huanza mazungumzo mapya. Mazungumzo ya awali hubaki kwenye historia ya MeBot.</string>
+    <string name="jobs_jobicy_region_unassigned">Jobicy haijabainisha eneo</string>
+    <string name="jobs_source_region_raw">Eneo lililoandikwa na chanzo: %1$s. Hakiki ustahiki wa nchi na mwajiri.</string>
 </resources>
