@@ -115,15 +115,18 @@ class JobsRepository(context: Context, private val http: FeedHttp = SecureFeedHt
                 if (cursor == null) return@source collected.distinctBy { it.id }
                 require(seenCursors.add(cursor!!)) { "Repeated source cursor" }
             }
-            // Do not silently replace a complete cache with a truncated provider response.
-            error("Job source exceeded bounded page limit")
+            // A bounded traversal is useful even when the provider has more pages. Keep
+            // prior unseen rows and explicitly report partial coverage, never pretend complete.
+            failed += "Jobicy partial"
+            (collected + before.jobs.filter { it.source == "Jobicy" }).distinctBy { it.id }
         }
         // Source status is a separate verification pass. An unavailable status service
         // never means a role is closed, and never erases a saved snapshot or document.
         val statusIds = (fetched.map { it.id } + before.applications.filter { it.bookmarked }.map { it.jobId }).distinct()
             .filter { it.matches(Regex("jobicy:[1-9][0-9]{0,18}")) && it.substringAfter(':').toLongOrNull() != null }
+        if (statusIds.size > 2000) failed += "Jobicy status partial"
         val statuses = if ("Jobicy" !in failed && statusIds.isNotEmpty()) {
-            try { fetchJobicyStatuses(http, statusIds) }
+            try { fetchJobicyStatuses(http, statusIds.take(2000)) }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { failed += "Jobicy status"; emptyMap() }
         } else emptyMap()
@@ -136,10 +139,24 @@ class JobsRepository(context: Context, private val http: FeedHttp = SecureFeedHt
             job.copy(sourceStatus = prior.sourceStatus, statusCheckedAt = prior.statusCheckedAt)
         } ?: job
         val anySourceSucceeded = "Remotive" !in failed || "Jobicy" !in failed
-        update { if (epoch.get() == token) it.copy(
-            jobs = fetched.distinctBy { job -> job.id }.map(::checked).filterNot { job -> job.sourceStatus == "closed" },
-            applications = it.applications.map { record -> record.copy(snapshot = record.snapshot?.let(::checked)) },
-            lastRefreshAt = if (anySourceSucceeded) now else it.lastRefreshAt, failedSources = failed) else it }
+        update { current ->
+            if (epoch.get() != token) current else {
+                val candidates = fetched.distinctBy { it.id }.map(::checked).filterNot { it.sourceStatus == "closed" }
+                // Reserve room for user-owned records. Oversized catalogs must not make
+                // the entire persistent store (including saved work) fail to commit.
+                val userBytes = JobsJson.encodeToString(current.copy(jobs = emptyList())).toByteArray(Charsets.UTF_8).size
+                val catalogBudget = minOf(8 * 1024 * 1024, (16 * 1024 * 1024 - userBytes - 256 * 1024).coerceAtLeast(0))
+                var bytes = 2
+                val bounded = candidates.filter { job ->
+                    val size = JobsJson.encodeToString(job).toByteArray(Charsets.UTF_8).size + 1
+                    if (bytes + size <= catalogBudget) { bytes += size; true } else false
+                }
+                current.copy(jobs = bounded,
+                    applications = current.applications.map { record -> record.copy(snapshot = record.snapshot?.let(::checked)) },
+                    lastRefreshAt = if (anySourceSucceeded) now else current.lastRefreshAt,
+                    failedSources = (failed + if (bounded.size < candidates.size) listOf("Catalog partial") else emptyList()).distinct())
+            }
+        }
         if (!anySourceSucceeded) throw mebot.nguli.com.feed.FeedFailure("provider_error")
         true
     }

@@ -111,7 +111,7 @@
     <string name="jobs_notification_denied">Arifa hazijaruhusiwa. Sehemu ya Kazi bado inafanya kazi; unaweza kuruhusu arifa kwenye mipangilio ya simu.</string>
     <string name="jobs_daily">Kila siku</string>
     <string name="jobs_weekly">Kila wiki</string>
-    <string name="jobs_error_partial">Baadhi ya vyanzo havijapatikana. Matokeo yaliyopo na kazi ulizohifadhi bado zinaonekana; angalia muda wa taarifa za kila kazi.</string>
+    <string name="jobs_error_partial">Usasishaji huu haujakamilika. Baadhi ya nafasi au ukaguzi wa vyanzo havijapatikana; matokeo yaliyopo na kazi ulizohifadhi bado zinaonekana. Angalia tarehe za kila nafasi.</string>
     <string name="jobs_error_storage">Mabadiliko hayajahifadhiwa kwenye kifaa. Uhariri wako bado upo. Jaribu kuhifadhi tena; usifunge programu mpaka uhifadhi.</string>
     <string name="jobs_saving">Inahifadhi mabadiliko…</string>
     <string name="jobs_snapshot_warning">Tangazo hili lililohifadhiwa halipo tena kwenye orodha ya sasa. Hakiki upatikanaji kwenye chanzo chake.</string>

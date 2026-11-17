@@ -76,8 +76,18 @@ for variant in phone-light phone-dark-large-text tablet-light; do
     -Pandroid.testInstrumentationRunnerArguments.qaVariant="$variant" --stacktrace > "$evidence/instrumentation-$variant.log" 2>&1
 done
 adb -s "$ANDROID_SERIAL" pull /sdcard/Android/data/mebot.nguli.com.debug/files/jobs-device-qa "$evidence/"
+# Keep this exact discovery-journey set aligned with JobsDeviceJourneyTest.capture calls.
+expected_captures=(
+  01-roles 02-skills 03-location 04-review 05-matches 06-restored-matches
+  07-detail 08-restored-detail 09-saved 10-fresh-launch-detail 12-ai-consent-not-sent
+)
 for variant in phone-light phone-dark-large-text tablet-light; do
-  count=$(find "$evidence/jobs-device-qa/$variant" -name '*.png' -type f | wc -l)
-  [[ "$count" -ge 13 ]] || { echo "Incomplete native screenshot evidence for $variant ($count/13)." >&2; exit 4; }
+  directory="$evidence/jobs-device-qa/$variant"
+  for capture in "${expected_captures[@]}"; do
+    [[ -s "$directory/$capture.png" ]] || { echo "Missing native screenshot for $variant: $capture.png" >&2; exit 4; }
+  done
+  actual=$(find "$directory" -name '*.png' -type f -printf '%f\n' | LC_ALL=C sort)
+  expected=$(printf '%s.png\n' "${expected_captures[@]}" | LC_ALL=C sort)
+  [[ "$actual" == "$expected" ]] || { echo "Unexpected native screenshot filename set for $variant." >&2; exit 4; }
 done
 printf 'Instrumented journey completed; screenshots still require human/model visual inspection.\n' > "$evidence/RESULT.txt"

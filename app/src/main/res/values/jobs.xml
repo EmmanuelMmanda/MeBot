@@ -111,7 +111,7 @@
     <string name="jobs_notification_denied">Notifications are not allowed. Jobs still works; you can enable notifications in device settings.</string>
     <string name="jobs_daily">Daily</string>
     <string name="jobs_weekly">Weekly</string>
-    <string name="jobs_error_partial">Some sources could not refresh. Available results and saved listings remain visible; check each listing’s last-updated time.</string>
+    <string name="jobs_error_partial">This refresh is partial. Some listings or source checks are unavailable; available results and saved listings remain visible. Check each listing’s dates.</string>
     <string name="jobs_error_storage">Could not save changes on this device. Your edits remain here. Try saving again; do not close the app until they are saved.</string>
     <string name="jobs_saving">Saving your changes…</string>
     <string name="jobs_snapshot_warning">This saved listing is no longer in the current feed. Check its original source for availability.</string>
