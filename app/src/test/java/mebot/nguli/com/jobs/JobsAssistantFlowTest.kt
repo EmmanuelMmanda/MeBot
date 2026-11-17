@@ -48,15 +48,19 @@ class JobsAssistantFlowTest {
     @After fun close() { models.clear(); if (::app.isInitialized) app.alarms.clearAll(); Dispatchers.resetMain() }
 
     private suspend fun answer(request: JobsAssistantRequest): AiConversation {
-        val id = JobsAssistant.conversation(job, request.sharedContext).id
-        val previous = app.feedRepository.current().conversations.find { it.id == id }?.turns?.size ?: 0
+        val previousIds = app.feedRepository.current().conversations.map { it.id }.toSet()
         val reviewed = if (request.sharedContext.isNotEmpty() && request.contextRevision.isEmpty())
             request.copy(contextRevision = currentRevision()) else request
         vm.openJobsConversation(job, reviewed).join()
+        val id = requireNotNull(vm.ui.value.activeConversationId)
+        assertFalse("Every reviewed detail action creates a new conversation", id in previousIds)
         val saved = withTimeout(10_000) { app.feedRepository.state.first { state ->
-            state.conversations.any { it.id == id && it.turns.size > previous && it.turns.lastOrNull()?.role == "assistant" }
+            state.conversations.any { it.id == id && it.turns.lastOrNull()?.role == "assistant" }
         } }
         withTimeout(10_000) { vm.ui.first { !it.asking && it.activeConversationId == id } }
+        // Unconfined observers resume during the final UI emission, before Job completion.
+        val send = FeedViewModel::class.java.getDeclaredField("askJob").apply { isAccessible = true }.get(vm) as Job
+        withTimeout(10_000) { send.join() }
         return saved.conversations.single { it.id == id }
     }
 
@@ -144,34 +148,64 @@ class JobsAssistantFlowTest {
         }
     }
 
-    @Test fun sameContextReopenPreservesChosenFileAndExistingHistory(): Unit = runBlocking {
+    @Test fun sameContextDetailActionDoesNotTransmitOldFilesOrHistoryButPreservesThemLocally(): Unit = runBlocking {
         val request = JobsAssistantRequest(sharedContext = "Reviewed fact", question = "First question")
         val first = answer(request)
         val file = AiAttachment(id = "user-file", name = "cv.txt", text = "Explicitly chosen CV excerpt")
         app.feedRepository.update { state -> state.copy(conversations = state.conversations.map {
             if (it.id == first.id) it.copy(attachments = it.attachments + file) else it
         }) }
+        val preserved = app.feedRepository.current().conversations.single { it.id == first.id }
         val second = answer(request.copy(question = "Second question"))
-        assertEquals(first.id, second.id)
-        assertEquals(first.turns, second.turns.take(first.turns.size))
-        assertEquals(file.text, app.requests.last().attachments.single { it.id == file.id }.text)
-        assertEquals(3, second.attachments.size)
+        assertNotEquals(first.id, second.id)
+        assertEquals(preserved, app.feedRepository.current().conversations.single { it.id == first.id })
+        assertTrue(app.requests.last().attachments.none { it.id == file.id })
+        assertTrue(app.requests.last().turns.none { it.text.contains("First question") })
+        assertEquals(2, second.attachments.size)
+        assertEquals(2, second.turns.size)
+        // Once inside the reviewed conversation, ordinary follow-ups retain that chat.
+        vm.sendConversation("Follow-up in this chat")
+        val followed = withTimeout(10_000) { app.feedRepository.state.first { state ->
+            state.conversations.any { it.id == second.id && it.turns.size == 4 && it.turns.last().role == "assistant" }
+        } }
+        assertEquals(2, followed.conversations.size)
+        assertEquals(second.id, app.requests.last().id)
     }
 
-    @Test fun capacityConflictRejectsWithoutDiscardingUserFilesOrUsingQuota(): Unit = runBlocking {
-        val shared = "Reviewed fact"
-        val candidate = JobsAssistant.conversation(job, shared)
-        val existing = candidate.copy(attachments = listOf(candidate.attachments.first(),
-            AiAttachment(id = "file-a", name = "a.txt", text = "Chosen A"),
-            AiAttachment(id = "file-b", name = "b.txt", text = "Chosen B")))
-        app.feedRepository.update { it.copy(conversations = listOf(existing)) }
+    @Test fun blankContextDetailActionCannotResendPersonalHistoryFromEarlierBlankContextChat(): Unit = runBlocking {
+        val first = answer(JobsAssistantRequest(question = "Explain this role"))
+        val privateTurn = AiTurn(role = "user", text = "Private prior-chat fact: my confidential work history.")
+        val privateFile = AiAttachment(id = "private-file", name = "private-cv.txt", text = "Private prior-chat CV details")
+        app.feedRepository.update { state -> state.copy(conversations = state.conversations.map {
+            if (it.id == first.id) it.copy(turns = it.turns + privateTurn, attachments = it.attachments + privateFile) else it
+        }) }
+        val preserved = app.feedRepository.current().conversations.single { it.id == first.id }
+        val second = answer(JobsAssistantRequest(question = "Explain this role again"))
+        assertNotEquals(first.id, second.id)
+        assertEquals(preserved, app.feedRepository.current().conversations.single { it.id == first.id })
+        val dispatched = app.requests.last()
+        assertEquals(1, dispatched.attachments.size)
+        assertEquals("job-listing.txt", dispatched.attachments.single().name)
+        assertTrue(dispatched.turns.none { it.id == privateTurn.id || it.text.contains("confidential work history") })
+        assertTrue(dispatched.attachments.none { it.id == privateFile.id || it.text.contains("Private prior-chat CV") })
+        assertTrue(dispatched.attachments.none { it.name == "candidate-context.txt" })
+        assertEquals(2, app.feedRepository.current().conversations.size)
+    }
+
+    @Test fun conversationCapacityRejectsNewActionWithoutDiscardingOldHistoryOrUsingQuota(): Unit = runBlocking {
+        val existing = (1..ConversationLogic.maxConversations).map { index ->
+            JobsAssistant.conversation(job).copy(id = "old-job-$index", attachments = listOf(
+                AiAttachment(id = "file-$index", name = "saved.txt", text = "Saved personal evidence $index")))
+        }
+        app.feedRepository.update { it.copy(conversations = existing) }
         val before = app.feedRepository.current()
-        vm.openJobsConversation(job, JobsAssistantRequest(sharedContext = shared, contextRevision = currentRevision())).join()
-        assertEquals("invalid_input", vm.ui.value.error)
+        vm.openJobsConversation(job, JobsAssistantRequest()).join()
+        assertEquals("conversation_limit", vm.ui.value.error)
         assertTrue(app.requests.isEmpty())
         assertEquals(before.requestsToday, app.feedRepository.current().requestsToday)
-        assertEquals(existing, app.feedRepository.current().conversations.single())
+        assertEquals(existing, app.feedRepository.current().conversations)
     }
+
 }
 
 /** Captures only synthetic requests; the production conversation engine still streams and commits. */

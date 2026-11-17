@@ -239,4 +239,5 @@
     <string name="jobs_status_checked">Hali ya chanzo ilikaguliwa: %1$s</string>
     <string name="jobs_question_count">Herufi %1$d / 1,000</string>
     <string name="jobs_question_invalid">Tumia herufi zisizozidi 1,000 na uondoe herufi tupu zisizokubalika. Swali lako limehifadhiwa hapa.</string>
+    <string name="jobs_ai_fresh_chat">Kila hatua ya Jobs huanza mazungumzo mapya. Mazungumzo ya awali hubaki kwenye historia ya MeBot.</string>
 </resources>

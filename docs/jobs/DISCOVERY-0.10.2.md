@@ -18,6 +18,12 @@ Unknown or failed checks are not proof of an open role. Source timestamps remain
 closed saved snapshots remain readable. Remotive and Jobicy coverage is remote-focused,
 not exhaustive local/global coverage. There is no guaranteed count of new matches per day.
 
+Each new Jobs detail AI action starts an isolated conversation containing only the public
+listing and explicitly reviewed context. Prior conversations and user files remain in
+MeBot history, but are not silently carried into a new detail action. Follow-up messages
+inside the opened chat keep that conversation. Consent actions remain outside the
+scrolling preview so they are reachable on narrow screens and with larger text.
+
 Release gates: full regression tests, both lint variants, actual native discovery and
 persistence journeys, source schema verification, website browser checks, exact-source
 same-key signed artifact verification, in-place upgrade and public updater discovery.

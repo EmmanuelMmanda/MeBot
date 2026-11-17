@@ -12,6 +12,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
@@ -51,12 +53,18 @@ internal fun JobsAiReview(intent: JobsAssistantIntent, question: String, snapsho
         (personalText.isEmpty() || (personalText.isNotBlank() && snapshot.revision.isNotBlank()))
     val questionValid = customQuestion.length <= 1000 && !customQuestion.contains('\u0000')
     val valid = contextValid && questionValid
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.jobs_ai_review_title)) },
-        text = {
-            Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    // Avoid AlertDialog's intrinsic text-slot measurement around a scrolling text field.
+    // A bounded body scrolls independently while the consent actions remain visible.
+    val maxHeight = (LocalConfiguration.current.screenHeightDp * 0.85f).dp
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surface) {
+            Column(Modifier.fillMaxWidth().heightIn(max = maxHeight).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(stringResource(R.string.jobs_ai_review_title), style = MaterialTheme.typography.headlineSmall)
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(stringResource(R.string.jobs_ai_destination, provider.ifBlank { stringResource(R.string.jobs_ai_configured) }), style = MaterialTheme.typography.labelLarge)
                 if (!connected) Text(stringResource(R.string.jobs_ai_not_connected))
                 Text(stringResource(R.string.jobs_ai_review_body))
+                Text(stringResource(R.string.jobs_ai_fresh_chat), modifier = Modifier.testTag("jobs-ai-fresh-chat"), style = MaterialTheme.typography.bodySmall)
                 Text(question, style = MaterialTheme.typography.bodyMedium)
                 OutlinedTextField(customQuestion, { customQuestion = it },
                     label = { Text(stringResource(R.string.jobs_custom_question)) },
@@ -78,15 +86,21 @@ internal fun JobsAiReview(intent: JobsAssistantIntent, question: String, snapsho
                 Text(stringResource(R.string.jobs_ai_exact_preview), style = MaterialTheme.typography.titleSmall)
                 Text(personalText.ifBlank { stringResource(R.string.jobs_ai_nothing_shared) }, modifier = Modifier.testTag("jobs-ai-context-preview"), style = MaterialTheme.typography.bodySmall)
                 if (!contextValid) Text(stringResource(R.string.jobs_ai_limit), color = MaterialTheme.colorScheme.error)
-            }
-        }, confirmButton = {
+                }
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (connected) TextButton(onClick = { onSend(JobsAssistantRequest(intent = if (customQuestion.isBlank()) intent else JobsAssistantIntent.QUESTION, question = customQuestion.trim().ifBlank { question }, sharedContext = personalText,
-                contextRevision = snapshot.revision)) }, enabled = valid, modifier = Modifier.testTag("jobs-ai-send")) {
+                contextRevision = snapshot.revision)) }, enabled = valid, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("jobs-ai-send")) {
                 Text(stringResource(R.string.jobs_ai_send))
-            } else TextButton(onClick = { onConnect() }, modifier = Modifier.testTag("jobs-ai-connect")) {
+            } else TextButton(onClick = { onConnect() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("jobs-ai-connect")) {
                 Text(stringResource(R.string.jobs_connect_to_continue))
             }
-        }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.jobs_cancel)) } })
+                    TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                        Text(stringResource(R.string.jobs_cancel))
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

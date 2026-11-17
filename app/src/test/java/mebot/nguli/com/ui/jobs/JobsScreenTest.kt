@@ -156,6 +156,8 @@ class JobsScreenTest {
             JobsContextField.SKILL_TO_CONFIRM, "Kotlin", "self_reported_skill_review")))
         render(context = snapshot); openJob()
         compose.onNodeWithText("Understand this role with AI").performScrollTo().performClick()
+        compose.onNodeWithTag("jobs-ai-fresh-chat").performScrollTo().assertTextEquals(
+            "Each Jobs action starts a fresh chat. Earlier chats remain in MeBot history.")
         compose.onNodeWithTag("jobs-ai-context-preview").performScrollTo().assertTextEquals(
             androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
                 .getString(mebot.nguli.com.R.string.jobs_ai_nothing_shared))
