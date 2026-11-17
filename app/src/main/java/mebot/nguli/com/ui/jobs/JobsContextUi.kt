@@ -47,7 +47,10 @@ internal fun JobsAiReview(intent: JobsAssistantIntent, question: String, snapsho
     val personalText = buildList {
         snapshot.candidates.filter { it.id in selected }.distinctBy { it.sourceId to it.sourceText }.forEach { add(it.sourceText) }
     }.joinToString("\n\n")
-    val valid = personalText.length <= 8000 && !personalText.contains('\u0000')
+    val contextValid = personalText.length <= 8000 && !personalText.contains('\u0000') &&
+        (personalText.isEmpty() || (personalText.isNotBlank() && snapshot.revision.isNotBlank()))
+    val questionValid = customQuestion.length <= 1000 && !customQuestion.contains('\u0000')
+    val valid = contextValid && questionValid
     AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.jobs_ai_review_title)) },
         text = {
             Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -55,9 +58,14 @@ internal fun JobsAiReview(intent: JobsAssistantIntent, question: String, snapsho
                 if (!connected) Text(stringResource(R.string.jobs_ai_not_connected))
                 Text(stringResource(R.string.jobs_ai_review_body))
                 Text(question, style = MaterialTheme.typography.bodyMedium)
-                OutlinedTextField(customQuestion, { customQuestion = it.take(2000) },
+                OutlinedTextField(customQuestion, { customQuestion = it },
                     label = { Text(stringResource(R.string.jobs_custom_question)) },
-                    modifier = Modifier.fillMaxWidth().testTag("jobs-ai-question"), minLines = 2)
+                    modifier = Modifier.fillMaxWidth().testTag("jobs-ai-question"), minLines = 2,
+                    isError = !questionValid,
+                    supportingText = {
+                        Text(if (questionValid) stringResource(R.string.jobs_question_count, customQuestion.length)
+                            else stringResource(R.string.jobs_question_invalid), modifier = Modifier.testTag("jobs-ai-question-validation"))
+                    })
                 if (supportsContext && snapshot.candidates.isNotEmpty()) {
                     Text(stringResource(R.string.jobs_ai_choose_context), style = MaterialTheme.typography.titleSmall)
                     snapshot.candidates.distinctBy { it.sourceId to it.sourceText }.forEach { candidate ->
@@ -69,7 +77,7 @@ internal fun JobsAiReview(intent: JobsAssistantIntent, question: String, snapsho
                 HorizontalDivider()
                 Text(stringResource(R.string.jobs_ai_exact_preview), style = MaterialTheme.typography.titleSmall)
                 Text(personalText.ifBlank { stringResource(R.string.jobs_ai_nothing_shared) }, modifier = Modifier.testTag("jobs-ai-context-preview"), style = MaterialTheme.typography.bodySmall)
-                if (!valid) Text(stringResource(R.string.jobs_ai_limit), color = MaterialTheme.colorScheme.error)
+                if (!contextValid) Text(stringResource(R.string.jobs_ai_limit), color = MaterialTheme.colorScheme.error)
             }
         }, confirmButton = {
             if (connected) TextButton(onClick = { onSend(JobsAssistantRequest(intent = if (customQuestion.isBlank()) intent else JobsAssistantIntent.QUESTION, question = customQuestion.trim().ifBlank { question }, sharedContext = personalText,

@@ -237,4 +237,6 @@
     <string name="jobs_status_source_closed">Source reports closed.</string>
     <string name="jobs_status_source_unknown">Availability unknown. Verify the original listing.</string>
     <string name="jobs_status_checked">Source status checked: %1$s</string>
+    <string name="jobs_question_count">%1$d / 1,000 characters</string>
+    <string name="jobs_question_invalid">Use at most 1,000 characters and remove unsupported null characters. Your question is kept here.</string>
 </resources>

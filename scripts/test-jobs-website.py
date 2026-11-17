@@ -25,7 +25,7 @@ try:
                 errors = []
                 page.on('pageerror', lambda error: errors.append(str(error)))
                 page.goto(base + '/jobs.html')
-                page.get_by_role('heading', name='Find a role. Keep your next step.').wait_for()
+                page.get_by_role('heading', name='Find a role. Understand the fit.').wait_for()
                 metrics = page.evaluate('''async () => {
                     await document.fonts.load('400 16px Figtree');
                     await document.fonts.load('600 24px Figtree');

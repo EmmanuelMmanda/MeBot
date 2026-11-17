@@ -237,4 +237,6 @@
     <string name="jobs_status_source_closed">Chanzo kinasema tangazo limefungwa.</string>
     <string name="jobs_status_source_unknown">Upatikanaji haujulikani. Hakiki tangazo la asili.</string>
     <string name="jobs_status_checked">Hali ya chanzo ilikaguliwa: %1$s</string>
+    <string name="jobs_question_count">Herufi %1$d / 1,000</string>
+    <string name="jobs_question_invalid">Tumia herufi zisizozidi 1,000 na uondoe herufi tupu zisizokubalika. Swali lako limehifadhiwa hapa.</string>
 </resources>

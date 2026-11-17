@@ -195,4 +195,23 @@ class JobsScreenTest {
         compose.onNodeWithTag("jobs-apply-source").assertIsEnabled()
     }
 
+    @Test fun customQuestionBoundaryRetainsInvalidInputUntilCorrected() {
+        render(); openJob()
+        compose.onNodeWithText("Understand this role with AI").performScrollTo().performClick()
+        val field = compose.onNodeWithTag("jobs-ai-question")
+        field.performScrollTo().performTextReplacement("a".repeat(1000))
+        compose.onNodeWithTag("jobs-ai-send").assertIsEnabled()
+        field.performTextReplacement("a".repeat(1001))
+        compose.onNodeWithTag("jobs-ai-send").assertIsNotEnabled()
+        field.assertTextContains("a".repeat(1001))
+        assertTrue(assistantRequests.isEmpty())
+        field.performTextReplacement("bad\u0000question")
+        compose.onNodeWithTag("jobs-ai-send").assertIsNotEnabled()
+        field.assertTextContains("bad\u0000question")
+        field.performTextReplacement("a".repeat(1000))
+        compose.onNodeWithTag("jobs-ai-send").assertIsEnabled().performClick()
+        assertEquals("a".repeat(1000), assistantRequests.single().question)
+        assertEquals(mebot.nguli.com.jobs.JobsAssistantIntent.QUESTION, assistantRequests.single().intent)
+    }
+
 }

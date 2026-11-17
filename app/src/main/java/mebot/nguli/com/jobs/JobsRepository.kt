@@ -67,7 +67,9 @@ class JobsRepository(context: Context, private val http: FeedHttp = SecureFeedHt
     suspend fun save(id: String) = setSaved(id, current().applications.none { it.jobId == id && it.bookmarked })
     suspend fun setSaved(id: String, desired: Boolean, expectedGeneration: Long? = null, expectedScope: String? = null) = mutate(expectedGeneration, expectedScope) { s ->
         val existing = s.applications.find { it.jobId == id }
-        if (existing != null) s.copy(applications = s.applications.map {
+        if (!desired && existing != null && existing.status == "saved" && existing.notes.isBlank() && existing.draft.isBlank())
+            s.copy(applications = s.applications.filterNot { it.jobId == id })
+        else if (existing != null) s.copy(applications = s.applications.map {
             if (it.jobId == id) it.copy(bookmarked = desired) else it
         })
         else if (!desired) s
@@ -118,7 +120,7 @@ class JobsRepository(context: Context, private val http: FeedHttp = SecureFeedHt
         }
         // Source status is a separate verification pass. An unavailable status service
         // never means a role is closed, and never erases a saved snapshot or document.
-        val statusIds = (fetched.map { it.id } + before.applications.map { it.jobId }).distinct()
+        val statusIds = (fetched.map { it.id } + before.applications.filter { it.bookmarked }.map { it.jobId }).distinct()
             .filter { it.matches(Regex("jobicy:[1-9][0-9]{0,18}")) && it.substringAfter(':').toLongOrNull() != null }
         val statuses = if ("Jobicy" !in failed && statusIds.isNotEmpty()) {
             try { fetchJobicyStatuses(http, statusIds) }
