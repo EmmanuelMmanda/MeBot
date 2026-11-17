@@ -10,6 +10,7 @@ data class JobPosting(
     val description: String = "", val url: String = "", val source: String = "",
     val postedAt: Long = 0, val fetchedAt: Long = 0, val salary: String = "", val tags: List<String> = emptyList(),
     val salaryMin: Double? = null, val salaryMax: Double? = null, val salaryCurrency: String = "", val salaryPeriod: String = "",
+    val sourceStatus: String = "", val statusCheckedAt: Long = 0,
 )
 
 @Serializable
@@ -26,6 +27,7 @@ data class JobPreferences(
 data class JobApplication(
     val jobId: String = "", val status: String = "saved", val notes: String = "", val updatedAt: Long = 0,
     val snapshot: JobPosting? = null, val draft: String = "", val draftUpdatedAt: Long = 0,
+    val bookmarked: Boolean = true,
 )
 
 @Serializable

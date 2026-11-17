@@ -64,18 +64,25 @@ class JobsRepository(context: Context, private val http: FeedHttp = SecureFeedHt
     }
     suspend fun preferences(value: JobPreferences, expectedGeneration: Long? = null, expectedScope: String? = null, onCommitted: (JobPreferences) -> Unit = {}) =
         mutate(expectedGeneration, expectedScope, onCommitted = { onCommitted(it.preferences) }) { it.copy(preferences = value) }
-    suspend fun save(id: String) = setSaved(id, current().applications.none { it.jobId == id })
+    suspend fun save(id: String) = setSaved(id, current().applications.none { it.jobId == id && it.bookmarked })
     suspend fun setSaved(id: String, desired: Boolean, expectedGeneration: Long? = null, expectedScope: String? = null) = mutate(expectedGeneration, expectedScope) { s ->
         val existing = s.applications.find { it.jobId == id }
-        if (!desired && existing != null && existing.status == "saved" && existing.notes.isBlank() && existing.draft.isBlank())
-            s.copy(applications = s.applications.filterNot { it.jobId == id })
-        else if (!desired || existing != null) s
+        if (existing != null) s.copy(applications = s.applications.map {
+            if (it.jobId == id) it.copy(bookmarked = desired) else it
+        })
+        else if (!desired) s
         else s.copy(applications = s.applications + JobApplication(id, snapshot = s.jobs.find { it.id == id }, updatedAt = System.currentTimeMillis()))
     }
     suspend fun application(value: JobApplication, expectedGeneration: Long? = null, expectedScope: String? = null) = mutate(expectedGeneration, expectedScope) { s ->
         val old = s.applications.find { it.jobId == value.jobId }
         val now = System.currentTimeMillis()
-        val next = value.copy(updatedAt = now, draftUpdatedAt = if (value.draft != old?.draft) now else old?.draftUpdatedAt ?: now, snapshot = value.snapshot ?: old?.snapshot ?: s.jobs.find { it.id == value.jobId })
+        val snapshot = value.snapshot ?: old?.snapshot ?: s.jobs.find { it.id == value.jobId }
+        val newestAvailability = listOfNotNull(snapshot, old?.snapshot, s.jobs.find { it.id == value.jobId })
+            .maxByOrNull { it.statusCheckedAt }
+        val preservedSnapshot = if (snapshot != null && newestAvailability != null)
+            snapshot.copy(sourceStatus = newestAvailability.sourceStatus, statusCheckedAt = newestAvailability.statusCheckedAt) else snapshot
+        val next = value.copy(updatedAt = now, draftUpdatedAt = if (value.draft != old?.draft) now else old?.draftUpdatedAt ?: now,
+            snapshot = preservedSnapshot, bookmarked = old?.bookmarked ?: value.bookmarked)
         s.copy(applications = s.applications.filterNot { it.jobId == value.jobId } + next)
     }
     /** Remotive allows a few requests/day; manual refresh does not bypass the persisted limit. */
@@ -109,9 +116,29 @@ class JobsRepository(context: Context, private val http: FeedHttp = SecureFeedHt
             // Do not silently replace a complete cache with a truncated provider response.
             error("Job source exceeded bounded page limit")
         }
-        update { if (epoch.get() == token) it.copy(jobs = fetched.distinctBy { it.id },
-            lastRefreshAt = if (failed.size < 2) now else it.lastRefreshAt, failedSources = failed) else it }
-        if (failed.size == 2) throw mebot.nguli.com.feed.FeedFailure("provider_error")
+        // Source status is a separate verification pass. An unavailable status service
+        // never means a role is closed, and never erases a saved snapshot or document.
+        val statusIds = (fetched.map { it.id } + before.applications.map { it.jobId }).distinct()
+            .filter { it.matches(Regex("jobicy:[1-9][0-9]{0,18}")) && it.substringAfter(':').toLongOrNull() != null }
+        val statuses = if ("Jobicy" !in failed && statusIds.isNotEmpty()) {
+            try { fetchJobicyStatuses(http, statusIds) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { failed += "Jobicy status"; emptyMap() }
+        } else emptyMap()
+        val priorStatus = (before.jobs + before.applications.mapNotNull { it.snapshot })
+            .filter { it.sourceStatus.isNotBlank() }.groupBy { it.id }
+            .mapValues { (_, versions) -> versions.maxBy { it.statusCheckedAt } }
+        fun checked(job: JobPosting): JobPosting = statuses[job.id]?.let { status ->
+            job.copy(sourceStatus = status, statusCheckedAt = now)
+        } ?: priorStatus[job.id]?.let { prior ->
+            job.copy(sourceStatus = prior.sourceStatus, statusCheckedAt = prior.statusCheckedAt)
+        } ?: job
+        val anySourceSucceeded = "Remotive" !in failed || "Jobicy" !in failed
+        update { if (epoch.get() == token) it.copy(
+            jobs = fetched.distinctBy { job -> job.id }.map(::checked).filterNot { job -> job.sourceStatus == "closed" },
+            applications = it.applications.map { record -> record.copy(snapshot = record.snapshot?.let(::checked)) },
+            lastRefreshAt = if (anySourceSucceeded) now else it.lastRefreshAt, failedSources = failed) else it }
+        if (!anySourceSucceeded) throw mebot.nguli.com.feed.FeedFailure("provider_error")
         true
     }
 }

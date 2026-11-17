@@ -100,7 +100,7 @@ class JobsViewModel(application: Application, private val savedStateHandle: Save
     }
     fun save(id: String, expectedScope: String = mutable.value.state.editingScope) {
         if (!pendingBookmarks.add(id)) return
-        val desired = mutable.value.state.applications.none { it.jobId == id }
+        val desired = mutable.value.state.applications.none { it.jobId == id && it.bookmarked }
         val generation = repository.generation()
         mutate { try { repository.setSaved(id, desired, generation, expectedScope) } finally { pendingBookmarks.remove(id) } }
     }

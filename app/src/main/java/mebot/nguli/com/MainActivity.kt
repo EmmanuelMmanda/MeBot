@@ -791,14 +791,10 @@ private fun MeBotApp(ui: AppUiState, vm: MeBotViewModel, feedUi: FeedUiState, fe
                                 else -> feed.connection.mode.replaceFirstChar { it.uppercase() }
                             },
                             aiConnected = feedUi.connected,
-                            onConnectAi = { application ->
-                                jobsVm.prepareAssistant(application, jobsEditingScope) {
-                                    if (page == "jobs" && jobsVm.ui.value.state.editingScope == jobsEditingScope) openConnection()
-                                }
-                            },
+                            onConnectAi = { openConnection() },
                             onAssistant = { job, request ->
-                                jobsVm.prepareAssistant(request.application, jobsEditingScope) {
-                                    // Leaving the editor while disk is pending cancels the one-shot handoff.
+                                jobsVm.prepareAssistant(null, jobsEditingScope) {
+                                    // Leaving Jobs while state validation is pending cancels the one-shot handoff.
                                     if (page == "jobs" && jobsVm.ui.value.state.editingScope == jobsEditingScope) {
                                         aiReturn = "jobs"
                                         feedVm.openJobsConversation(job, request, jobsEditingScope)

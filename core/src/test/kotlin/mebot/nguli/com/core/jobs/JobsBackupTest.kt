@@ -68,4 +68,14 @@ class JobsBackupTest {
         assertEquals("", backup.editingScope)
         assertThrows(IllegalArgumentException::class.java) { JobsBackup.validate(backup.copy(editingScope = "injected")) }
     }
+    @org.junit.Test fun legacyBookmarkDefaultsAndUnsaveBackupRetainPrivateWork() {
+        val old = kotlinx.serialization.json.Json.decodeFromString<JobApplication>("""{"jobId":"old","status":"applied","notes":"Preserved","draft":"Old draft"}""")
+        org.junit.Assert.assertTrue(old.bookmarked)
+        val state = JobsState(applications = listOf(old.copy(bookmarked = false)))
+        val restored = JobsBackup.restore(JobsBackup.export(state)).applications.single()
+        org.junit.Assert.assertFalse(restored.bookmarked)
+        org.junit.Assert.assertEquals(old.notes, restored.notes)
+        org.junit.Assert.assertEquals(old.draft, restored.draft)
+        org.junit.Assert.assertEquals("applied", restored.status)
+    }
 }

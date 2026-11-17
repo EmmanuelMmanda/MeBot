@@ -39,16 +39,13 @@ internal fun RelatedJobsModules(snapshot: JobsContextSnapshot, onOpen: (String) 
 
 @Composable
 internal fun JobsAiReview(intent: JobsAssistantIntent, question: String, snapshot: JobsContextSnapshot,
-    application: JobApplication, provider: String, supportsContext: Boolean, connected: Boolean, onConnect: (JobApplication) -> Unit, onDismiss: () -> Unit,
+    provider: String, supportsContext: Boolean, connected: Boolean, onConnect: () -> Unit, onDismiss: () -> Unit,
     onSend: (JobsAssistantRequest) -> Unit) {
+    var customQuestion by rememberSaveable { mutableStateOf("") }
     var selected by rememberSaveable { mutableStateOf(emptyList<String>()) }
-    var shareNotes by rememberSaveable { mutableStateOf(false) }
-    var shareDraft by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(snapshot.revision) { selected = emptyList(); shareNotes = false; shareDraft = false }
+    LaunchedEffect(snapshot.revision) { selected = emptyList() }
     val personalText = buildList {
         snapshot.candidates.filter { it.id in selected }.distinctBy { it.sourceId to it.sourceText }.forEach { add(it.sourceText) }
-        if (shareNotes) add(application.notes)
-        if (shareDraft) add(application.draft)
     }.joinToString("\n\n")
     val valid = personalText.length <= 8000 && !personalText.contains('\u0000')
     AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.jobs_ai_review_title)) },
@@ -58,15 +55,16 @@ internal fun JobsAiReview(intent: JobsAssistantIntent, question: String, snapsho
                 if (!connected) Text(stringResource(R.string.jobs_ai_not_connected))
                 Text(stringResource(R.string.jobs_ai_review_body))
                 Text(question, style = MaterialTheme.typography.bodyMedium)
-                if (supportsContext && (snapshot.candidates.isNotEmpty() || application.notes.isNotBlank() || application.draft.isNotBlank())) {
+                OutlinedTextField(customQuestion, { customQuestion = it.take(2000) },
+                    label = { Text(stringResource(R.string.jobs_custom_question)) },
+                    modifier = Modifier.fillMaxWidth().testTag("jobs-ai-question"), minLines = 2)
+                if (supportsContext && snapshot.candidates.isNotEmpty()) {
                     Text(stringResource(R.string.jobs_ai_choose_context), style = MaterialTheme.typography.titleSmall)
                     snapshot.candidates.distinctBy { it.sourceId to it.sourceText }.forEach { candidate ->
                         ContextChoice(candidate.sourceLabel + "\n" + candidate.sourceText, candidate.id in selected) {
                             selected = if (candidate.id in selected) selected - candidate.id else selected + candidate.id
                         }
                     }
-                    if (application.notes.isNotBlank()) ContextChoice(stringResource(R.string.jobs_ai_share_notes), shareNotes) { shareNotes = it }
-                    if (application.draft.isNotBlank()) ContextChoice(stringResource(R.string.jobs_ai_share_draft), shareDraft) { shareDraft = it }
                 }
                 HorizontalDivider()
                 Text(stringResource(R.string.jobs_ai_exact_preview), style = MaterialTheme.typography.titleSmall)
@@ -74,10 +72,10 @@ internal fun JobsAiReview(intent: JobsAssistantIntent, question: String, snapsho
                 if (!valid) Text(stringResource(R.string.jobs_ai_limit), color = MaterialTheme.colorScheme.error)
             }
         }, confirmButton = {
-            if (connected) TextButton(onClick = { onSend(JobsAssistantRequest(intent = intent, question = question, sharedContext = personalText,
-                contextRevision = snapshot.revision, application = application)) }, enabled = valid, modifier = Modifier.testTag("jobs-ai-send")) {
+            if (connected) TextButton(onClick = { onSend(JobsAssistantRequest(intent = if (customQuestion.isBlank()) intent else JobsAssistantIntent.QUESTION, question = customQuestion.trim().ifBlank { question }, sharedContext = personalText,
+                contextRevision = snapshot.revision)) }, enabled = valid, modifier = Modifier.testTag("jobs-ai-send")) {
                 Text(stringResource(R.string.jobs_ai_send))
-            } else TextButton(onClick = { onConnect(application) }, modifier = Modifier.testTag("jobs-ai-connect")) {
+            } else TextButton(onClick = { onConnect() }, modifier = Modifier.testTag("jobs-ai-connect")) {
                 Text(stringResource(R.string.jobs_connect_to_continue))
             }
         }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.jobs_cancel)) } })

@@ -49,7 +49,9 @@ class JobsScreenTest {
             }
             MeBotTheme {
                 JobsScreen(state, false, screenError, {}, { preferencesWrites++; pendingPreferences = it }, { id ->
-                    state = state.copy(applications = state.applications + JobApplication(id, snapshot = job))
+                    val old = state.applications.firstOrNull { it.jobId == id }
+                    state = state.copy(applications = state.applications.filterNot { it.jobId == id } +
+                        (old?.copy(bookmarked = !old.bookmarked) ?: JobApplication(id, snapshot = job)))
                 }, { application ->
                     pendingApplication = application
                 }, { _, prompt -> asked += prompt }, { opened += it }, { draft }, contextSnapshot = context, onAssistant = { _, request -> assistantRequests += request })
@@ -60,11 +62,6 @@ class JobsScreenTest {
         compose.onNodeWithTag("jobs-screen").performScrollToNode(hasText(job.title))
         compose.onNodeWithText(job.title).performClick()
     }
-    private fun prepare() {
-        openJob()
-        compose.onNodeWithTag("jobs-prepare").assertIsDisplayed().performClick()
-    }
-
     @Test fun browsingAndSavingNeverRequiresAi() {
         render()
         compose.onNodeWithTag("jobs-screen").performScrollToNode(hasText(job.title))
@@ -110,43 +107,6 @@ class JobsScreenTest {
         assertTrue(asked.isEmpty())
     }
 
-    @Test fun notesSaveWithoutAiAndOpeningWorkspaceDoesNotSubmit() {
-        render(); prepare()
-        compose.onNodeWithTag("jobs-notes").performScrollTo().performTextInput("Check work eligibility")
-        compose.onNodeWithTag("jobs-save-progress").performScrollTo().performClick()
-        compose.waitUntil(5_000) { state.applications.isNotEmpty() }
-        assertEquals("preparing", state.applications.single().status)
-        assertEquals("Check work eligibility", state.applications.single().notes)
-        assertTrue(asked.isEmpty()); assertTrue(opened.isEmpty())
-    }
-
-    @Test fun documentExportNeedsReviewAndEditsClearReview() {
-        render(draft = "Verified candidate details only."); prepare()
-        compose.onNodeWithTag("jobs-open-document").performScrollTo().performClick()
-        compose.onNodeWithTag("jobs-export-pdf").performScrollTo().assertIsNotEnabled()
-        compose.onNodeWithTag("jobs-document-text").performScrollTo().assertTextContains("Application for ${job.title} at ${job.company}", substring = true)
-        compose.onNodeWithText("Use last completed AI answer").performScrollTo().performClick()
-        compose.onNodeWithText("Replace your current draft?").assertIsDisplayed()
-        compose.onNodeWithText("Replace draft").performClick()
-        compose.onNodeWithTag("jobs-document-text").performScrollTo().assertTextContains("Verified candidate details only.")
-        compose.onNodeWithTag("jobs-export-pdf").performScrollTo().assertIsNotEnabled()
-        compose.onNode(isToggleable()).performScrollTo().performClick()
-        compose.onNodeWithTag("jobs-export-pdf").assertIsEnabled()
-        compose.onNodeWithTag("jobs-document-text").performScrollTo().performTextInput(" Updated.")
-        compose.onNodeWithTag("jobs-export-pdf").performScrollTo().assertIsNotEnabled()
-    }
-
-    @Test fun openingDocumentPreservesExistingDraftInsteadOfReseedingOutline() {
-        val original = "My reviewed factual application draft."
-        state = state.copy(applications = listOf(JobApplication(job.id, status = "preparing", snapshot = job, draft = original)))
-        render(); prepare()
-        compose.onNodeWithTag("jobs-open-document").performScrollTo().performClick()
-        compose.onNodeWithTag("jobs-document-text").performScrollTo().assertTextContains(original)
-        compose.onNodeWithTag("jobs-export-pdf").performScrollTo().assertIsNotEnabled()
-        assertEquals(original, state.applications.single().draft)
-        assertTrue(asked.isEmpty())
-    }
-
     @Test fun latePersistedOnboardingStateShowsBrowse() {
         state = JobsState()
         render()
@@ -155,31 +115,6 @@ class JobsScreenTest {
         compose.waitForIdle()
         compose.onNodeWithTag("jobs-screen").assertIsDisplayed()
     }
-    @Test fun applicationSaveWaitsForPersistenceAcknowledgement() {
-        render(acknowledge = false); prepare()
-        compose.onNodeWithTag("jobs-notes").performScrollTo().performTextInput("Draft awaiting disk write")
-        compose.onNodeWithTag("jobs-save-progress").performScrollTo().performClick()
-        compose.onNodeWithText("Saving your changes…").assertIsDisplayed()
-        assertTrue(state.applications.isEmpty())
-        compose.runOnIdle {
-            state = state.copy(applications = listOf(requireNotNull(pendingApplication)))
-            pendingApplication = null
-        }
-        compose.waitForIdle()
-        compose.onNodeWithTag("jobs-prepare").assertExists()
-    }
-
-    @Test fun storageFailureKeepsWorkspaceEditsVisible() {
-        render(acknowledge = false); prepare()
-        compose.onNodeWithTag("jobs-notes").performScrollTo().performTextInput("Do not lose this draft")
-        compose.onNodeWithTag("jobs-save-progress").performScrollTo().performClick()
-        compose.runOnIdle { screenError = "storage_error" }
-        compose.waitForIdle()
-        compose.onNodeWithTag("jobs-storage-error").assertIsDisplayed()
-        compose.onNodeWithTag("jobs-notes").performScrollTo().assertTextContains("Do not lose this draft")
-        assertTrue(state.applications.isEmpty())
-    }
-
     @Test fun salaryFilterRequiresExplicitCurrencyAndPeriod() {
         render()
         compose.onNodeWithTag("jobs-preferences").performClick()
@@ -193,26 +128,6 @@ class JobsScreenTest {
         compose.onNodeWithTag("jobs-preferences-save").performScrollTo().assertIsEnabled().performClick()
         compose.waitUntil(5_000) { state.preferences.salaryCurrency == "USD" && state.preferences.salaryPeriod == "month" }
         assertEquals("2000", state.preferences.salaryMinimum)
-    }
-
-    @Test fun restoredUnconfirmedSaveRetainsDraftWithoutResubmitting() {
-        val restoration = StateRestorationTester(compose)
-        var writes = 0
-        restoration.setContent {
-            MeBotTheme {
-                JobsScreen(state, false, null, {}, {}, {}, { writes++ }, { _, _ -> }, {}, saving = false)
-            }
-        }
-        prepare()
-        compose.onNodeWithTag("jobs-notes").performScrollTo().performTextInput("Retain this interrupted draft")
-        compose.onNodeWithTag("jobs-save-progress").performScrollTo().performClick()
-        compose.onNodeWithText("Saving your changes…").assertIsDisplayed()
-        restoration.emulateSavedInstanceStateRestore()
-        compose.waitForIdle()
-        compose.onNodeWithTag("jobs-save-unconfirmed").assertIsDisplayed()
-        compose.onNodeWithTag("jobs-notes").performScrollTo().assertTextContains("Retain this interrupted draft")
-        assertEquals(1, writes)
-        assertTrue(state.applications.isEmpty())
     }
 
     @Test fun guidedSetupUsesChoicesAndPersistsEachStepWithoutAi() {
@@ -239,29 +154,45 @@ class JobsScreenTest {
     @Test fun aiReviewNeverSelectsPersonalContextByDefault() {
         val snapshot = JobsContextSnapshot("revision-one", listOf(JobsContextCandidate("skill", "profile", "About you", "Skills: Kotlin",
             JobsContextField.SKILL_TO_CONFIRM, "Kotlin", "self_reported_skill_review")))
-        render(context = snapshot); prepare()
-        compose.onNodeWithTag("jobs-notes").performScrollTo().performTextInput("My unpublished evidence")
-        compose.onNodeWithText("Draft a cover letter").performScrollTo().performClick()
+        render(context = snapshot); openJob()
+        compose.onNodeWithText("Understand this role with AI").performScrollTo().performClick()
         compose.onNodeWithTag("jobs-ai-context-preview").performScrollTo().assertTextEquals(
             androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
                 .getString(mebot.nguli.com.R.string.jobs_ai_nothing_shared))
         compose.onNodeWithTag("jobs-ai-send").performClick()
         assertEquals("", assistantRequests.single().sharedContext)
-        assertEquals("My unpublished evidence", assistantRequests.single().application?.notes)
-        assertEquals("preparing", assistantRequests.single().application?.status)
         assertTrue(opened.isEmpty())
     }
 
     @Test fun aiReviewSharesOnlyExplicitlySelectedExactEvidence() {
         val snapshot = JobsContextSnapshot("revision-two", listOf(JobsContextCandidate("skill", "profile", "About you", "Skills: Kotlin",
             JobsContextField.SKILL_TO_CONFIRM, "Kotlin", "self_reported_skill_review")))
-        render(context = snapshot); prepare()
-        compose.onNodeWithText("Draft a cover letter").performScrollTo().performClick()
+        render(context = snapshot); openJob()
+        compose.onNodeWithText("Understand this role with AI").performScrollTo().performClick()
         compose.onNodeWithContentDescription("About you\nSkills: Kotlin").performScrollTo().performClick()
         compose.onNodeWithTag("jobs-ai-context-preview").performScrollTo().assertTextEquals("Skills: Kotlin")
         compose.onNodeWithTag("jobs-ai-send").performClick()
         assertEquals("Skills: Kotlin", assistantRequests.single().sharedContext)
         assertEquals("revision-two", assistantRequests.single().contextRevision)
+    }
+
+    @Test fun unsavingLegacyRecordPreservesPrivateDraftAndSource() {
+        val legacy = JobApplication(job.id, status = "preparing", notes = "Private note", draft = "Private draft", snapshot = job)
+        state = state.copy(applications = listOf(legacy))
+        render(); openJob()
+        compose.onNodeWithContentDescription("Remove saved job").performClick()
+        assertFalse(state.applications.single().bookmarked)
+        assertEquals(legacy.notes, state.applications.single().notes)
+        assertEquals(legacy.draft, state.applications.single().draft)
+        compose.onNodeWithTag("jobs-prepare").assertDoesNotExist()
+        compose.onNodeWithTag("jobs-apply-source").assertIsDisplayed()
+    }
+
+    @Test fun closedListingWarnsWithoutRemovingSourceAccess() {
+        state = state.copy(jobs = listOf(job.copy(sourceStatus = "closed")))
+        render(); openJob()
+        compose.onNodeWithTag("jobs-listing-closed").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("jobs-apply-source").assertIsEnabled()
     }
 
 }

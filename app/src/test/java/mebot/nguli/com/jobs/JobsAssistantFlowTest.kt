@@ -77,7 +77,7 @@ class JobsAssistantFlowTest {
     @Test fun explicitContextIsExactAndDifferentSelectionsNeverReuseOldTurns(): Unit = runBlocking {
         val chosen = "  Reviewed candidate fact\nUzoefu wa kazi.\n"
         val first = answer(JobsAssistantRequest(sharedContext = chosen, question = "Explain requirements"))
-        val second = answer(JobsAssistantRequest(sharedContext = "Another reviewed fact", question = "Draft a letter"))
+        val second = answer(JobsAssistantRequest(sharedContext = "Another reviewed fact", question = "Explain location restrictions"))
         assertNotEquals(first.id, second.id)
         assertEquals(2, app.requests.size)
         assertEquals(chosen, app.requests.first().attachments.single { it.name == "candidate-context.txt" }.text)

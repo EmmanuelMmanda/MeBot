@@ -41,6 +41,9 @@ try:
                 # Scroll each lazy native capture into view and verify decoded source dimensions.
                 captures = page.locator('.jobs-native-shot img')
                 assert captures.count() == 6
+                assert page.get_by_text('Historical release gallery', exact=True).is_visible()
+                assert 'no fixed daily job quota' in page.locator('#coverage').inner_text()
+                assert 'not an application tracker or document editor' in page.locator('#saved').inner_text()
                 for capture in captures.all():
                     capture.scroll_into_view_if_needed()
                     capture.evaluate('(img) => img.decode()')
@@ -74,7 +77,7 @@ try:
         search = page.locator('input[type="search"]')
         assert search.count() == 1
         search.fill('jobs')
-        page.get_by_role('link', name='Jobs & applications').click()
+        page.get_by_role('link', name='Jobs discovery').click()
         assert page.url == base + '/jobs.html'
         page.get_by_role('link', name='Get MeBot for Android').click()
         assert page.url == base + '/download.html'

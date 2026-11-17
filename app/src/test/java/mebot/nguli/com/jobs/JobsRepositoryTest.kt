@@ -75,6 +75,10 @@ class JobsRepositoryTest {
         repository.setSaved(job.id, false)
         assertEquals("Keep my work", repository.current().applications.single().notes)
         assertEquals("Reviewed draft", repository.current().applications.single().draft)
+        assertFalse(repository.current().applications.single().bookmarked)
+        repository.setSaved(job.id, true)
+        assertTrue(repository.current().applications.single().bookmarked)
+        assertEquals("Keep my work", repository.current().applications.single().notes)
     }
     @Test fun resetAndImportRejectPreviouslyQueuedWrites() = runBlocking {
         val repository = JobsRepository(ApplicationProvider.getApplicationContext(), isOnline = { false })
@@ -94,5 +98,71 @@ class JobsRepositoryTest {
         assertTrue(runCatching { repository.application(mebot.nguli.com.core.jobs.JobApplication("old", draft = "Stale frame"), repository.generation(), beforeImportScope) }.exceptionOrNull() is JobsStateChangedException)
         assertEquals("Restored", repository.current().preferences.roles)
         assertTrue(repository.current().applications.isEmpty())
+    }
+    @Test fun sourceReportedClosedLeavesSavedWorkAndUnknownRemainsDiscoverable() = runBlocking {
+        val jobicy = """{"jobs":[{"id":9,"jobTitle":"Engineer","url":"https://jobicy.com/jobs/9"},{"id":10,"jobTitle":"Designer","url":"https://jobicy.com/jobs/10"}]}"""
+        val http = object : FeedHttp {
+            override suspend fun request(url: String, method: String, body: String?, bearer: String?): String = when {
+                url.contains("/status?") -> """{"jobs":[{"id":9,"status":"closed"},{"id":10,"status":"unknown"}]}"""
+                url.contains("jobicy.com") -> jobicy
+                else -> """{"jobs":[]}"""
+            }
+        }
+        val repository = JobsRepository(ApplicationProvider.getApplicationContext(), http, isOnline = { true })
+        repository.erase()
+        val snapshot = mebot.nguli.com.core.jobs.JobPosting(id = "jobicy:9", title = "Engineer", url = "https://jobicy.com/jobs/9")
+        repository.application(mebot.nguli.com.core.jobs.JobApplication(snapshot.id, status = "applied", notes = "Private old note", snapshot = snapshot, draft = "Old draft"))
+        repository.refresh(100000)
+        val state = repository.current()
+        assertEquals(listOf("jobicy:10"), state.jobs.map { it.id })
+        assertEquals("unknown", state.jobs.single().sourceStatus)
+        assertEquals(100000L, state.jobs.single().statusCheckedAt)
+        assertEquals("closed", state.applications.single().snapshot?.sourceStatus)
+        assertEquals("Private old note", state.applications.single().notes)
+        assertEquals("Old draft", state.applications.single().draft)
+        assertEquals("applied", state.applications.single().status)
+    }
+
+    @Test fun failedStatusPassRetainsListingsWithoutPretendingTheyAreVerified() = runBlocking {
+        val http = object : FeedHttp {
+            override suspend fun request(url: String, method: String, body: String?, bearer: String?): String = when {
+                url.contains("/status?") -> error("Temporary status service failure")
+                url.contains("jobicy.com") -> """{"jobs":[{"id":9,"jobTitle":"Engineer","url":"https://jobicy.com/jobs/9"}]}"""
+                else -> """{"jobs":[]}"""
+            }
+        }
+        val repository = JobsRepository(ApplicationProvider.getApplicationContext(), http, isOnline = { true })
+        repository.erase()
+        repository.refresh(100000)
+        val state = repository.current()
+        assertEquals("jobicy:9", state.jobs.single().id)
+        assertEquals("", state.jobs.single().sourceStatus)
+        assertEquals(0L, state.jobs.single().statusCheckedAt)
+        assertTrue("Jobicy status" in state.failedSources)
+    }
+    @Test fun failedRecheckAndLegacyEditorCannotEraseNewerClosedStatus() = runBlocking {
+        val http = object : FeedHttp {
+            override suspend fun request(url: String, method: String, body: String?, bearer: String?): String = when {
+                url.contains("/status?") -> error("Status unavailable")
+                url.contains("jobicy.com") -> """{"jobs":[{"id":9,"jobTitle":"Updated engineer","url":"https://jobicy.com/jobs/9"}]}"""
+                else -> """{"jobs":[]}"""
+            }
+        }
+        val repository = JobsRepository(ApplicationProvider.getApplicationContext(), http, isOnline = { true })
+        repository.erase()
+        val oldSnapshot = mebot.nguli.com.core.jobs.JobPosting(id = "jobicy:9", title = "Engineer", url = "https://jobicy.com/jobs/9")
+        val staleEditor = mebot.nguli.com.core.jobs.JobApplication(oldSnapshot.id, notes = "Old note", snapshot = oldSnapshot)
+        repository.application(staleEditor)
+        repository.update { it.copy(applications = it.applications.map { record ->
+            record.copy(snapshot = oldSnapshot.copy(sourceStatus = "closed", statusCheckedAt = 50000))
+        }) }
+        repository.refresh(100000)
+        assertTrue(repository.current().jobs.isEmpty())
+        assertEquals(50000L, repository.current().applications.single().snapshot?.statusCheckedAt)
+        repository.application(staleEditor.copy(notes = "New notes"))
+        val saved = repository.current().applications.single()
+        assertEquals("New notes", saved.notes)
+        assertEquals("closed", saved.snapshot?.sourceStatus)
+        assertEquals(50000L, saved.snapshot?.statusCheckedAt)
     }
 }
