@@ -62,6 +62,22 @@ class JobsScreenTest {
         compose.onNodeWithTag("jobs-screen").performScrollToNode(hasText(job.title))
         compose.onNodeWithText(job.title).performClick()
     }
+    private fun openAiReviewWithTrace() {
+        println("JOBS_REVIEW_TRACE before detail action scroll")
+        val action = compose.onNodeWithText("Understand this role with AI")
+        action.performScrollTo()
+        println("JOBS_REVIEW_TRACE after detail action scroll")
+        action.assertIsDisplayed()
+        println("JOBS_REVIEW_TRACE before detail action click")
+        action.performClick()
+        println("JOBS_REVIEW_TRACE after detail action click; native dialog=" +
+            org.robolectric.shadows.ShadowDialog.getLatestDialog()?.isShowing)
+        compose.onNodeWithText(androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+            .getString(mebot.nguli.com.R.string.jobs_ai_review_title)).assertIsDisplayed()
+        compose.onNodeWithTag("jobs-ai-fresh-chat").assertExists()
+        println("JOBS_REVIEW_TRACE dialog semantics idle")
+    }
+
     @Test fun browsingAndSavingNeverRequiresAi() {
         render()
         compose.onNodeWithTag("jobs-screen").performScrollToNode(hasText(job.title))
@@ -155,7 +171,7 @@ class JobsScreenTest {
         val snapshot = JobsContextSnapshot("revision-one", listOf(JobsContextCandidate("skill", "profile", "About you", "Skills: Kotlin",
             JobsContextField.SKILL_TO_CONFIRM, "Kotlin", "self_reported_skill_review")))
         render(context = snapshot); openJob()
-        compose.onNodeWithText("Understand this role with AI").performScrollTo().performClick()
+        openAiReviewWithTrace()
         compose.onNodeWithTag("jobs-ai-fresh-chat").performScrollTo().assertTextEquals(
             "Each Jobs action starts a fresh chat. Earlier chats remain in MeBot history.")
         compose.onNodeWithTag("jobs-ai-context-preview").performScrollTo().assertTextEquals(
@@ -170,7 +186,7 @@ class JobsScreenTest {
         val snapshot = JobsContextSnapshot("revision-two", listOf(JobsContextCandidate("skill", "profile", "About you", "Skills: Kotlin",
             JobsContextField.SKILL_TO_CONFIRM, "Kotlin", "self_reported_skill_review")))
         render(context = snapshot); openJob()
-        compose.onNodeWithText("Understand this role with AI").performScrollTo().performClick()
+        openAiReviewWithTrace()
         compose.onNodeWithContentDescription("About you\nSkills: Kotlin").performScrollTo().performClick()
         compose.onNodeWithTag("jobs-ai-context-preview").performScrollTo().assertTextEquals("Skills: Kotlin")
         compose.onNodeWithTag("jobs-ai-send").performClick()
@@ -199,7 +215,7 @@ class JobsScreenTest {
 
     @Test fun customQuestionBoundaryRetainsInvalidInputUntilCorrected() {
         render(); openJob()
-        compose.onNodeWithText("Understand this role with AI").performScrollTo().performClick()
+        openAiReviewWithTrace()
         val field = compose.onNodeWithTag("jobs-ai-question")
         field.performScrollTo().performTextReplacement("a".repeat(1000))
         compose.onNodeWithTag("jobs-ai-send").assertIsEnabled()
@@ -214,6 +230,35 @@ class JobsScreenTest {
         compose.onNodeWithTag("jobs-ai-send").assertIsEnabled().performClick()
         assertEquals("a".repeat(1000), assistantRequests.single().question)
         assertEquals(mebot.nguli.com.jobs.JobsAssistantIntent.QUESTION, assistantRequests.single().intent)
+    }
+
+    @Test fun isolatedReviewDialogReachesIdleWithoutJobsScreen() {
+        compose.setContent {
+            MeBotTheme {
+                JobsAiReview(mebot.nguli.com.jobs.JobsAssistantIntent.REQUIREMENTS, "Explain this role",
+                    JobsContextSnapshot(), "Test provider", true, true, {}, {}, {})
+            }
+        }
+        println("JOBS_REVIEW_TRACE isolated dialog content set")
+        compose.onNodeWithTag("jobs-ai-fresh-chat").assertExists()
+        compose.onNodeWithTag("jobs-ai-send").assertIsDisplayed().assertIsEnabled()
+        println("JOBS_REVIEW_TRACE isolated dialog idle")
+    }
+
+    @Test fun detailActionScrollAndPointerClickWithoutDialogReachIdle() {
+        var clicks = 0
+        compose.setContent {
+            MeBotTheme {
+                JobDetails(job, JobPreferences(), null, false, false, {}, {}, {}, { clicks++ })
+            }
+        }
+        println("JOBS_REVIEW_TRACE isolated detail before scroll")
+        compose.onNodeWithText("Understand this role with AI").performScrollTo()
+        println("JOBS_REVIEW_TRACE isolated detail after scroll")
+        compose.onNodeWithText("Understand this role with AI").assertIsDisplayed().performClick()
+        compose.waitForIdle()
+        assertEquals(1, clicks)
+        println("JOBS_REVIEW_TRACE isolated detail pointer click idle")
     }
 
 }
